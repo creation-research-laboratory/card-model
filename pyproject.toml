@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "card-model"
+version = "0.1.0"
+description = "Calibrating Accelerated Radiometric Decay (CARD): forward/inverse radiometric age modeling under time-varying decay rates"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+authors = [
+    { name = "Rick Sanders" },
+]
+dependencies = [
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "emcee",
+    "corner",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
+docs = [
+    "jupyter",  # needed by Quarto to render RIAG_model.qmd
+]
+
+# Interim flat-module layout: the importable modules live at the repo root.
+# A later restructuring phase (see repo_todo.md) moves them into src/card/,
+# at which point this section is replaced by package discovery under src/.
+[tool.setuptools]
+py-modules = ["decay_solver", "riag_mcmc", "create_custom_plots"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"

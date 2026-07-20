@@ -216,3 +216,26 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Figures
+*.png
+*.jpg
+*.jpeg
+
+# Folders
+mcmc_output/
+.claude/
+
+# Quarto artifacts
+.quarto/
+*.qmd
+*.qmd~
+
+# Presentations
+*.pptx
+*.key
+
+# System and misc files
+.DS_Store
+todo.md
+notes.md
