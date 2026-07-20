@@ -228,12 +228,11 @@ mcmc_output/
 
 # Quarto artifacts
 .quarto/
-*.qmd
-*.qmd~
 
 # Presentations
 *.pptx
 *.key
+*.pdf
 
 # System and misc files
 .DS_Store

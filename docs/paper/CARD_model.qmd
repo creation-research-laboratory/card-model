@@ -1,0 +1,313 @@
+---
+title: "RIAG: Radiometric Isotope Analysis Graph"
+format: 
+    html: 
+        code-fold: true
+    pdf: default
+---
+
+### General Model Derivation and Examples
+
+A very general model we consider is a piecewise function that defines how the rate of radiometric decay, $\lambda$, evolves through time (no pun intended). 
+
+The basic model is as follows: 
+$$
+\lambda(t) = \begin{cases}
+\lambda_c &  0 < t < t_c \\
+\left(\lambda_c - \lambda_{bg}\right) e^{-k_c (t - t_c)} + \lambda_{bg} & t_c < t \leq t_{F} \\
+\lambda_F & t_{F} < t < t_{F2} \\
+\left(\lambda_F - \lambda_{bg}\right) e^{-k_F (t - t_{F2})} + \lambda_{bg} & t_{F2} < t \\
+\end{cases}
+$$ {#eq-general-model}
+
+where $t$ is the time in years after Day 1 of creation, denoted as $t_0$. 
+We can plot the general mathematical model represented in @eq-general-model using Python: 
+
+```{python}
+#| label: fig-general-model
+#| fig-cap: "Schematic diagram of the general model showing model behavior. "
+import numpy as np
+import matplotlib.pyplot as plt
+
+def rate_model(t, t0, tc, tF, tF2, lam_c, lam_F, lam_bg, k_c, k_F):
+    '''
+    A general model for accelerated radiometric decay rates from the Creation week to the present.
+    '''
+    t = np.array(t) # ensure t is an array 
+    rates = lam_bg * np.ones(t.shape)
+
+    ind_1 = np.where((t0 <= t) & (t < tc))
+    ind_2 = np.where((tc <= t) & (t < tF))
+    ind_3 = np.where((tF <= t) & (t <= tF2))
+    ind_4 = np.where(t > tF2)
+    rates[ind_1] = lam_c
+    rates[ind_2] = (lam_c - lam_bg) * np.exp(-k_c * (t[ind_2] - tc)) + lam_bg
+    rates[ind_3] = lam_F
+    rates[ind_4] = (lam_F - lam_bg) * np.exp(-k_F * (t[ind_4] - tF2)) + lam_bg
+    return rates
+
+ts = np.linspace(0, 6000,1000)
+rates = rate_model(ts, 0, 1, 1660, 1661, 1e3, 1e5, 1, 1e-1, 1e-2)
+plt.semilogy(ts, rates)
+plt.xlabel('Time (years after Creation)')
+plt.ylabel(r'$\lambda(t)/\lambda_{bg}$')
+plt.title('Generalized Radiometric Decay Model')
+plt.grid()
+plt.show()
+```
+
+@fig-general-model shows schematically how @eq-general-model would look for a particular set of choices for the parameters. 
+This model has a total of 7 parameters that can either be specified or solved for, given appropriate data.
+
+- $\lambda_{bg}$: the background decay rate, what is measured today. 
+- $t_0$: Day 1 of creation, an unknown number of years before present (YBP). Note that $t$ (time in years after creation) is related to YBP as $t = t_p - \text{YBP}$, where $t_p$ is the present in years after Day 1 of creation. @eq-general-model can be re-written using this to put everything in terms of YBP if desired. 
+- $\lambda_{bg}$: the background decay rate, what is measured today
+- $\lambda_c$: the decay rate during the creation week, which could be higher than the background
+- $\lambda_F$: the decay rate during the Flood, which could be higher than the background
+- $k_c$: the decay constant for the decay rate during the post-creation period
+- $k_F$: the decay constant for the decay rate during the post-Flood period
+- $t_{F}$: the start time of accelerated decay during the Flood
+- $t_{F2}$: the end time of accelerated decay during the Flood
+
+There are other models that would be more general extensions of this model, for example, we could have a ramp-up of accelerated decay rates or non-constant decay rates during the Creation week or the Flood, but this model is a good starting point for understanding the general behavior of the system and how it can be used to make predictions and test hypotheses.
+
+@eq-general-model is useful conceptually, but it is is difficult to work with because time must start at the Creation. 
+A more natural way of testing various hypotheses is to re-define time to be in years before present (YBP), which is more intuitive and allows us to easily compare the model predictions from @eq-general-model to secular ages.
+This implies a change of variables and a change in integration direction. 
+The modified @eq-general-model in terms of YBP would be:
+$$
+\lambda(t) = \begin{cases}
+\left(\lambda_F - \lambda_{bg}\right) e^{k_F \tau} + \lambda_{bg} & 0 < \tau < t_{F2} \\
+\lambda_F & t_{F2} < \tau < t_{F} \\
+\left(\lambda_c - \lambda_{bg}\right) e^{k_c (\tau - t_F)} + \lambda_{bg} & t_{F} < \tau \leq t_{c} \\
+\lambda_c &  \tau< t_{c} \\
+\end{cases}
+$$ {#eq-general-model-YBP}
+where we have used $\tau$ to denote time in years before present, and the parameters have been re-defined accordingly.
+
+From this general model various simplifications can be derived. 
+For example, one simplification is to assume that $t_{F} = t_{F2}$, and that $\lambda_c = \lambda_{bg}$, which would imply no acceleration of decay during the Creation week, and that the decay rate immediately jumps to $\lambda_F$ at the start of the Flood, and then begins to decay back to the background rate immediately after.
+Under this assumption, @eq-general-model-YBP becomes:
+$$
+\lambda(t) = \begin{cases}
+\left(\lambda_F - \lambda_{bg}\right) e^{k_F (\tau - t_{F})} + \lambda_{bg} & \tau \le t_{F} \\
+\lambda_{bg} &  \tau > t_F \\
+\end{cases}
+$$ {#eq-flood-only-model}
+
+where here $t_F$ is the time of the Flood. 
+
+We will further assume in this analasys that the rate of increase in decay rates is constant across all isotopes, and that the decay rates for all isotopes decay back to the background rate at the same rate.
+In this case, we can normalize all decay rates to the background decay rate, and thus we can re-define $\lambda_{bg} = 1$ and express all other decay rates as a ratio to the background decay rate.
+
+
+Now consider the differential equation for radiometric decay, which is given by:
+$$
+\frac{dN}{dt} = -\lambda(t) N
+$$ {#eq-decay-rate-differential}
+Note that here we have switched to $t$ again to denote that this is forward time. 
+This can be solved to give the number of atoms remaining as a function of time:
+$$
+N(t) = N_0 e^{-\int_{t_f}^{t_p} \lambda(t') dt'}
+$$ {#eq-decay-rate-integral}
+where $N_0$ is the initial number of atoms and $\lambda(t)$ is the  time-dependent decay rate given by @eq-general-model. 
+$t_f$ is the time of formation of the rock, and $t_p$ is the present, both in years after Day 1 of creation.
+$t'$ here is the integration variable. 
+The ratio of remaining to original atoms is given by:
+$$
+r(t) = \frac{N(t)}{N_0} = e^{-\int_{t_f}^{t_p} \lambda(t') dt'}
+$$ {#eq-ratio-integral}
+In the secular model, where $\lambda$ is constant and equal to $\lambda_{bg}$, this simplifies to:
+$$
+r(t_{sec}) = e^{-\lambda_{bg} t_{sec}}
+$$ {#eq-ratio-secular}
+In the young-age model, where $\lambda$ is a function of time, we have:
+$$
+r(t_p) = e^{-\int_{t_f}^{t_p} \lambda(t') dt'}
+$$ {#eq-ratio-young-age}
+where 0 is the time of formation of the rock and $t_p$ is the present in years after Day 1 of creation.
+
+We can run experiments by considering cases where the ages of a rock or geologic horizon within the two models is known. 
+The ratio of daughter to parent products is the same for both the secular and young-age models while the ages are different. 
+Thus, we can set the ratios for the two models equal to each other and take the logarithm of both sides, normalizing by the background decay rate to get:
+$$
+t_{sec} = \int_{t_f}^{t_p} \frac{\lambda(t')}{\lambda_{bg}} dt'
+$$ 
+where we need to substitute the appropriate time-dependence for $\lambda(t)$ from @eq-general-model. 
+Since @eq-general-model is a piecewise function, we evaluate the integral piecewise as well. 
+<!-- However, we need to now consider a change of variables to express the integral in terms of YBP, in order to make use of @eq-flood-only-model.  -->
+
+<!-- To relate $t$ to $\tau$, we can use the relationship $t = t_p - \tau$, where $t_p$ is the present in years after Day 1 of creation.
+For the integration then, $dt = -d\tau$, the limits of integration change from $t=0$ and $t=t_p$ to $\tau = t_{ya}$ and $\tau = 0$.
+Flipping the limits of integration (note that the two negative signs cancel) gives: -->
+$$
+\begin{aligned}
+A_{sec} & = \int_{t_f}^{t_p} \frac{\lambda(\tau)}{\lambda_{bg}} d\tau\\
+& = \left(\frac{\lambda_F - \lambda_{bg}}{\lambda_{bg}}\right) \int_{t_{limit}}^{t_{p}}  e^{-k_F \tau} d\tau + \int_{t_f}^{t_{F}} d\tau + \int_{t_F}^{t_p} d\tau \\
+& = A_{ya} + R \int_{t_{limit}}^{t_{p}}  e^{-k_F \tau} d\tau \\
+& = A_{ya} + \frac{R}{k_F} \left(e^{-k_F t_{limit}} - e^{-k_F t_{p}}  \right) \\
+& = A_{ya} + \frac{R}{k_F} \left(e^{-k_F (A_E - A_{ya})} - e^{-k_F A_E}  \right) \\
+& = A_{ya} + \frac{R}{k_F} e^{-k_F A_E} \left(e^{k_F A_{ya}} - 1  \right) \\
+\end{aligned}
+$$ {#eq-integral-flood-only-1}
+where $t_{limit} = t_F$ if $t_f \le t_F$ and $t_{limit} = t_f$ if $t_{f} > t_F$. 
+$R = (\lambda_F - \lambda_{bg})/ \lambda_{bg}$ is the normalized ratio of the flood decay rate $\lambda_F$ to the background decay rate.
+<!-- If $t_{ya} < t_F$, then we simply integrate to $t_{ya}$ instead of $t_F$ in the first integral. -->
+
+Using @eq-integral-flood-only-1, we can test several hypotheses. 
+For example, given two pairs of ages known in both the secular and young-age models, we can calculate the decay constant $k_F$ and decay rate ratio $R$. 
+As an example, let us consider the start of the Flood. 
+Assume for the moment the Flood begins at the Precambrian-Cambrian boundary, an event dated on the secular time-scale to be ~540 Ma. 
+Take the the equivalent young-age model estimate for the date to be ~5000 YBP.
+Take the the end of the Ice Age as another data point, conventionally dated to be around 11.7 ka, and in the young-age model perhaps ending around 4200 YBP. 
+
+Substituting these values into @eq-integral-flood-only-1 gives: 
+$$
+\begin{aligned}
+(5.4 \times 10^8) - 5000 & = \frac{R}{k_F} e^{-k_F A_E} (e^{5400 k_F} - 1) \\
+\end{aligned}
+$$ {#eq-flood-constraint}
+
+and
+$$
+\begin{aligned}
+(1.17 \times 10^4) - 4200 & = \frac{R}{k_F} e^{-k_F A_E}  (e^{4200 k_F} - 1) \\
+\end{aligned}
+$$ {#eq-iceAge-constraint}
+
+If we divided @eq-iceAge-constraint by @eq-flood-constraint, we eliminate the $(R/k_F) e^{-k_F A_E}$ term and can solve for $k_F$ directly:
+$$
+7.2 \times 10^4 \approx \frac{e^{5000 k_F} - 1}{e^{4200 k_F} - 1} 
+$$ {#eq-constraint-ratio}
+
+Ignoring the -1 terms in the numerator and denominator (which is valid for $k_F > 0.001$) gives:
+$$
+7.2 \times 10^4 \approx e^{800 k_F}
+$$ {#eq-constraint-ratio-approx}
+
+And solving for $k_F$ gives:
+$$
+k_F \approx \frac{\ln(7.2 \times 10^4)}{800} \approx 0.01 \text{ years}^{-1}
+$$ {#eq-kF-constraint}
+
+Substituting this value for $k_F$ back into either @eq-flood-constraint or @eq-iceAge-constraint gives:
+$$
+\frac{A_{sec} - A_{ya}}{100 \left(e^{0.01 A_{ya}} - 1  \right)}e^{0.01 A_E} = R  
+$$ {#eq-R-constraint}
+Here we need to make an assumption about $A_E$, the age of the Earth in years after Day 1 of creation.
+Since we assumed that the Flood began at 5000 YBP, assume that $A_E = 6600$ years.
+Taking $A_{sec} - A_{ya} = 7500$ gives and ubstituting into @eq-R-constraint gives:
+$$
+R \approx \frac{75}{\left(e^{42} - 1  \right)} e^{66} \approx 75 e^{24} 
+$$ {#eq-R-constraint-final}
+
+
+
+<!-- Looking at the Ice Age constraint, we get: 
+$$
+2.86\lambda_{bg}  = \lambda(t_{IA})
+$$ -->
+So at the end of the Ice Age, the accelerated rate of decay is still ~*** times that of the present-day. 
+
+<!-- We can substitute @eq-flood-only-model for $\lambda(t)$ into these models to solve for the parameters given the assumptions we have made, keeping careful track of the relative times: 
+$$
+\begin{cases}
+(10^5 + 1) \lambda_{bg} = \left(\lambda_F - \lambda_{bg}\right) e^{-k_F (5400 - 5400) years} \\
+3.86\lambda_{bg} = \left(\lambda_F - \lambda_{bg}\right) e^{-k_F (5400 - 4200) years}
+\end{cases}
+$$ {#eq-cases}
+
+Taking the ratio of the two expressions cancels out all the $\lambda$ terms and gives:
+
+$$
+\begin{aligned}
+2.59 \times 10^4 & = e^{1200 k_F } \\
+9.65 & = 1200 k_F \\
+k_F & = \frac{9.65}{1200} = \sim8.04 \times 10^{-3} \text{years}^{-1}
+\end{aligned}
+$$ {#eq-kF}
+
+Setting $t = t_F$ in the first equation in @eq-cases, we can also solve for $\lambda_F$:
+
+$$
+\begin{aligned}
+(10^5 + 1) \lambda_{bg} & = \left(\lambda_F - \lambda_{bg}\right)\\
+(10^5 + 2) \lambda_{bg} & = \lambda_F \\
+\end{aligned}
+$$ {#eq-lambdaF} -->
+
+It is important to note that this derivation made several assumptions about the timing and dates of the beginning of the Flood and the Ice Age in the rock record, which could be debated. 
+Other comparative dates for these events could easily be substituted for the ones used here, and the resulting parameters would be slightly different. 
+The point is that this is a completely generalizable model for which, given any constraints or assumptions about the timing of these events, we can derive the equivalent decay rates within a young-age framework. 
+
+Other simplified models could be derived from the general model (@eq-general-model). 
+An example would be a constant low or high decay rate prior to the Flood. @eq-general-model represents a very general form, and the simple analytical solutions we have determined here could be expanded to include estimates for rocks created during the Creation week, for example, or a possible extended period of time during the Flood when $\lambda(t) = \lambda_F$, before beginning to decay back to the background rate.
+The general framework of @eq-general-model allows for these variations and adaptations to be made, as well as allowing for derivative models to be constructed based on different assumptions or constraints. 
+We discuss these further in Section ***. 
+
+With this framework, we now can not only make predictions, but test those predictions against observations. 
+An example would be that most young-age researchers accept that decay rates should have reached the background level by around 3000 YBP. 
+We can write this as a constraint, where $\lambda(t)/\lambda_{bg} < 1.01$ for $t > 3000$ YBP.
+Comparing this to the predicted decay rate at 3000 YBP based on the parameters we estimated in @eq-kF and @eq-lambdaF, we get: 
+$$
+\lambda(3000 \text{ YBP}) = \left(\lambda_F - \lambda_{bg}\right) e^{-k_F (5400 - 3000) years} + \lambda_{bg} \approx 1.0004 \lambda_{bg}
+$$
+Thus, the estimated model parameters predict a decay rate at 3000 YBP that is consistent with the expectation of being very close to the background rate, less than 0.05\% different.
+Today (0 YBP) the predicted decay rate is within $10^{-14}$ of the background, consistent with the observation that decay rates observed in the last few decades are constant. 
+
+### Implications for Ages
+
+
+
+
+Rearranging this to solve for $t_{ya}$ is not straightforward, but can easily be done numerically.
+We can also sanity-check the mathematical solution by noting that as $t_{ya} \to 0$, $t_{sec} \to 0$, and as $t_{ya} \to t_F$, $t_{sec} \to  + t_{ya}$, which is consistent with the expectation that for very long young-age times, the secular age will be dominated by the flood decay rate. 
+
+
+We can also approximate the solution by noting that $R >> t_{ya}$ term on the right-hand side and solve for $t_{ya}$ in terms of $t_{sec}$, $R$, and $k_F$:
+$$
+\begin{aligned}
+e^{-k_F t_{ya}} & \approx  1 - \frac{k_F}{R} t_{sec} \\
+-k_F t_{ya} & \approx \ln\left(1 - \frac{k_F}{R} t_{sec}\right) \\
+t_{ya} & \approx -\frac{1}{k_F} \ln\left(1 - \frac{k_F}{R} t_{sec}\right) \\
+t_{ya} & \approx \frac{1}{k_F} \ln\left(\frac{k_F}{R} t_{sec} - 1\right) \\
+\end{aligned}
+$$
+where we need $t_{sec} > R/k_F$ for this approximation to be valid.
+For $R=10^5$ and $k_F = 8.04 \times 10^{-3}$, this gives $t_{sec} > 1.24 \times 10^7$ years for the approximation to be valid, which is true for most secular ages of interest.
+
+Alternatively, assuming a particular young-earth age, we can easily calculate the corresponding secular age by substituting $t_{ya}$ into @eq-integral-flood-only-3 and solving for $t_{sec}$. 
+
+```{python}
+import numpy as np
+from scipy.optimize import fsolve
+import matplotlib.pyplot as plt
+
+def young_age(t_ya, R, k_F):
+    '''
+    A function to solve for the young-age equivalent of a given secular age, given the parameters of the flood-only model.
+    '''
+    exp_term = (1 - np.exp(-k_F * t_ya)) / k_F
+
+    return R * exp_term + t_ya
+
+
+t_sec = 65e5 # 65 million years in the secular model
+lam_bg = 1 # normalized background decay rate
+lam_F = 1e5 # normalized flood decay rate
+R = (lam_F - lam_bg) / lam_bg
+k_F = 8.04e-3 # flood decay constant
+
+ts = np.linspace(0, 4000, 1000)
+
+plt.semilogy(ts, young_age(ts, R, k_F))
+plt.semilogy([0, ts[-1]], [t_sec, t_sec], 'r--')
+plt.xlabel('Young-age equivalent (years)')
+plt.ylabel('Secular age (years)')
+plt.title('Young-age equivalent of secular ages under the flood-only model')
+plt.grid()
+plt.show()
+
+print(f"Ratio of flood decay rate to background decay rate: {lam_F / lam_bg}")
+
+```
