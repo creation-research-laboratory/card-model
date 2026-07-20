@@ -10,15 +10,16 @@ todo.md's recorded calibration solutions.
 If a deliberate model change alters these numbers, update the pins in the
 same commit and say why in the commit message.
 
-Note: ICE_AGE_END_AGE has a known convention ambiguity (years-after-Creation
-vs. YBP, see todo.md).  These tests pin behavior for explicit numeric inputs
-only, so they remain valid whichever convention is adopted.
+Note: the ICE_AGE_END_AGE convention ambiguity was resolved 2026-07-19 —
+it is years after Creation (3500); its YBP counterpart is ICE_AGE_END_YBP
+(2556).  These tests pin behavior for explicit numeric inputs only, so they
+were unaffected by that fix.
 """
 
 import numpy as np
 import pytest
 
-from decay_solver import (
+from card.decay_solver import (
     AGE_OF_EARTH,
     GeneralModel,
     GeneralModelParams,

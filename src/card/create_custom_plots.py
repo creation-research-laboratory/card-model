@@ -259,7 +259,7 @@ def main():
     # Load the results
     samples, log_probs_per_chain, param_names = load_mcmc_results(output_dir)
 
-    # Define priors for the fixed model (from run_riag_mcmc_fixed.py)
+    # Default priors for the flood-only reduced model (matches run_card_mcmc.py)
     prior_means = {
         'lambda_F': 6,
         'k_F': -3,

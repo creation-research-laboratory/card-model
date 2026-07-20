@@ -1,5 +1,5 @@
 """
-RIAG MCMC Parameter Fitting Module
+CARD MCMC Parameter Fitting Module
 
 This module provides Bayesian parameter fitting for the General decay model
 using Markov Chain Monte Carlo (MCMC) sampling with the emcee library.
@@ -18,14 +18,14 @@ lambda_bg is fixed at 1.0 as per model normalization.
 Priors are Gaussian in log-space for stability.
 Likelihood is Gaussian on secular age measurements.
 
-Example usage is: 
+Example usage is:
 
-from riag_mcmc import RIAGMCMC
+from card.card_mcmc import CARDMCMC
 
 # Your data: [(young_age, secular_age, uncertainty), ...]
 data = [(100, 45.2, 4.5), (500, 123.1, 12.3), ...]
 
-fitter = RIAGMCMC(data)
+fitter = CARDMCMC(data)
 results = fitter.run_mcmc(n_walkers=32, n_steps=1000, burn_in=200)
 fitter.save_results(results)
 fitter.plot_corner(results)
@@ -38,12 +38,12 @@ import corner
 import matplotlib.pyplot as plt
 from typing import List, Tuple, Dict, Any
 import os
-from decay_solver import GeneralModel, GeneralModelParams
+from .decay_solver import GeneralModel, GeneralModelParams
 
 
-class RIAGMCMC:
+class CARDMCMC:
     """
-    MCMC parameter fitting for RIAG General decay model.
+    MCMC parameter fitting for the CARD General decay model.
     
     Parameters are fit in log-space for numerical stability:
     theta = [log(lambda_c), log(lambda_F), log(k_c), log(k_F), log(t_c), log(t_F), log(t_F2)]
@@ -361,7 +361,7 @@ class RIAGMCMC:
 
 def example_usage():
     """
-    Example usage of RIAG MCMC fitting.
+    Example usage of CARD MCMC fitting.
     """
     # Synthetic data: (young_age, secular_age, uncertainty)
     # For demonstration, create some fake data
@@ -392,8 +392,8 @@ def example_usage():
         data.append((ya, observed_secular, uncertainty))
     
     # Set up MCMC
-    fitter = RIAGMCMC(data)
-    
+    fitter = CARDMCMC(data)
+
     # Run MCMC
     results = fitter.run_mcmc(n_walkers=32, n_steps=500, burn_in=100)
     

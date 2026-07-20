@@ -13,7 +13,7 @@ was anchored at the present rather than at the Flood, has been removed).
 import numpy as np
 import pytest
 
-from decay_solver import (
+from card.decay_solver import (
     ACCEPTABLE_ERROR,
     AGE_OF_EARTH,
     ConstantDecayModel,

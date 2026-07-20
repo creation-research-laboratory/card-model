@@ -28,11 +28,8 @@ docs = [
     "jupyter",  # needed by Quarto to render RIAG_model.qmd
 ]
 
-# Interim flat-module layout: the importable modules live at the repo root.
-# A later restructuring phase (see repo_todo.md) moves them into src/card/,
-# at which point this section is replaced by package discovery under src/.
-[tool.setuptools]
-py-modules = ["decay_solver", "riag_mcmc", "create_custom_plots"]
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

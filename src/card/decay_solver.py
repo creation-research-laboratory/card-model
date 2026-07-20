@@ -1,5 +1,5 @@
 """
-Radiometric Age Solver (RIAG) Module
+CARD (Calibrating Accelerated Radiometric Decay) Age Solver Module
 
 Solves radiometric dating problems in both directions (forward and inverse)
 for constant and variable decay rates. Supports two model complexities:
@@ -36,6 +36,7 @@ FLOOD_AGE = AGE_OF_EARTH - FLOOD_START  # Age of Flood event in years before pre
 
 # Ice Age end (years after Creation)
 ICE_AGE_END_AGE = 3500
+ICE_AGE_END_YBP = AGE_OF_EARTH - ICE_AGE_END_AGE  # Ice Age end in years before present (YBP)
 
 # Precambrian-Cambrian boundary timing (years after Creation)
 PC_CAMBRIAN_BOUNDARY = 5400
