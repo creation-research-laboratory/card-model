@@ -237,4 +237,5 @@ mcmc_output/
 # System and misc files
 .DS_Store
 todo.md
+repo_todo.md
 notes.md

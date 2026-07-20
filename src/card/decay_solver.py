@@ -213,7 +213,7 @@ class GeneralModel(DecayModel):
     3. Flood (t_F < t ≤ t_F2): λ = λ_F (constant)
     4. Post-Flood (t > t_F2): λ = (λ_F - λ_bg)*exp(-k_F*(t - t_F2)) + λ_bg (exponential decay)
     
-    This is the full @eq-general-model from RIAG_model.qmd documentation.
+    This is the full @eq-general-model from docs/paper/CARD_model.qmd.
     """
     
     def __init__(self, params: GeneralModelParams):

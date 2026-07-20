@@ -25,7 +25,7 @@ dev = [
     "pytest",
 ]
 docs = [
-    "jupyter",  # needed by Quarto to render RIAG_model.qmd
+    "jupyter",  # needed by Quarto to render docs/paper/CARD_model.qmd
 ]
 
 [tool.setuptools.packages.find]
