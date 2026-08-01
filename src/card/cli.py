@@ -125,8 +125,6 @@ def _apply_overrides(config: RunConfig, args) -> RunConfig:
 
 
 def _run_fit(args) -> int:
-    import numpy as np
-
     from .plotting import (
         plot_age_comparison,
         plot_mcmc_corner,
@@ -141,9 +139,6 @@ def _run_fit(args) -> int:
     config = _apply_overrides(RunConfig.from_file(args.config), args)
     out_dir = config.output_dir
     os.makedirs(out_dir, exist_ok=True)
-
-    if config.sampler.seed is not None:
-        np.random.seed(config.sampler.seed)
 
     fitter = config.build_fitter()
     initial_guess = config.initial_guess_for(fitter)
@@ -165,6 +160,10 @@ def _run_fit(args) -> int:
         initial_guess=initial_guess,
         init_spread=config.sampler.init_spread,
         progress=config.sampler.progress and not args.quiet,
+        # The seed goes to the fitter's own Generator rather than to
+        # np.random.seed, so a run is reproducible without reaching into
+        # process-global state that other code may also be using.
+        seed=config.sampler.seed,
     )
 
     written = [fitter.save_results(results, os.path.join(out_dir, "chain.h5"))]

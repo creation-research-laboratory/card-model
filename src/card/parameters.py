@@ -50,6 +50,11 @@ class ParamSpec:
         log_scale: True when the parameter spans orders of magnitude.  Such
             parameters are sampled in log10 by the fitter and drawn on log axes;
             their priors are specified in log10 units.
+        is_date: True when the parameter is a DATE — years after Day 1 of
+            Creation.  Its upper bound is then the age of the Earth, which is a
+            chronology setting rather than a constant, so a consumer building
+            sliders should ask `bounds_for_chronology` instead of reading
+            `maximum` directly.
     """
 
     symbol: str
@@ -59,6 +64,7 @@ class ParamSpec:
     minimum: float
     maximum: float
     log_scale: bool = False
+    is_date: bool = False
 
     def clamp(self, value: float) -> float:
         """Clamp a value into [minimum, maximum] — useful for GUI inputs."""
@@ -118,14 +124,50 @@ def parameter_bounds(params_class: Any) -> Dict[str, Tuple[float, float]]:
             for name, spec in parameter_specs(params_class).items()}
 
 
-def to_json_schema(params_class: Any, title: str = None) -> Dict[str, Any]:
+def bounds_for_chronology(params_class: Any,
+                          chronology: Any) -> Dict[str, Tuple[float, float]]:
+    """
+    (minimum, maximum) per parameter, with DATE bounds taken from `chronology`.
+
+    The declared bounds are fixed at import time against the default
+    chronology, so a caller that lets the user change the age of the Earth —
+    a GUI, a browser form — would otherwise offer date sliders that stop at
+    6056 years no matter what chronology is loaded.  Everything that is not a
+    DATE is returned unchanged.
+
+    Args:
+        params_class: Parameter dataclass carrying ParamSpec metadata.
+        chronology: A `Chronology`; its `present_date` becomes the upper bound
+            of every date parameter.
+
+    Returns:
+        Mapping of parameter name to (minimum, maximum).
+    """
+    present = float(chronology.present_date)
+    return {
+        name: (spec.minimum, present if spec.is_date else spec.maximum)
+        for name, spec in parameter_specs(params_class).items()
+    }
+
+
+def to_json_schema(params_class: Any, title: str = None,
+                   chronology: Any = None) -> Dict[str, Any]:
     """
     Render the parameter specs as a JSON Schema object.
 
     Intended for a browser front end, which can build and validate an input
     form from this without any Python.
+
+    Args:
+        params_class: Parameter dataclass carrying ParamSpec metadata.
+        title: Schema title; defaults to the class name.
+        chronology: Optional `Chronology`.  When given, DATE parameters get
+            their upper bound from it (see `bounds_for_chronology`) instead of
+            from the default chronology baked in at import time.
     """
     specs = parameter_specs(params_class)
+    bounds = (bounds_for_chronology(params_class, chronology)
+              if chronology is not None else parameter_bounds(params_class))
     return {
         "title": title or params_class.__name__,
         "type": "object",
@@ -135,10 +177,11 @@ def to_json_schema(params_class: Any, title: str = None) -> Dict[str, Any]:
                 "title": spec.symbol,
                 "description": spec.description,
                 "default": spec.default,
-                "minimum": spec.minimum,
-                "maximum": spec.maximum,
+                "minimum": bounds[name][0],
+                "maximum": bounds[name][1],
                 "x-unit": spec.unit,
                 "x-log-scale": spec.log_scale,
+                "x-is-date": spec.is_date,
             }
             for name, spec in specs.items()
         },

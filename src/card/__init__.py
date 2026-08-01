@@ -68,6 +68,7 @@ _EXPORTS = {
     "GeneralModelParams": "card.models",
     # parameter metadata
     "ParamSpec": "card.parameters",
+    "bounds_for_chronology": "card.parameters",
     "parameter_bounds": "card.parameters",
     "parameter_defaults": "card.parameters",
     "parameter_names": "card.parameters",
@@ -87,6 +88,7 @@ _EXPORTS = {
     "summarize_mcmc": "card.plotting",
     # inference (emcee, h5py)
     "MCMCFitter": "card.inference",
+    "SamplingProgress": "card.inference",
     "load_results": "card.inference",
     "save_results": "card.inference",
 }
@@ -146,7 +148,12 @@ if TYPE_CHECKING:  # pragma: no cover
         PRESENT_DATE,
         SOLVER_TOLERANCE,
     )
-    from .inference import MCMCFitter, load_results, save_results
+    from .inference import (
+        MCMCFitter,
+        SamplingProgress,
+        load_results,
+        save_results,
+    )
     from .models import (
         ConstantDecayModel,
         DecayModel,
@@ -155,6 +162,7 @@ if TYPE_CHECKING:  # pragma: no cover
     )
     from .parameters import (
         ParamSpec,
+        bounds_for_chronology,
         parameter_bounds,
         parameter_defaults,
         parameter_names,

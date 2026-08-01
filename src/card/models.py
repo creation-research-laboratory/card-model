@@ -141,15 +141,15 @@ class GeneralModelParams:
         description="Post-Flood relaxation constant; larger means faster return to background.",
         default=8.04e-3, minimum=0.0, maximum=1.0)})
     t_c: float = field(metadata={SPEC_KEY: ParamSpec(
-        symbol="t_c", unit="years after Creation", log_scale=False,
+        symbol="t_c", unit="years after Creation", log_scale=False, is_date=True,
         description="DATE at which the Creation week ends.",
         default=1.0, minimum=0.0, maximum=AGE_OF_EARTH)})
     t_F: float = field(metadata={SPEC_KEY: ParamSpec(
-        symbol="t_F", unit="years after Creation", log_scale=False,
+        symbol="t_F", unit="years after Creation", log_scale=False, is_date=True,
         description="DATE at which the Flood starts.",
         default=FLOOD_START_DATE, minimum=0.0, maximum=AGE_OF_EARTH)})
     t_F2: float = field(metadata={SPEC_KEY: ParamSpec(
-        symbol="t_{F2}", unit="years after Creation", log_scale=False,
+        symbol="t_{F2}", unit="years after Creation", log_scale=False, is_date=True,
         description="DATE at which the Flood ends; equal to t_F for an instantaneous Flood.",
         default=FLOOD_START_DATE, minimum=0.0, maximum=AGE_OF_EARTH)})
 

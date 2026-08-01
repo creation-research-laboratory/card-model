@@ -201,3 +201,49 @@ print(config.constraints[0].young_age, config.fixed_params["t_F"])
 `RunConfig.from_file` loads YAML or JSON; `build_fitter()` returns the
 configured [`MCMCFitter`](api/inference.md); `calibrated_start()` runs the
 deterministic solve.
+
+## Embedding CARD in an application
+
+Everything the CLI does is available to a GUI or a web service, and a few
+pieces exist specifically for that:
+
+- **Reproducibility without global state.** `run_mcmc(seed=...)` — or
+  `rng=numpy.random.default_rng(...)` — seeds the fit's own generator. Nothing
+  in the package touches `numpy.random.seed`, so two fits in one process
+  cannot disturb each other.
+- **Progress and cancellation.** `run_mcmc(callback=...)` is called after every
+  step with a `SamplingProgress` (`phase`, `step`, `total`, `fraction`,
+  `acceptance_fraction`). **Return `False` to stop**; the results then carry
+  `stopped_early=True` and describe the steps actually taken.
+- **Figures you own.** Every plotting function takes `ax=` to draw into your
+  canvas, or `return_figure=True` to hand back an open matplotlib `Figure`.
+- **Forms that follow the chronology.** `to_json_schema(GeneralModelParams,
+  chronology=...)` and `bounds_for_chronology(...)` give date parameters an
+  upper bound from the chronology the user has loaded, not the default one.
+
+```python
+from card import MCMCFitter, RunConfig, example_config_text
+
+config = RunConfig.from_dict(__import__("yaml").safe_load(example_config_text()))
+fitter = config.build_fitter()
+
+def on_step(progress):
+    if progress.step % 20 == 0:
+        print(f"{progress.phase} {progress.fraction:6.1%} "
+              f"acceptance {progress.acceptance_fraction:.2f}")
+    return True          # return False to cancel
+
+results = fitter.run_mcmc(
+    n_walkers=16, n_steps=60, burn_in=10, seed=0, progress=False,
+    initial_guess=config.initial_guess_for(fitter), callback=on_step,
+)
+print(f"stopped early: {results['stopped_early']}, "
+      f"steps: {results['n_steps']}")
+```
+
+```text
+sampling  33.3% acceptance 0.73
+sampling  66.7% acceptance 0.73
+sampling 100.0% acceptance 0.74
+stopped early: False, steps: 60
+```

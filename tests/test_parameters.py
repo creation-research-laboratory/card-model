@@ -120,3 +120,51 @@ def test_specs_are_reachable_from_the_class():
     assert GeneralModelParams.specs() == parameter_specs(GeneralModelParams)
     assert GeneralModelParams.names() == parameter_names(GeneralModelParams)
     assert isinstance(GeneralModelParams.specs()["k_F"], ParamSpec)
+
+
+# ----------------------------------------------------------------------------
+# Chronology-dependent bounds
+# ----------------------------------------------------------------------------
+
+def test_date_parameters_are_marked_as_such():
+    """A DATE's upper bound is the age of the Earth, which is a chronology
+    setting rather than a constant.  Consumers need to know which parameters
+    those are without pattern-matching on the unit string."""
+    specs = parameter_specs(GeneralModelParams)
+    dates = {name for name, spec in specs.items() if spec.is_date}
+    assert dates == {'t_c', 't_F', 't_F2'}
+
+
+def test_bounds_follow_a_custom_chronology():
+    from card import Chronology, bounds_for_chronology
+
+    older = Chronology(age_of_earth=7000.0, flood_start_date=2000.0,
+                       flood_end_date=2000.0, ice_age_end_date=3600.0)
+    bounds = bounds_for_chronology(GeneralModelParams, older)
+
+    assert bounds['t_F'] == (0.0, 7000.0)      # follows the chronology
+    assert bounds['lambda_F'] == parameter_bounds(GeneralModelParams)['lambda_F']
+
+
+def test_default_bounds_match_the_default_chronology():
+    from card import DEFAULT_CHRONOLOGY, bounds_for_chronology
+
+    assert (bounds_for_chronology(GeneralModelParams, DEFAULT_CHRONOLOGY)
+            == parameter_bounds(GeneralModelParams))
+
+
+def test_json_schema_can_take_a_chronology():
+    """The schema is what a browser form is built from, so its date maxima have
+    to follow whatever chronology the user has loaded."""
+    from card import Chronology, to_json_schema
+
+    older = Chronology(age_of_earth=7000.0, flood_start_date=2000.0,
+                       flood_end_date=2000.0, ice_age_end_date=3600.0)
+    schema = to_json_schema(GeneralModelParams, chronology=older)
+
+    assert schema['properties']['t_F']['maximum'] == 7000.0
+    assert schema['properties']['t_F']['x-is-date'] is True
+    assert schema['properties']['lambda_F']['x-is-date'] is False
+    # Unchanged without one.
+    assert to_json_schema(GeneralModelParams)['properties']['t_F']['maximum'] \
+        == 6056.0
