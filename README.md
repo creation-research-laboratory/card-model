@@ -44,8 +44,8 @@ What that work did not supply was a general quantitative mapping. If decay was
 accelerated, then by how much, beginning when, and with what time dependence —
 and what young-earth age corresponds to a particular published date? CARD is an
 attempt to answer that in a form that can be calculated rather than asserted.
-It represents the decay rate as an explicit function of time, \(\lambda(t)\),
-with a small number of parameters: when acceleration occurred, how intense it
+It represents the decay rate as an explicit function of time, λ(t), with a
+small number of parameters: when acceleration occurred, how intense it
 was, and how quickly it relaxed back to the rate we measure today. Integrating
 that function gives the apparent age a rock of any true age would present to a
 conventional analysis; inverting it goes the other way. The parameters are not
