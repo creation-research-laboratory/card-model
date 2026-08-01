@@ -70,8 +70,25 @@ __all__ = [
     "Constraint",
     "RunConfig",
     "SamplerConfig",
+    "example_config_text",
     "load_config",
 ]
+
+#: Name of the worked example shipped inside the package (card/data/).
+EXAMPLE_CONFIG_NAME = "flood_only.yaml"
+
+
+def example_config_text() -> str:
+    """
+    The bundled example run config, comments and all, as text.
+
+    Shipped as package data rather than left in ``examples/``, because that
+    directory is not part of the installed distribution: a ``pip install``
+    user has no repository to point at.  `card init` writes this out.
+    """
+    from importlib.resources import files
+
+    return (files("card") / "data" / EXAMPLE_CONFIG_NAME).read_text()
 
 #: Sampler defaults.  Deliberately the driver script's production values, so a
 #: config that omits `sampler:` reproduces `examples/run_card_mcmc.py`.

@@ -1,10 +1,11 @@
 """
 Command-line entry point: ``card <command> ...``.
 
-Three commands, all of which are thin wrappers over the package API:
+Four commands, all of which are thin wrappers over the package API:
 
-    card fit config.yaml        run the MCMC a config file describes
-    card calibrate config.yaml  solve the same constraints deterministically
+    card init myrun.yaml        write a starter run config to edit
+    card fit myrun.yaml         run the MCMC a config file describes
+    card calibrate myrun.yaml   solve the same constraints deterministically
     card schema                 print the parameter/chronology JSON schema
 
 ``card fit`` is the config-driven form of `examples/run_card_mcmc.py`: it
@@ -40,6 +41,13 @@ def _build_parser() -> argparse.ArgumentParser:
                         version=f"card {__version__}")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    init = subparsers.add_parser(
+        "init", help="write a documented starter run config")
+    init.add_argument("path", nargs="?", default="card_run.yaml",
+                      help="where to write it (default: card_run.yaml)")
+    init.add_argument("-f", "--force", action="store_true",
+                      help="overwrite the file if it already exists")
+
     fit = subparsers.add_parser(
         "fit", help="run the MCMC fit described by a YAML/JSON config")
     fit.add_argument("config", help="path to a .yaml, .yml or .json run config")
@@ -69,6 +77,28 @@ def _build_parser() -> argparse.ArgumentParser:
                         help="print the default chronology instead")
 
     return parser
+
+
+# -------------------------------------------------------------------- init
+def _run_init(args) -> int:
+    from .config import example_config_text
+
+    if os.path.exists(args.path) and not args.force:
+        raise ValueError(
+            f"{args.path!r} already exists.  Pass --force to overwrite it, or "
+            "choose another path."
+        )
+
+    directory = os.path.dirname(args.path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    with open(args.path, "w") as handle:
+        handle.write(example_config_text())
+
+    print(f"Wrote {args.path}")
+    print(f"Edit it, then run:  card fit {args.path}")
+    print(f"Or, for the exact solve:  card calibrate {args.path}")
+    return 0
 
 
 # --------------------------------------------------------------------- fit
@@ -247,6 +277,7 @@ def _run_schema(args) -> int:
 
 
 _COMMANDS = {
+    "init": _run_init,
     "fit": _run_fit,
     "calibrate": _run_calibrate,
     "schema": _run_schema,

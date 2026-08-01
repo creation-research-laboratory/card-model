@@ -361,7 +361,7 @@ class MCMCFitter:
 
         The cure is to start the walkers at the answer rather than at the prior
         mean — `card.calibrate` solves these two constraints exactly and for
-        free — which is what `examples/flood_only.yaml` now does.
+        free — which is what the bundled example config now does.
         """
         if log_prob_chain.ndim != 2 or log_prob_chain.shape[1] < 2:
             return np.empty(0, dtype=int)

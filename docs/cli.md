@@ -7,15 +7,17 @@ exploring a different chronology or a different constraint set is an edit to a
 config rather than an edit to a script.
 
 ```bash
-card fit config.yaml         # run the MCMC, write chain + figures + summary
-card calibrate config.yaml   # solve the same two constraints exactly
+card init myrun.yaml         # write a documented starter config
+card fit myrun.yaml          # run the MCMC, write chain + figures + summary
+card calibrate myrun.yaml    # solve the same two constraints exactly
 card schema                  # print the parameter spec as JSON Schema
 card --version
 ```
 
 ## A complete config
 
-This is `examples/flood_only.yaml`, the main inversion:
+`card init` writes exactly this — the main inversion. It ships inside the
+package, so it is available from a `pip install` with no repository checkout:
 
 ```yaml
 chronology:
@@ -60,7 +62,8 @@ output:
 Run it:
 
 ```bash
-card fit examples/flood_only.yaml
+card init myrun.yaml
+card fit myrun.yaml
 ```
 
 which writes `chain.h5`, `run_config.json`, `summary_statistics.txt`,
@@ -144,7 +147,7 @@ Command-line flags win over the file, which is what makes a config reusable for
 a quick check:
 
 ```bash
-card fit examples/flood_only.yaml -o /tmp/quick --walkers 8 --steps 200 \
+card fit myrun.yaml -o /tmp/quick --walkers 8 --steps 200 \
     --seed 1 --no-figures --quiet
 ```
 

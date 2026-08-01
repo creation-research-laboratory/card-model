@@ -141,6 +141,51 @@ def test_output_directory_is_created(tmp_path, config_path):
 
 
 # ----------------------------------------------------------------------------
+# card init
+# ----------------------------------------------------------------------------
+
+def test_init_writes_a_config_that_actually_runs(capsys, tmp_path):
+    """`card init` is the entry point for a pip user, who has no repository
+    checkout to copy a config from.  What it writes must be immediately
+    runnable, not a template with holes in it."""
+    from card import load_config
+
+    path = tmp_path / "myrun.yaml"
+    assert main(["init", str(path)]) == 0
+    assert "Wrote" in capsys.readouterr().out
+
+    config = load_config(str(path))
+    assert len(config.constraints) == 2
+
+    out = tmp_path / "run"
+    assert main(["fit", str(path), "-o", str(out), *FIT_ARGS]) == 0
+    assert (out / "chain.h5").exists()
+
+
+def test_init_defaults_to_a_named_file(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    assert main(["init"]) == 0
+    assert (tmp_path / "card_run.yaml").exists()
+
+
+def test_init_refuses_to_clobber(capsys, tmp_path):
+    path = tmp_path / "myrun.yaml"
+    path.write_text("mine\n")
+    assert main(["init", str(path)]) == 2
+    assert "already exists" in capsys.readouterr().err
+    assert path.read_text() == "mine\n"
+
+    assert main(["init", str(path), "--force"]) == 0
+    assert "constraints" in path.read_text()
+
+
+def test_init_creates_missing_directories(tmp_path):
+    path = tmp_path / "nested" / "deeper" / "run.yaml"
+    assert main(["init", str(path)]) == 0
+    assert path.exists()
+
+
+# ----------------------------------------------------------------------------
 # card calibrate / schema / errors
 # ----------------------------------------------------------------------------
 

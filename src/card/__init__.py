@@ -59,6 +59,7 @@ _EXPORTS = {
     "Constraint": "card.config",
     "RunConfig": "card.config",
     "SamplerConfig": "card.config",
+    "example_config_text": "card.config",
     "load_config": "card.config",
     # models
     "ConstantDecayModel": "card.models",
@@ -124,7 +125,13 @@ if TYPE_CHECKING:  # pragma: no cover
         years_after_creation_to_years_before_present,
         years_before_present_to_years_after_creation,
     )
-    from .config import Constraint, RunConfig, SamplerConfig, load_config
+    from .config import (
+        Constraint,
+        RunConfig,
+        SamplerConfig,
+        example_config_text,
+        load_config,
+    )
     from .constants import (
         ACCEPTABLE_ERROR,
         AGE_OF_EARTH,

@@ -22,14 +22,11 @@ with MCMC when the dates carry uncertainties.
 
 ## Install
 
-> **Note**
-> CARD is not on PyPI yet. The `pip install card-model` form below is the
-> intended interface, written here so it is ready at the first release; until
-> then, install from source.
-
 ```bash
-pip install card-model            # planned, not yet published
+pip install card-model
 ```
+
+Or from source, for development:
 
 ```bash
 git clone https://github.com/creation-research-laboratory/card-model.git
@@ -56,8 +53,9 @@ Fitting the model to two dated events, exactly or with uncertainties, is
 A whole fit can also be described in a YAML file and run from the command line:
 
 ```bash
-card fit examples/flood_only.yaml         # MCMC: chain, figures, summary
-card calibrate examples/flood_only.yaml   # the same constraints, solved exactly
+card init myrun.yaml         # a documented starter config, ready to edit
+card calibrate myrun.yaml    # solve its two constraints exactly, in milliseconds
+card fit myrun.yaml          # the full MCMC: chain, figures, summary
 ```
 
 ## Ages and dates
@@ -70,9 +68,9 @@ present**. A matching pair sums to the age of the Earth. Model parameters
 
 ## The paper
 
-`docs/paper/CARD_model.qmd` is the mathematical write-up. It imports this
-package for every date, figure and solved parameter, so the paper and the code
-cannot drift apart.
+[`docs/paper/CARD_model.qmd`](https://github.com/creation-research-laboratory/card-model/blob/main/docs/paper/CARD_model.qmd)
+is the mathematical write-up. It imports this package for every date, figure
+and solved parameter, so the paper and the code cannot drift apart.
 
 ```bash
 quarto render docs/paper/CARD_model.qmd
@@ -91,5 +89,8 @@ the documentation from `main`.
 
 ## License and citation
 
-See [`LICENSE`](LICENSE). A `CITATION.cff` will accompany the first tagged
-release.
+Apache-2.0 — see
+[`LICENSE`](https://github.com/creation-research-laboratory/card-model/blob/main/LICENSE).
+If you use CARD in published work, cite it with the metadata in
+[`CITATION.cff`](https://github.com/creation-research-laboratory/card-model/blob/main/CITATION.cff)
+(GitHub renders a ready-made citation under *Cite this repository*).

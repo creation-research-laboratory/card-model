@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+title: "CARD: Calibrating Accelerated Radiometric Decay"
+message: "If you use this software, please cite it using these metadata."
+type: software
+authors:
+  - given-names: Rick
+    family-names: Sanders
+repository-code: "https://github.com/creation-research-laboratory/card-model"
+url: "https://creation-research-laboratory.github.io/card-model/"
+abstract: >-
+  A general model for accelerated radiometric decay within a young-earth
+  creation framework. CARD represents the decay rate as a piecewise function of
+  time, with accelerated periods during the Creation week and the Flood
+  relaxing exponentially back toward the rate measured today, and converts
+  between true young-earth ages and apparent secular ages. Model parameters can
+  be specified, solved exactly from matched date pairs, or sampled with MCMC.
+keywords:
+  - radiometric dating
+  - accelerated decay
+  - young earth
+  - creation science
+  - geochronology
+  - mcmc
+license: Apache-2.0
+version: 0.1.0
+date-released: "2026-08-01"

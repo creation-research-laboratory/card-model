@@ -58,15 +58,20 @@ def test_yaml_and_json_agree(tmp_path):
     assert from_yaml.to_dict() == from_json.to_dict()
 
 
-def test_shipped_example_config_loads():
-    """examples/flood_only.yaml is the documented entry point; keep it valid."""
-    import os
+def test_bundled_example_config_loads(tmp_path):
+    """The example ships as package data — `examples/` is not installed, so a
+    pip user has no repository to point at.  It is what `card init` writes, so
+    it must stay valid."""
+    from card.config import example_config_text
 
-    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    config = load_config(os.path.join(root, "examples", "flood_only.yaml"))
+    path = tmp_path / "bundled.yaml"
+    path.write_text(example_config_text())
+
+    config = load_config(str(path))
     assert config.chronology == Chronology()
     assert [c.young_age for c in config.constraints] == [4400.0, 2556.0]
-    assert config.sampler.seed is not None  # the example must be reproducible
+    assert config.sampler.seed is not None       # must be reproducible
+    assert config.sampler.initial_guess == "calibrate"  # must not get stuck
 
 
 def test_chronology_keywords_respect_the_date_age_rule():

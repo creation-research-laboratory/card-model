@@ -12,6 +12,28 @@ requires-python = ">=3.10"
 authors = [
     { name = "Rick Sanders" },
 ]
+keywords = [
+    "radiometric dating",
+    "accelerated decay",
+    "young earth",
+    "creation science",
+    "geochronology",
+    "mcmc",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Physics",
+]
 dependencies = [
     "numpy",
     "scipy",
@@ -21,6 +43,13 @@ dependencies = [
     "h5py",  # MCMC chains are stored as HDF5 (card.inference)
     "pyyaml",  # run configs for `card fit` (card.config); imported lazily
 ]
+
+# Shown in the sidebar of the PyPI project page.
+[project.urls]
+Homepage = "https://creation-research-laboratory.github.io/card-model/"
+Documentation = "https://creation-research-laboratory.github.io/card-model/"
+Repository = "https://github.com/creation-research-laboratory/card-model"
+Issues = "https://github.com/creation-research-laboratory/card-model/issues"
 
 [project.scripts]
 card = "card.cli:main"
@@ -39,6 +68,11 @@ docs = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+# The worked example config ships inside the package: `examples/` is not part
+# of the installed distribution, so `card init` reads it from here instead.
+[tool.setuptools.package-data]
+card = ["data/*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

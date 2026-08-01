@@ -216,6 +216,7 @@ Everything above is one YAML file and one command — see
 [run configs and CLI](../cli.md):
 
 ```bash
-card calibrate examples/flood_only.yaml   # the exact solve
-card fit examples/flood_only.yaml         # the full MCMC, figures included
+card init myrun.yaml         # the same fit as a config file
+card calibrate myrun.yaml    # the exact solve
+card fit myrun.yaml          # the full MCMC, figures included
 ```
