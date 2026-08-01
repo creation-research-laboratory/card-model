@@ -1,0 +1,68 @@
+name: docs
+
+# Builds the mkdocs site and publishes it to GitHub Pages.
+#
+# One-time setup in the GitHub UI: Settings -> Pages -> Build and deployment ->
+# Source: "GitHub Actions".  Without that, the deploy step fails with a 404.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  # Let a running deployment finish rather than cancelling it half-published.
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install the package and the docs extra
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[docs]"
+
+      - name: Generate the gallery figures
+        # The figures are derived artifacts, not committed (*.png is
+        # gitignored), so the site is built against freshly generated ones.
+        env:
+          MPLBACKEND: Agg
+        run: python docs/generate_figures.py
+
+      - name: Build the site
+        # --strict turns mkdocs and mkdocstrings warnings (a broken link, an
+        # undocumented parameter) into a failed build.
+        run: mkdocs build --strict
+
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    # Pull requests build the site to prove it still builds, but only main
+    # publishes.
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
