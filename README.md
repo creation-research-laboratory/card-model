@@ -20,6 +20,55 @@ with MCMC when the dates carry uncertainties.
 [API reference](https://creation-research-laboratory.github.io/card-model/api/models/) ·
 [figure gallery](https://creation-research-laboratory.github.io/card-model/gallery/)
 
+## Background, Motivation, and Context
+
+Radiometric dating estimates the age of a rock from the ratio of a radioactive
+parent isotope to the products it decays into, on the assumption that the decay
+rate has been constant since the rock formed. On that assumption the Earth is
+about 4.5 billion years old, the Precambrian–Cambrian boundary falls near 540
+million years ago, and the last glacial period ended roughly 11,700 years ago.
+Those dates, and the constant-rate assumption underlying them, are the standard
+framework of modern geochronology.
+
+Young-earth creation models instead place the age of the Earth at roughly six
+thousand years, which cannot be reconciled with those dates unless something in
+the standard assumptions differs. One long-standing proposal is that the decay
+rates were not in fact constant — that decay was dramatically accelerated
+during one or more episodes in the past, so that a great deal of decay occurred
+in a short time and rocks consequently *appear* far older than they are. That
+hypothesis was investigated in detail by the RATE project (Radioisotopes and
+the Age of The Earth, 1997–2005), which examined helium retention in zircons,
+radiohalos, fission tracks and isotopic discordance.
+
+What that work did not supply was a general quantitative mapping. If decay was
+accelerated, then by how much, beginning when, and with what time dependence —
+and what young-earth age corresponds to a particular published date? CARD is an
+attempt to answer that in a form that can be calculated rather than asserted.
+It represents the decay rate as an explicit function of time, \(\lambda(t)\),
+with a small number of parameters: when acceleration occurred, how intense it
+was, and how quickly it relaxed back to the rate we measure today. Integrating
+that function gives the apparent age a rock of any true age would present to a
+conventional analysis; inverting it goes the other way. The parameters are not
+assumed — they are **calibrated** from matched date pairs, events assigned both
+a young-earth date and a conventional one, either solved exactly or fitted with
+uncertainties by MCMC.
+
+Making the model explicit is the point. Once the assumptions are numbers in a
+configuration file rather than prose, they can be varied, disagreed with, and
+tested: how much does the answer depend on where the Flood is placed? What rate
+of sediment deposition or mountain building would a given calibration imply? At
+what point does the decay rate return to the background value? Different
+assumptions produce different numbers, and the framework makes that dependence
+visible instead of hiding it.
+
+CARD is a modeling tool, not an argument. It takes a young-earth chronology as
+an input assumption and works out the consequences; it does not attempt to
+establish that chronology, and it does not address the physical objections to
+accelerated decay — most prominently the heat problem, the enormous quantity of
+energy such acceleration would release, which the RATE researchers themselves
+identified as unresolved. Those questions should be weighed separately from the
+arithmetic implemented here.
+
 ## Install
 
 ```bash
