@@ -42,6 +42,7 @@ Example::
 
 import json
 import os
+import warnings
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 import numpy as np
@@ -54,6 +55,12 @@ __all__ = ["MCMCFitter", "load_results"]
 
 #: Default prior width, in whatever space the parameter is sampled in.
 DEFAULT_PRIOR_SIGMA = 3.0
+
+#: How far below the best walker's median log-posterior a walker has to sit
+#: before it is called stuck.  The likelihood is Gaussian in the secular ages,
+#: so a gap of 50 means that walker is ~10 sigma out on a constraint the rest
+#: of the ensemble fits: it is not sampling the same posterior, it is trapped.
+STUCK_WALKER_LOG_PROB_GAP = 50.0
 
 
 class MCMCFitter:
@@ -309,9 +316,13 @@ class MCMCFitter:
         except Exception:  # pragma: no cover - emcee version differences
             autocorr = np.full(self.ndim, np.nan)
 
+        log_prob_chain = sampler.get_log_prob()
+        stuck = self._find_stuck_walkers(log_prob_chain)
+
         return {
             'chain': sampler.get_chain(),                  # (steps, walkers, ndim)
-            'log_prob_chain': sampler.get_log_prob(),      # (steps, walkers)
+            'log_prob_chain': log_prob_chain,              # (steps, walkers)
+            'stuck_walkers': stuck,
             'samples': sampler.get_chain(flat=True),
             'log_probs': sampler.get_log_prob(flat=True),
             'acceptance_fraction': float(np.mean(sampler.acceptance_fraction)),
@@ -327,6 +338,56 @@ class MCMCFitter:
             'prior_means': dict(self.prior_means),
             'prior_sigmas': dict(self.prior_sigmas),
         }
+
+    # ------------------------------------------------------- diagnostics
+    @staticmethod
+    def _find_stuck_walkers(log_prob_chain: np.ndarray) -> np.ndarray:
+        """
+        Indices of walkers that never joined the rest of the ensemble.
+
+        Warns rather than raises, and never discards anything: the samples are
+        returned as drawn, with a pointer at which walkers to look at.
+
+        This is not a hypothetical.  The main inversion's posterior has a
+        second, far-away local maximum — small lambda_F with a k_F so small the
+        rate never relaxes — which fits the tight Ice Age constraint while
+        missing the Flood by ~50 sigma.  Started from the prior mean, about a
+        quarter of the walkers fall into it during burn-in and can never leave:
+        the barrier between the two modes is ~1e10 in log-posterior, so no
+        stretch move that lands between them is ever accepted.  Their samples
+        are non-convergence, not posterior mass (the mode carries weight
+        e^-1473), but they still dragged the reported 16th percentile of
+        lambda_F from 3.2e6 down to 5.4.
+
+        The cure is to start the walkers at the answer rather than at the prior
+        mean — `card.calibrate` solves these two constraints exactly and for
+        free — which is what `examples/flood_only.yaml` now does.
+        """
+        if log_prob_chain.ndim != 2 or log_prob_chain.shape[1] < 2:
+            return np.empty(0, dtype=int)
+
+        walker_medians = np.median(log_prob_chain, axis=0)
+        finite = walker_medians[np.isfinite(walker_medians)]
+        if finite.size == 0:
+            return np.empty(0, dtype=int)
+
+        gap = np.max(finite) - walker_medians
+        stuck = np.flatnonzero(~(gap < STUCK_WALKER_LOG_PROB_GAP))
+        if stuck.size:
+            warnings.warn(
+                f"{stuck.size} of {log_prob_chain.shape[1]} walkers never "
+                f"joined the ensemble: walkers {stuck.tolist()} sit at least "
+                f"{STUCK_WALKER_LOG_PROB_GAP:g} in log-posterior below the "
+                "best one (worst gap "
+                f"{np.max(gap):.3g}).  They are almost certainly trapped in a "
+                "far-away local maximum, and every percentile computed from "
+                "the flat chain is contaminated by them.  Re-run with an "
+                "`initial_guess` near the solution — for the flood-only limit, "
+                "`card.calibrate.solve_flood_only` gives it exactly — or drop "
+                "these walkers before summarizing.",
+                stacklevel=3,
+            )
+        return stuck
 
     # ------------------------------------------------------------- io
     def save_results(self, results: Dict[str, Any], path: str) -> str:
@@ -358,7 +419,7 @@ def save_results(results: Dict[str, Any], path: str) -> str:
 
     with h5py.File(path, 'w') as handle:
         for key in ('chain', 'log_prob_chain', 'samples', 'log_probs',
-                    'autocorr_time'):
+                    'autocorr_time', 'stuck_walkers'):
             if key in results:
                 handle.create_dataset(key, data=np.asarray(results[key]),
                                       compression='gzip')

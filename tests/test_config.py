@@ -11,6 +11,7 @@ read for the constraint ages only.
 
 import json
 
+import numpy as np
 import pytest
 import yaml
 
@@ -199,6 +200,54 @@ def test_custom_chronology_reaches_present_time():
                                      "ice_age_end_date": 3600.0})
     fitter = RunConfig.from_dict(data).build_fitter()
     assert fitter.present_time == 7000.0
+
+
+def test_initial_guess_defaults_to_none():
+    fitter = RunConfig.from_dict(MINIMAL).build_fitter()
+    assert RunConfig.from_dict(MINIMAL).initial_guess_for(fitter) is None
+
+
+def test_calibrate_keyword_starts_at_the_exact_solution():
+    """In sampling space, so log10 for these two — the conversion is the whole
+    point of resolving the guess against the fitter rather than the config."""
+    from card import solve_flood_only
+
+    config = RunConfig.from_dict(
+        dict(MINIMAL, sampler={"initial_guess": "calibrate"}))
+    guess = config.initial_guess_for(config.build_fitter())
+
+    truth = solve_flood_only(4400.0, 540e6, 2556.0, 11500.0)
+    assert guess == pytest.approx([np.log10(truth.lambda_F),
+                                   np.log10(truth.k_F)])
+
+
+def test_calibrate_keyword_needs_two_constraints():
+    config = RunConfig.from_dict(dict(
+        MINIMAL, constraints=MINIMAL["constraints"][:1],
+        sampler={"initial_guess": "calibrate"}))
+    with pytest.raises(ValueError, match="two matched date pairs"):
+        config.initial_guess_for(config.build_fitter())
+
+
+def test_explicit_initial_guess_is_ordered_by_free_parameters():
+    config = RunConfig.from_dict(dict(
+        MINIMAL, sampler={"initial_guess": {"k_F": -2.2, "lambda_F": 6.5}}))
+    fitter = config.build_fitter()
+    assert fitter.free_param_names == ("lambda_F", "k_F")
+    assert config.initial_guess_for(fitter) == [6.5, -2.2]
+
+
+def test_incomplete_initial_guess_is_rejected():
+    config = RunConfig.from_dict(dict(
+        MINIMAL, sampler={"initial_guess": {"lambda_F": 6.5}}))
+    with pytest.raises(ValueError, match="missing: \\['k_F'\\]"):
+        config.initial_guess_for(config.build_fitter())
+
+
+def test_unknown_initial_guess_keyword_is_rejected():
+    with pytest.raises(ValueError, match="initial_guess must be a mapping"):
+        RunConfig.from_dict(dict(MINIMAL,
+                                 sampler={"initial_guess": "somewhere"}))
 
 
 def test_to_dict_round_trips():

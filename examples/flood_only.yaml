@@ -49,6 +49,12 @@ sampler:
   n_steps: 20000
   burn_in: 5000
   seed: 20260731
+  # Start the walkers at the exact solution to these two constraints rather
+  # than at the prior means.  This is not a convenience: started from the prior
+  # means, about a quarter of the walkers fall into a far local maximum (tiny
+  # lambda_F with a k_F so small the rate never relaxes) that fits the Ice Age
+  # and misses the Flood by ~50 sigma, and they can never climb back out.
+  initial_guess: calibrate
 
 output:
   directory: mcmc_output

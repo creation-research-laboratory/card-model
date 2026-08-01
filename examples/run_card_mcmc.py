@@ -21,6 +21,7 @@ examples/flood_only.yaml`); this script exists to get a *posterior*, which
 needs the uncertainties.
 """
 
+import math
 import os
 
 from card import (
@@ -32,6 +33,7 @@ from card import (
     plot_age_comparison,
     plot_mcmc_corner,
     plot_mcmc_traces,
+    solve_flood_only,
     summarize_mcmc,
 )
 
@@ -71,7 +73,18 @@ def main():
         fixed_params=fixed_params,
     )
 
-    results = fitter.run_mcmc(n_walkers=32, n_steps=n_steps, burn_in=n_burn)
+    # Start the walkers at the exact solution to the same two constraints,
+    # not at the prior means.  The posterior has a second, far local maximum
+    # (tiny lambda_F, k_F small enough that the rate never relaxes) that fits
+    # the tight Ice Age constraint while missing the Flood by ~50 sigma; from
+    # the prior means about a quarter of the walkers fall into it and never
+    # leave, contaminating every percentile.  MCMCFitter warns when that
+    # happens.  In sampling space, so log10 for these two.
+    exact = solve_flood_only(FLOOD_AGE, 540_000_000, ICE_AGE_END_AGE, 11_500.0)
+    initial_guess = [math.log10(exact.lambda_F), math.log10(exact.k_F)]
+
+    results = fitter.run_mcmc(n_walkers=32, n_steps=n_steps, burn_in=n_burn,
+                              initial_guess=initial_guess)
     chain_path = fitter.save_results(results, os.path.join(out_dir, 'chain.h5'))
     print(f"Chain saved to {chain_path}")
 
@@ -111,6 +124,9 @@ def main():
     print("=" * 60)
     print(f"mean acceptance fraction: {results['acceptance_fraction']:.3f}")
     print(f"autocorrelation time:     {results['autocorr_time']}")
+    if len(results['stuck_walkers']):
+        print(f"WARNING: walkers {list(results['stuck_walkers'])} never joined "
+              "the ensemble; the intervals below are contaminated.")
     for row in summary:
         print(f"{row['parameter']}: {row['linear_median']:.6g} "
               f"[{row['linear_16%']:.6g}, {row['linear_84%']:.6g}]")

@@ -14,9 +14,8 @@ All young ages are in years before present (YBP).
 
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.optimize import brentq
 
-from card import AGE_OF_EARTH, solve_lambda_F
+from card import solve_lambda_F
 
 # Paired calibration dates (secular age, YBP) shared by both scenarios
 FLOOD_SECULAR = 541e6    # Precambrian-Cambrian boundary

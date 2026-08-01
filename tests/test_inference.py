@@ -8,6 +8,8 @@ parameters are rejected rather than sampled, and that a short run recovers
 parameters it was given.
 """
 
+import warnings
+
 import numpy as np
 import pytest
 
@@ -195,6 +197,11 @@ def test_short_run_recovers_the_calibrated_parameters():
     assert 10 ** median[1] == pytest.approx(truth.k_F, rel=0.5)
 
 
+# The tests below run 20-50 steps from the prior means purely to get an object
+# of the right shape.  Chains that short genuinely have not converged, so the
+# stuck-walker warning is correct and beside the point; it is silenced per test
+# rather than globally, so a *new* warning still surfaces.
+@pytest.mark.filterwarnings("ignore:.*never joined the ensemble")
 def test_fixed_parameters_never_move():
     np.random.seed(1)
     fitter = make_fitter()
@@ -207,6 +214,7 @@ def test_fixed_parameters_never_move():
         assert params.lambda_bg == 1.0
 
 
+@pytest.mark.filterwarnings("ignore:.*never joined the ensemble")
 def test_results_record_the_sampling_space():
     np.random.seed(2)
     results = make_fitter().run_mcmc(n_walkers=8, n_steps=20, burn_in=0,
@@ -216,9 +224,56 @@ def test_results_record_the_sampling_space():
 
 
 # ----------------------------------------------------------------------------
+# Stuck-walker diagnostic
+# ----------------------------------------------------------------------------
+
+def test_a_trapped_walker_is_reported():
+    """The main inversion's posterior has a far local maximum that swallows
+    walkers permanently.  Their samples are non-convergence, not posterior
+    mass, and they used to drag the reported 16th percentile of lambda_F from
+    3.2e6 down to 5.4 with nothing said."""
+    log_prob = np.full((100, 8), -1.0)
+    log_prob[:, 3] = -1500.0          # trapped in the other mode
+
+    with pytest.warns(UserWarning, match="never joined the ensemble"):
+        stuck = MCMCFitter._find_stuck_walkers(log_prob)
+    assert stuck.tolist() == [3]
+
+
+def test_a_converged_ensemble_is_not_flagged():
+    rng = np.random.default_rng(0)
+    log_prob = rng.normal(-1.0, 0.5, size=(100, 8))
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")   # any warning here fails the test
+        assert MCMCFitter._find_stuck_walkers(log_prob).size == 0
+
+
+@pytest.mark.filterwarnings("ignore:.*never joined the ensemble")
+def test_a_run_reports_its_stuck_walkers():
+    np.random.seed(6)
+    results = make_fitter().run_mcmc(n_walkers=8, n_steps=20, burn_in=0,
+                                     progress=False)
+    assert 'stuck_walkers' in results
+
+
+def test_starting_at_the_exact_solution_converges():
+    """`solve_flood_only` answers the same two constraints deterministically,
+    so it is the right place to start the walkers — and starting there is what
+    keeps them out of the far mode."""
+    np.random.seed(7)
+    truth = solve_flood_only(FLOOD_AGE, 541e6, ICE_AGE_END_AGE, 11.7e3)
+    guess = [np.log10(truth.lambda_F), np.log10(truth.k_F)]
+    results = make_fitter().run_mcmc(n_walkers=16, n_steps=300, burn_in=100,
+                                     initial_guess=guess, progress=False)
+    assert len(results['stuck_walkers']) == 0
+    assert results['acceptance_fraction'] > 0.2
+
+
+# ----------------------------------------------------------------------------
 # HDF5 round trip
 # ----------------------------------------------------------------------------
 
+@pytest.mark.filterwarnings("ignore:.*never joined the ensemble")
 def test_results_round_trip_through_hdf5(tmp_path):
     np.random.seed(3)
     fitter = make_fitter()
@@ -236,6 +291,7 @@ def test_results_round_trip_through_hdf5(tmp_path):
     assert loaded['n_walkers'] == 8
 
 
+@pytest.mark.filterwarnings("ignore:.*never joined the ensemble")
 def test_saved_chain_keeps_walker_structure(tmp_path):
     """The old text format flattened the chain, so the plotting code had to
     guess the walker count back by factorizing the sample total.  HDF5 records
@@ -253,6 +309,7 @@ def test_loading_a_missing_file_says_so(tmp_path):
         load_results(str(tmp_path / "absent.h5"))
 
 
+@pytest.mark.filterwarnings("ignore:.*never joined the ensemble")
 def test_hdf5_backend_streams_the_chain(tmp_path):
     """With backend_path emcee writes as it goes, so a long run is resumable
     and inspectable before it finishes."""

@@ -1,52 +1,73 @@
-import matplotlib.pyplot as plt
-import numpy as np
+"""
+Schematic of the general model's decay-rate history, lambda(t).
 
-# Create mock data
-def lam(t, t_c, t_f, t_F2, k_c, k_f, lam_c, lam_F):
-    lams = np.zeros(t.shape)
-    mask = t <= t_c
-    lams[mask] = lam_c
-    mask = (t >= t_c) & (t < t_f)
-    lams[mask] = (lam_c - 1)*np.exp(-k_c*(t[mask] - t_c)) + 1
-    mask = (t >= t_f) & (t <= t_F2)
-    lams[mask] = lam_F
-    mask = t > t_F2
-    lams[mask] = (lam_F - 1)*np.exp(-k_f*(t[mask] - t_F2)) + 1
-    return lams
+Three relaxation constants are drawn on one axis to show how k controls the
+return to the background rate after each accelerated period: a large k relaxes
+within a few years of the event, a small one leaves the rate elevated for
+thousands of years.
 
-ts = np.linspace(0, 6000, 6000)
+The x axis is a DATE — years after Day 1 of Creation — because that is the
+timeline lambda is defined on.
 
-t_f = 1700
-t_F2 = 1701
-lam_F = 100000
-lam_c = 1000
-t_c = 0.1
+This script used to re-implement the piecewise lambda(t) itself, with its own
+Flood date and its own idea of the age of the Earth, so a change to the model
+or to the chronology would not have reached the figure.  Both now come from the
+package: `plot_lambda_history` evaluates `GeneralModel.lambda_func`, the same
+function the solver integrates.
 
-lams1 = lam(ts, t_c, t_f, t_F2, 0.1, 0.1, lam_c, lam_F)
-lams2 = lam(ts, t_c, t_f, t_F2, 0.01, 0.01, lam_c, lam_F)
-lams3 = lam(ts, t_c, t_f, t_F2, 0.005, 0.005, lam_c, lam_F)
+Writes general_model_plot.png to the current directory.
+"""
 
-# Initialize the plot
-fig, ax = plt.subplots(figsize=(10, 5), layout="tight")
+import math
 
-# 1. plot the decay models
-ax.semilogy(ts, lams1, color='black', label='k = 0.1')
-ax.semilogy(ts, lams2, color='blue', label='k = 0.01', linestyle=':')
-ax.semilogy(ts, lams3, color='green', label='k = 0.005', linestyle='--')
+from card import (
+    FLOOD_END_DATE,
+    FLOOD_START_DATE,
+    GeneralModelParams,
+    plot_lambda_history,
+)
 
-# 2. Add vertical lines at t = 0
-ax.axvline(x=0, color='gray', linestyle='--')
+# Peak rates, as multiples of the background rate.
+LAMBDA_C = 1e3      # Creation week
+LAMBDA_F = 1e5      # Flood
 
-# 3. Shade the region between the lines
-# 'alpha' controls transparency (0 = fully transparent, 1 = solid)
-ax.axvspan(t_f, t_F2, color='red', alpha=0.2, label='Flood period')
+# One year of Flood, so the constant-rate region is visible on the figure.  The
+# flood-only limit used elsewhere sets t_F2 == t_F, which has no width to draw.
+FLOOD_END = max(FLOOD_END_DATE, FLOOD_START_DATE + 1)
 
-# Add legend and display
-ax.legend()
+# Relaxation constants, applied to both the post-Creation and post-Flood decay.
+DECAY_CONSTANTS = [0.1, 0.01, 0.005]
 
-plt.xlabel('Time (yr)')
-plt.ylabel(r'$\lambda(t)$')
 
-plt.ylim([0.97, 1e5 + 1000])
+def main():
+    models = [
+        GeneralModelParams(
+            lambda_c=LAMBDA_C,
+            lambda_F=LAMBDA_F,
+            lambda_bg=1.0,
+            k_c=k,
+            k_F=k,
+            t_c=1.0,
+            t_F=FLOOD_START_DATE,
+            t_F2=FLOOD_END,
+        )
+        for k in DECAY_CONSTANTS
+    ]
+    labels = [f"$k_c = k_F$ = {k:g}" for k in DECAY_CONSTANTS]
 
-plt.savefig('general_model_plot.png', dpi=300)
+    out_file = plot_lambda_history(
+        models, labels=labels, out_file='general_model_plot.png')
+
+    print(f"Flood: DATE {FLOOD_START_DATE:g} to {FLOOD_END:g} "
+          f"(years after Creation)")
+    for k in DECAY_CONSTANTS:
+        # How long the post-Flood rate stays 10x the background: the figure's
+        # main message, as a number.
+        years = math.log((LAMBDA_F - 1) / 9.0) / k
+        print(f"  k = {k:<6g} rate is still 10x background "
+              f"{years:,.0f} years after the Flood")
+    print(f"\nSaved: {out_file}")
+
+
+if __name__ == '__main__':
+    main()

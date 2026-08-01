@@ -116,16 +116,23 @@ def _run_fit(args) -> int:
         np.random.seed(config.sampler.seed)
 
     fitter = config.build_fitter()
+    initial_guess = config.initial_guess_for(fitter)
     if not args.quiet:
         print(f"Fitting {len(config.constraints)} constraint(s) for "
               f"{', '.join(fitter.free_param_names)} "
               f"({config.sampler.n_walkers} walkers x "
               f"{config.sampler.n_steps} steps)")
+        if initial_guess is not None:
+            print("starting the walkers at "
+                  + ", ".join(f"{name}={value:.6g}" for name, value
+                              in zip(fitter.free_param_names, initial_guess))
+                  + " (sampling space)")
 
     results = fitter.run_mcmc(
         n_walkers=config.sampler.n_walkers,
         n_steps=config.sampler.n_steps,
         burn_in=config.sampler.burn_in,
+        initial_guess=initial_guess,
         init_spread=config.sampler.init_spread,
         progress=config.sampler.progress and not args.quiet,
     )
@@ -174,6 +181,13 @@ def _run_fit(args) -> int:
     if not args.quiet:
         print(f"\nmean acceptance fraction: {results['acceptance_fraction']:.3f}")
         print(f"autocorrelation time:     {results['autocorr_time']}")
+        stuck = results.get('stuck_walkers', [])
+        if len(stuck):
+            # run_mcmc has already warned; repeat it where the numbers are
+            # printed, because the numbers themselves are what it invalidates.
+            print(f"WARNING: {len(stuck)} walker(s) never joined the ensemble "
+                  f"{list(stuck)}; the percentiles below are contaminated.  "
+                  "Set sampler.initial_guess (try `calibrate`) and re-run.")
         for row in summary:
             print(f"{row['parameter']}: {row['linear_median']:.6g} "
                   f"[{row['linear_16%']:.6g}, {row['linear_84%']:.6g}]")

@@ -12,9 +12,12 @@ import numpy as np
 import pytest
 
 from card import (
+    FLOOD_START_DATE,
+    GeneralModel,
     GeneralModelParams,
     plot_age_comparison,
     plot_general_model_parameter_sweep,
+    plot_lambda_history,
     plot_mcmc_corner,
     plot_mcmc_traces,
     summarize_mcmc,
@@ -75,6 +78,60 @@ def test_parameter_sweep_writes_a_file(tmp_path):
         vary_params={'lambda_F': [1e5, 1e6]}, n_points=50, out_file=str(out))
     assert result == str(out)
     assert out.stat().st_size > 0
+
+
+def test_lambda_history_writes_a_file(tmp_path):
+    out = tmp_path / "lambda.png"
+    result = plot_lambda_history(
+        GeneralModel.flood_only(lambda_F=1e5, k_F=1e-2), n_points=50,
+        out_file=str(out))
+    assert result == str(out)
+    assert out.stat().st_size > 0
+
+
+def test_lambda_history_draws_the_model_not_a_copy_of_it(tmp_path):
+    """The curve must come from `lambda_func` itself — the failure this figure
+    used to have was a hand-rolled piecewise function drifting from the model."""
+    import matplotlib.pyplot as plt
+
+    model = GeneralModel(GeneralModelParams.defaults(
+        lambda_c=1e3, lambda_F=1e5, k_c=1e-1, k_F=1e-2,
+        t_F=FLOOD_START_DATE, t_F2=FLOOD_START_DATE + 1))
+    fig, ax = plt.subplots()
+    plot_lambda_history(model, n_points=200, ax=ax)
+
+    x, y = ax.get_lines()[0].get_data()
+    for value, drawn in zip(x[::20], y[::20]):
+        assert drawn == pytest.approx(model.lambda_func(value))
+    plt.close(fig)
+
+
+def test_lambda_history_accepts_params_and_several_models(tmp_path):
+    out = tmp_path / "many.png"
+    models = [GeneralModelParams.defaults(k_F=k) for k in (1e-2, 1e-3)]
+    plot_lambda_history(models, labels=["fast", "slow"], n_points=50,
+                        out_file=str(out))
+    assert out.stat().st_size > 0
+
+
+def test_lambda_history_x_axis_is_a_date(tmp_path):
+    """The age-curve figures plot AGEs; this one plots DATEs, and mixing the
+    two up is the mistake the naming rule exists to prevent."""
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots()
+    plot_lambda_history(GeneralModel.flood_only(lambda_F=1e5, k_F=1e-2),
+                        n_points=20, ax=ax)
+    assert ax.get_xlabel() == "Time (years after Creation)"
+    plt.close(fig)
+
+
+def test_lambda_history_rejects_mismatched_labels(tmp_path):
+    with pytest.raises(ValueError, match="labels has 1 entries"):
+        plot_lambda_history([GeneralModelParams.defaults(),
+                             GeneralModelParams.defaults(k_F=1e-3)],
+                            labels=["only one"], n_points=10,
+                            out_file=str(tmp_path / "x.png"))
 
 
 def test_sweep_rejects_unknown_parameter_names(tmp_path):

@@ -35,6 +35,7 @@ __all__ = [
     "load_legacy_text_results",
     "plot_age_comparison",
     "plot_general_model_parameter_sweep",
+    "plot_lambda_history",
     "plot_mcmc_corner",
     "plot_mcmc_traces",
     "summarize_mcmc",
@@ -123,6 +124,93 @@ def plot_age_comparison(
     ax.set_title("Secular age vs young age (0 to present)")
     ax.legend()
     ax.grid(True)
+
+    return _finish(fig, ax, out_file, show, owns_figure)
+
+
+def plot_lambda_history(
+    models,
+    labels: Optional[List[str]] = None,
+    n_points: int = 2000,
+    out_file: str = "lambda_history_plot.png",
+    show: bool = False,
+    shade_flood: bool = True,
+    ax=None,
+):
+    """Plot the decay-rate history lambda(t)/lambda_bg against DATE.
+
+    The x axis is a DATE — years after Day 1 of Creation — because that is the
+    timeline lambda is defined on, unlike the age-curve figures whose x axis is
+    an AGE.
+
+    Every curve comes from the model's own `lambda_func`, which is the point of
+    this function: `examples/plot_general_model.py` and the paper's schematic
+    both used to re-implement the piecewise formula by hand, so a change to the
+    model would not have reached either figure.
+
+    Args:
+        models: A `GeneralModel` (or any `DecayModel`), or a sequence of them.
+            `GeneralModelParams` are accepted too and wrapped in a GeneralModel.
+        labels: Legend entry per model.  Omitted means no legend.
+        n_points: Number of DATEs sampled between 0 and the present.
+        out_file: Output filename for the figure.
+        show: If True, display the figure (ignored when `ax` is given).
+        shade_flood: Shade each model's Flood window `[t_F, t_F2]`.  Only a
+            model that exposes those DATEs is shaded, and a zero-width window
+            (the instantaneous-Flood limit) is drawn as a line.
+        ax: Optional existing axes to draw into.  When supplied the caller owns
+            the figure and this returns the axes instead of a path.
+
+    Returns:
+        Path to the saved figure, or the axes when `ax` was supplied.
+
+    Raises:
+        ValueError: If `labels` is given and its length does not match `models`.
+    """
+    models = list(models) if isinstance(models, (list, tuple)) else [models]
+    models = [GeneralModel(m) if isinstance(m, GeneralModelParams) else m
+              for m in models]
+    if labels is not None and len(labels) != len(models):
+        raise ValueError(
+            f"labels has {len(labels)} entries for {len(models)} model(s)."
+        )
+
+    present_date = AGE_OF_EARTH
+    t = np.linspace(0.0, present_date, n_points)
+    colors = cm.viridis(np.linspace(0, 0.85, len(models)))
+
+    owns_figure = ax is None
+    if owns_figure:
+        fig, ax = plt.subplots(figsize=(10, 5))
+    else:
+        fig = ax.get_figure()
+
+    for i, model in enumerate(models):
+        rates = np.array([model.lambda_func(value) for value in t])
+        ax.semilogy(t, rates, color=colors[i], linewidth=2,
+                    label=None if labels is None else labels[i])
+
+    if shade_flood:
+        # After the curves, so the Flood comes last in the legend rather than
+        # interrupting the models.  Identical windows are drawn once.
+        windows = {(m.params.t_F, m.params.t_F2)
+                   for m in models if hasattr(m, "params")}
+        for j, (t_F, t_F2) in enumerate(sorted(windows)):
+            label = "Flood" if j == 0 else None
+            if t_F2 > t_F:
+                ax.axvspan(t_F, t_F2, color="red", alpha=0.15, label=label)
+            else:
+                # The instantaneous-Flood limit has no width to shade.
+                ax.axvline(t_F, color="red", alpha=0.35, linestyle="--",
+                           linewidth=1, label=label)
+
+    ax.set_xlabel("Time (years after Creation)")
+    ax.set_ylabel(r"$\lambda(t)/\lambda_{bg}$")
+    ax.set_title("Decay rate through time")
+    ax.set_xlim(0, present_date)
+    ax.grid(True, alpha=0.3)
+    if labels is not None or (shade_flood and ax.get_legend_handles_labels()[1]):
+        ax.legend()
 
     return _finish(fig, ax, out_file, show, owns_figure)
 

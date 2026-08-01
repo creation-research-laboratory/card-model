@@ -184,7 +184,17 @@ class Constraint:
 
 @dataclass(frozen=True)
 class SamplerConfig:
-    """emcee settings for a run."""
+    """
+    emcee settings for a run.
+
+    `initial_guess` is where the walkers start, in each parameter's **sampling
+    space** (log10 for the log-scale ones, like `priors`).  It is either a
+    mapping of free-parameter names to values, or the string ``calibrate``,
+    which solves the config's two constraints exactly with
+    `card.calibrate.solve_flood_only` and starts there.  Omitting it starts the
+    walkers at the prior means, which is emcee's usual advice and is wrong for
+    this posterior — see `MCMCFitter._find_stuck_walkers`.
+    """
 
     n_walkers: int = DEFAULT_N_WALKERS
     n_steps: int = DEFAULT_N_STEPS
@@ -192,6 +202,10 @@ class SamplerConfig:
     seed: Optional[int] = None
     init_spread: float = 1e-4
     progress: bool = True
+    initial_guess: Optional[Any] = None
+
+    #: The one string `initial_guess` accepts in place of explicit values.
+    CALIBRATE = "calibrate"
 
     def __post_init__(self):
         for name in ("n_walkers", "n_steps"):
@@ -204,6 +218,14 @@ class SamplerConfig:
         if self.init_spread <= 0:
             raise ValueError(f"sampler.init_spread must be positive, got "
                              f"{self.init_spread!r}")
+        guess = self.initial_guess
+        if guess is not None and not isinstance(guess, MappingABC):
+            if guess != self.CALIBRATE:
+                raise ValueError(
+                    f"sampler.initial_guess must be a mapping of parameter "
+                    f"names to starting values, or the string "
+                    f"{self.CALIBRATE!r}; got {guess!r}."
+                )
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "SamplerConfig":
@@ -219,6 +241,12 @@ class SamplerConfig:
             kwargs["init_spread"] = float(data["init_spread"])
         if "progress" in data:
             kwargs["progress"] = bool(data["progress"])
+        if data.get("initial_guess") is not None:
+            guess = data["initial_guess"]
+            kwargs["initial_guess"] = (
+                {name: float(value) for name, value in guess.items()}
+                if isinstance(guess, MappingABC) else guess
+            )
         return cls(**kwargs)
 
 
@@ -375,6 +403,73 @@ class RunConfig:
             present_time=self.chronology.present_date,
         )
 
+    def calibrated_start(self) -> Dict[str, float]:
+        """
+        Solve this config's two constraints exactly, in **linear** units.
+
+        Raises:
+            ValueError: Unless the config has exactly two constraints, which is
+                what makes the flood-only solve determined.
+        """
+        from .calibrate import solve_flood_only
+
+        if len(self.constraints) != 2:
+            raise ValueError(
+                f"sampler.initial_guess: {SamplerConfig.CALIBRATE!r} solves "
+                "two matched date pairs for lambda_F and k_F, but this config "
+                f"has {len(self.constraints)} constraint(s).  Give explicit "
+                "starting values instead."
+            )
+        flood, second = sorted(self.constraints, key=lambda c: c.young_age,
+                               reverse=True)
+        result = solve_flood_only(
+            flood_age=flood.young_age,
+            flood_secular_age=flood.secular_age,
+            second_age=second.young_age,
+            second_secular_age=second.secular_age,
+            chronology=self.chronology,
+        )
+        return {"lambda_F": result.lambda_F, "k_F": result.k_F}
+
+    def initial_guess_for(self, fitter) -> Optional[list]:
+        """
+        Starting position for `fitter`, ordered by its free parameters.
+
+        Returns None when the config does not ask for one, which leaves emcee
+        starting at the prior means.
+
+        Raises:
+            ValueError: If the guess omits a free parameter or names one the
+                fitter is not sampling.
+        """
+        import math
+
+        guess = self.sampler.initial_guess
+        if guess is None:
+            return None
+
+        if isinstance(guess, MappingABC):
+            values = dict(guess)          # already in sampling space
+        else:
+            # `calibrate` returns model values, so convert each into the space
+            # its parameter is sampled in.
+            values = {
+                name: (math.log10(value) if fitter.specs[name].log_scale
+                       else value)
+                for name, value in self.calibrated_start().items()
+            }
+
+        missing = set(fitter.free_param_names) - set(values)
+        unknown = set(values) - set(fitter.free_param_names)
+        if missing or unknown:
+            raise ValueError(
+                f"sampler.initial_guess must give a starting value for every "
+                f"free parameter and nothing else.  Free: "
+                f"{sorted(fitter.free_param_names)}; missing: "
+                f"{sorted(missing)}; unexpected: {sorted(unknown)}."
+            )
+        return [float(values[name]) for name in fitter.free_param_names]
+
     def to_dict(self) -> Dict[str, Any]:
         """Round-trippable plain-dict form (all keywords resolved to numbers)."""
         return {
@@ -397,6 +492,10 @@ class RunConfig:
                 "seed": self.sampler.seed,
                 "init_spread": self.sampler.init_spread,
                 "progress": self.sampler.progress,
+                "initial_guess": (dict(self.sampler.initial_guess)
+                                  if isinstance(self.sampler.initial_guess,
+                                                MappingABC)
+                                  else self.sampler.initial_guess),
             },
             "output": {"directory": self.output_dir, "figures": self.figures},
         }

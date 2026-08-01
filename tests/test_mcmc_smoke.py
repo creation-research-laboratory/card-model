@@ -36,7 +36,12 @@ SMOKE_CONFIG = {
               "t_F": "flood_start_date", "t_F2": "flood_end_date"},
     "priors": {"lambda_F": {"mean": 6.5, "sigma": 1.0},
                "k_F": {"mean": -2.2, "sigma": 1.0}},
-    "sampler": {"n_walkers": 8, "n_steps": 60, "burn_in": 20, "seed": 4},
+    # `calibrate` starts the walkers at the exact solution to these two
+    # constraints.  Without it a 60-step run does not converge at all — half
+    # the walkers end up trapped in the far local maximum — so this is what
+    # makes a smoke test this short mean anything.
+    "sampler": {"n_walkers": 8, "n_steps": 60, "burn_in": 20, "seed": 4,
+                "initial_guess": "calibrate"},
     "output": {"directory": "out", "figures": True},
 }
 
@@ -88,9 +93,13 @@ def test_chain_lands_near_the_deterministic_solution(tmp_path, config_path):
     truth = solve_flood_only(flood_age=4400.0, flood_secular_age=541e6,
                              second_age=2556.0, second_secular_age=11700.0)
 
+    assert len(results["stuck_walkers"]) == 0, (
+        "walkers fell into the far local maximum; the chain is not sampling "
+        "the posterior the constraints describe")
+
     median = np.median(results["samples"], axis=0)
-    assert 10 ** median[0] == pytest.approx(truth.lambda_F, rel=2.0)
-    assert 10 ** median[1] == pytest.approx(truth.k_F, rel=0.5)
+    assert 10 ** median[0] == pytest.approx(truth.lambda_F, rel=0.5)
+    assert 10 ** median[1] == pytest.approx(truth.k_F, rel=0.2)
 
 
 def test_the_seed_makes_a_run_reproducible(tmp_path, config_path):

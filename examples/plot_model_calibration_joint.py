@@ -17,7 +17,12 @@ import matplotlib.pyplot as plt
 
 from card import solve_flood_only
 
-from plot_model_calibration import FLOOD_SECULAR, ICE_AGE_SECULAR
+# The same two secular targets plot_model_calibration.py uses.  They are
+# repeated rather than imported from it: a sibling import only resolves when
+# the script is run from inside examples/, and two float literals are a smaller
+# hazard than a script that fails depending on the working directory.
+FLOOD_SECULAR = 541e6    # Precambrian-Cambrian boundary
+ICE_AGE_SECULAR = 12e3   # End of the Ice Age
 
 SCENARIOS = {
     'Scenario 1': {'flood_ybp': 5324, 'ice_age_ybp': 4200, 'color': '#e34948'},

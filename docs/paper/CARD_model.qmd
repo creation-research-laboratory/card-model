@@ -45,8 +45,8 @@ from card import (
     FLOOD_AGE,           # AGE at which the Flood begins
     FLOOD_START_DATE,    # DATE at which the Flood begins
     ICE_AGE_END_AGE,     # AGE at which the Ice Age ends
-    GeneralModel,
     GeneralModelParams,
+    plot_lambda_history,
 )
 ```
 
@@ -77,10 +77,12 @@ We can plot the general mathematical model represented in @eq-general-model usin
 ```{python}
 #| label: fig-general-model
 #| fig-cap: "Schematic diagram of the general model showing model behavior. "
-# lambda(t) comes straight from the package, so this figure always shows the
-# same function the solver integrates.  A one-year Flood is used here purely so
-# that the third region is visible; the flood-only limit sets t_F2 == t_F.
-schematic = GeneralModel(GeneralModelParams(
+# The curve is the package's own lambda_func, drawn by the package's own
+# plotting function — the same code `examples/plot_general_model.py` calls — so
+# this figure cannot drift from the model the solver integrates.  A one-year
+# Flood is used here purely so that the third region is visible; the flood-only
+# limit sets t_F2 == t_F.
+schematic = GeneralModelParams(
     lambda_c=1e3,
     lambda_F=1e5,
     lambda_bg=1.0,
@@ -89,17 +91,9 @@ schematic = GeneralModel(GeneralModelParams(
     t_c=1,
     t_F=FLOOD_START_DATE,
     t_F2=FLOOD_START_DATE + 1,
-))
+)
 
-ts = np.linspace(0, AGE_OF_EARTH, 1000)
-rates = np.array([schematic.lambda_func(t) for t in ts])
-
-plt.semilogy(ts, rates)
-plt.xlabel('Time (years after Creation)')
-plt.ylabel(r'$\lambda(t)/\lambda_{bg}$')
-plt.title('Generalized Radiometric Decay Model')
-plt.grid()
-plt.show()
+plot_lambda_history(schematic, out_file=None, show=True)
 ```
 
 @fig-general-model shows schematically how @eq-general-model would look for a particular set of choices for the parameters. 
