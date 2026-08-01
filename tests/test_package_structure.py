@@ -149,6 +149,52 @@ def test_cli_help_does_not_import_the_numerical_stack():
     assert loaded.splitlines()[-1] == "HEAVY:"
 
 
+def test_every_annotation_in_the_package_resolves():
+    """
+    Every name used in a type annotation must actually be imported.
+
+    This is a Python-version trap, not a style check.  Through 3.13, a
+    function's annotations are evaluated when the `def` executes, so a missing
+    import is an immediate NameError at import time.  From 3.14 (PEP 649) they
+    are evaluated lazily, so the same bug imports and runs perfectly — and
+    surfaces only on someone else's interpreter.
+
+    That is exactly what happened: `Sequence` was dropped from config.py's
+    typing import while still being used in a signature.  The suite was green
+    on the 3.14 development machine and every CI job on 3.10-3.13 failed at
+    collection.  Calling get_type_hints forces the evaluation on any version.
+    """
+    import importlib
+    import inspect
+    import pkgutil
+    import typing
+
+    import card
+
+    failures = []
+    for module_info in pkgutil.iter_modules(card.__path__):
+        with warnings.catch_warnings():
+            # The deprecation shims warn on import by design; another test
+            # covers that, and it is noise here.
+            warnings.simplefilter("ignore", DeprecationWarning)
+            module = importlib.import_module(f"card.{module_info.name}")
+        targets = [module]
+        targets += [obj for _, obj in inspect.getmembers(module)
+                    if (inspect.isclass(obj) or inspect.isfunction(obj))
+                    and getattr(obj, "__module__", None) == module.__name__]
+        for target in targets:
+            try:
+                typing.get_type_hints(target)
+            except NameError as error:
+                failures.append(f"{module.__name__}.{getattr(target, '__qualname__', '')}: {error}")
+            except Exception:
+                # Forward references to third-party types we do not import at
+                # runtime are not what this test is about.
+                pass
+
+    assert not failures, "unresolvable annotations:\n" + "\n".join(failures)
+
+
 def test_package_docstring_examples_actually_run():
     """The `>>>` example in card/__init__.py is the first thing a reader sees.
     Nothing executed it until this test, and it had been quietly wrong since

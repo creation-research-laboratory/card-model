@@ -62,7 +62,11 @@ import os
 from collections.abc import Mapping as MappingABC
 from collections.abc import Sequence as SequenceABC
 from dataclasses import dataclass, field
-from typing import Any, Dict, Mapping, Optional, Tuple
+# The ABCs above are for isinstance checks; these are for annotations.  Both
+# spellings are needed, and dropping either one is only visible on Python
+# <= 3.13: from 3.14 (PEP 649) annotations are evaluated lazily, so a missing
+# name in a signature raises nothing until something asks for the type hints.
+from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
 
 from .chronology import DEFAULT_CHRONOLOGY, Chronology
 
