@@ -150,3 +150,49 @@ class Chronology:
 # the package has used all along (Earth 6056 years old, instantaneous Flood
 # 1656 years after Creation, Ice Age ending 3500 years after Creation).
 DEFAULT_CHRONOLOGY = Chronology()
+
+
+# ---------------------------------------------------------------------------
+# Module-level conversions against the default chronology.
+#
+# `Chronology.date_to_age` / `age_to_date` are the same operations bound to a
+# specific chronology; prefer those when a caller supplies one.  These spelled
+# out names are kept because they read unambiguously at a call site.
+# ---------------------------------------------------------------------------
+
+def years_before_present_to_years_after_creation(
+    years_ago: float, age_of_earth: float = None
+) -> float:
+    """
+    Convert an AGE (years before present) to a DATE (years after Creation).
+
+    Args:
+        years_ago: AGE to convert.
+        age_of_earth: Age of the Earth to measure against; defaults to the
+            default chronology's value.
+
+    Returns:
+        The corresponding DATE.
+    """
+    if age_of_earth is None:
+        age_of_earth = DEFAULT_CHRONOLOGY.age_of_earth
+    return age_of_earth - years_ago
+
+
+def years_after_creation_to_years_before_present(
+    years_after: float, age_of_earth: float = None
+) -> float:
+    """
+    Convert a DATE (years after Creation) to an AGE (years before present).
+
+    Args:
+        years_after: DATE to convert.
+        age_of_earth: Age of the Earth to measure against; defaults to the
+            default chronology's value.
+
+    Returns:
+        The corresponding AGE.
+    """
+    if age_of_earth is None:
+        age_of_earth = DEFAULT_CHRONOLOGY.age_of_earth
+    return age_of_earth - years_after

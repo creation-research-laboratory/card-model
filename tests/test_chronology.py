@@ -14,8 +14,8 @@ import json
 
 import pytest
 
-from card.chronology import DEFAULT_CHRONOLOGY, Chronology
-from card.decay_solver import (
+from card import DEFAULT_CHRONOLOGY, Chronology
+from card import (
     AGE_OF_EARTH,
     FLOOD_AGE,
     FLOOD_END_DATE,

@@ -13,7 +13,7 @@ was anchored at the present rather than at the Flood, has been removed).
 import numpy as np
 import pytest
 
-from card.decay_solver import (
+from card import (
     ACCEPTABLE_ERROR,
     AGE_OF_EARTH,
     ConstantDecayModel,
@@ -47,10 +47,12 @@ STANDARD_GENERAL_PARAMS = GeneralModelParams(
 # ill-conditioned there — those ages are excluded from round-trip tests.
 ROUND_TRIP_TRUE_AGES = [0, 100, 4000, 4200, 5000]
 
-# Secular ages for the inverse -> forward round trip.  For the standard
-# GeneralModel the maximum achievable secular age is ~1.255e7 years, so
-# 1e7 is safely inside the achievable range.
-ROUND_TRIP_SECULAR_AGES = [0, 100, 1000, 5000, 1e7]
+# Secular ages for the inverse -> forward round trip, given as fractions of
+# each model's own maximum achievable secular age.  Absolute values cannot be
+# shared across models: the constant model tops out at AGE_OF_EARTH while the
+# accelerated ones reach into the millions of years, and asking any model for a
+# secular age it cannot produce is a domain error, not a round trip.
+ROUND_TRIP_SECULAR_FRACTIONS = [0.0, 1e-6, 1e-3, 0.1, 0.5, 1.0]
 
 
 def make_constant():
@@ -101,11 +103,68 @@ def test_forward_then_inverse_recovers_true_age(model, true_age):
 # Round trip: inverse -> forward recovers the secular age
 # ----------------------------------------------------------------------------
 
-@pytest.mark.parametrize("secular_age", ROUND_TRIP_SECULAR_AGES)
-def test_inverse_then_forward_recovers_secular_age(model, secular_age):
+@pytest.mark.parametrize("fraction", ROUND_TRIP_SECULAR_FRACTIONS)
+def test_inverse_then_forward_recovers_secular_age(model, fraction):
+    secular_age = fraction * model.max_secular_age()
     true_age = model.inverse_age(secular_age)
     recovered = model.forward_age(true_age)
     assert recovered == pytest.approx(secular_age, rel=ACCEPTABLE_ERROR, abs=1e-6)
+
+
+def test_max_secular_age_is_the_top_of_the_domain(model):
+    """The ceiling is the secular age of a rock formed on Day 1 of Creation,
+    and asking for anything above it is a domain error."""
+    ceiling = model.max_secular_age()
+    assert model.forward_age(AGE_OF_EARTH) == pytest.approx(ceiling, rel=1e-12)
+    assert model.inverse_age(ceiling) == pytest.approx(AGE_OF_EARTH, rel=1e-9)
+    with pytest.raises(ValueError, match="exceeds the maximum"):
+        model.inverse_age(ceiling * 1.0001 + 1.0)
+
+
+# ----------------------------------------------------------------------------
+# Unified error contract
+#
+# Every model rejects invalid input the same way: ValueError, never a NaN
+# sentinel and never a plausible-looking number.  forward_age used to return
+# NaN for negative ages (to keep the old fsolve inverse from raising), which
+# meant a caller who did not check could propagate NaN silently.
+# ----------------------------------------------------------------------------
+
+@pytest.mark.parametrize("bad_age", [-1.0, -1e-12, np.nan, np.inf, -np.inf])
+def test_forward_age_rejects_invalid_ages(model, bad_age):
+    with pytest.raises(ValueError):
+        model.forward_age(bad_age)
+
+
+@pytest.mark.parametrize("bad_age", [-1.0, np.nan, np.inf, -np.inf])
+def test_inverse_age_rejects_invalid_ages(model, bad_age):
+    with pytest.raises(ValueError):
+        model.inverse_age(bad_age)
+
+
+def test_forward_age_never_returns_nan(model):
+    """No NaN sentinels anywhere in the valid domain."""
+    for true_age in np.linspace(0, AGE_OF_EARTH, 200):
+        assert np.isfinite(model.forward_age(true_age))
+
+
+@pytest.mark.parametrize("bad_present", [0, -1, np.nan, np.inf])
+def test_invalid_present_time_is_rejected(model, bad_present):
+    with pytest.raises(ValueError, match="present_time"):
+        model.forward_age(100, present_time=bad_present)
+
+
+@pytest.mark.parametrize("bad_type", ["4400", None, [4400], True])
+def test_non_numeric_ages_are_rejected(model, bad_type):
+    with pytest.raises(ValueError, match="real number"):
+        model.forward_age(bad_type)
+
+
+def test_every_model_rejects_formation_before_creation(model):
+    """Uniform across models: an age beyond present_time places formation
+    before Day 1 of Creation."""
+    with pytest.raises(ValueError, match="exceeds present_time"):
+        model.forward_age(AGE_OF_EARTH + 1)
 
 
 # ----------------------------------------------------------------------------

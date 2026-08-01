@@ -16,7 +16,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import brentq
 
-from card.decay_solver import AGE_OF_EARTH, GeneralModel, GeneralModelParams
+from card import AGE_OF_EARTH, solve_lambda_F
 
 # Paired calibration dates (secular age, YBP) shared by both scenarios
 FLOOD_SECULAR = 541e6    # Precambrian-Cambrian boundary
@@ -30,32 +30,14 @@ SCENARIOS = {
 }
 
 
-def build_model(flood_ybp: float, k_F: float, lambda_F: float) -> GeneralModel:
-    """Flood-only limit of the General model: no Creation-week acceleration,
-    instantaneous Flood (t_F == t_F2) at the scenario's Flood time."""
-    t_flood = AGE_OF_EARTH - flood_ybp  # years after Creation
-    params = GeneralModelParams(
-        lambda_c=1.0,
-        lambda_F=lambda_F,
-        lambda_bg=1.0,
-        k_c=1.0,     # irrelevant: lambda_c == lambda_bg
-        k_F=k_F,
-        t_c=1.0,
-        t_F=t_flood,
-        t_F2=t_flood,
-    )
-    return GeneralModel(params)
+def calibrate(flood_ybp: float, k_F: float):
+    """Flood-only calibration at fixed k_F, via card.calibrate.
 
-
-def solve_lambda_F(flood_ybp: float, k_F: float) -> float:
-    """Solve for lambda_F such that a rock formed at the Flood has the
-    target secular age. Root-find in log10 space (monotonic in lambda_F)."""
-    def residual(log10_lambda_F):
-        model = build_model(flood_ybp, k_F, 10.0 ** log10_lambda_F)
-        return model.forward_age(flood_ybp) - FLOOD_SECULAR
-
-    log10_lambda_F = brentq(residual, 2.0, 12.0, xtol=1e-12)
-    return 10.0 ** log10_lambda_F
+    The solve used to live in this script; it now lives in the package so the
+    joint variant, the paper and the tests all share one implementation.
+    """
+    return solve_lambda_F(flood_age=flood_ybp, flood_secular_age=FLOOD_SECULAR,
+                          k_F=k_F)
 
 
 def main():
@@ -64,8 +46,8 @@ def main():
     young_ages = np.linspace(1, 6000, 800)
 
     for name, sc in SCENARIOS.items():
-        lambda_F = solve_lambda_F(sc['flood_ybp'], sc['k_F'])
-        model = build_model(sc['flood_ybp'], sc['k_F'], lambda_F)
+        result = calibrate(sc['flood_ybp'], sc['k_F'])
+        lambda_F, model = result.lambda_F, result.model
 
         secular = np.array([model.forward_age(t) for t in young_ages])
         ice_age_pred = model.forward_age(sc['ice_age_ybp'])

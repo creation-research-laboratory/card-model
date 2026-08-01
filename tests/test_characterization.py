@@ -20,7 +20,7 @@ unaffected by both changes.
 import numpy as np
 import pytest
 
-from card.decay_solver import (
+from card import (
     AGE_OF_EARTH,
     GeneralModel,
     GeneralModelParams,

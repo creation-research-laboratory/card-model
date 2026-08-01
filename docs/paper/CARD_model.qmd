@@ -7,12 +7,12 @@ format:
 ---
 
 # Abstract
-We present a general model for accelerated radiometric decay that can be used to estimate the equivalent young-earth ages of rocks and geologic horizons given a secular age . 
-The model is based on specifying a time-deependent decay rate $\lambda(t)$ as a piecewise function that defines how the rate of radiometric decay evolves through time, with parameters that can be specified or solved for given appropriate data. 
+We present a general model for accelerated radiometric decay that can be used to estimate the equivalent young-earth ages of rocks and geologic horizons given a secular age.
+The model is based on specifying a time-dependent decay rate $\lambda(t)$ as a piecewise function that defines how the rate of radiometric decay evolves through time, with parameters that can be specified or solved for given appropriate data. 
 The model assumes two possible periods of accelerated decay, one during the Creation week and one during the Flood, with the decay rate decaying back to the background rate after each period.
 Following the initial acceleration, $\lambda(t)$ decays back to the background decay rate $\lambda_{bg}$ as an exponential function of time, with decay constant $k_c$ and $k_F$ for the post-Creation week and post-Flood periods, respectively.
 By specifying pairs of matched dates (young-earth and secular), it is possible to calibrate the model to estimate the model parameters, which then allows it to be used for age estimation.
-Using this approach, we can build a numerical solver for mathmetically calculating a young-earth age given a secular age, and vice versa.
+Using this approach, we can build a numerical solver for calculating a young-earth age given a secular age, and vice versa.
 In this paper, we derive the general model and provide examples of calibrated age relationships based on various hypothesized matched date pairs. 
 The predictions from these example models can then be used to calculate various parameters of relevance to young-earth creation studies, for example, the rates of sediment flux and mountain building during the Flood, the timing of the end of the Flood with regards to the geologic period, and the point at which the accelerated decay rates return to the background rate.
 The framework we propose is very flexible and can be used to explore the implications of accelerated decay for various creation issues. 
@@ -56,7 +56,7 @@ In order to develop the general model, we make a series of assumptions that limi
 First, we assume that there are two periods of accelerated decay, one during the Creation week and one during the Flood. 
 These periods of accelerated decay are assumed to be followed by a period of exponential decay back to the background decay rate, $\lambda_{bg}$, which is the decay rate measured today.
 Accelerated decay may occur instantaneously at the start of the Creation week and the Flood and then immediately begin to decline, or there may be an extended time period over which the decay rate returns to the background, depending on the decay constant, which can be specified separately for each accelerated period.
-Finally, we assume that all different isotopes are affected percentage-wise the same, so that the ratio of decay rates for any isotope to the background decay rate is the same for all isotopes.b 
+Finally, we assume that all different isotopes are affected percentage-wise the same, so that the ratio of decay rates for any isotope to the background decay rate is the same for all isotopes.
 This essentially means that we do not directly model the decay of any particular isotope, but instead we model the geologic time scale directly. 
 
 With these assumptions, we can define a general mathematical framework for the time-dependent decay rate, $\lambda(t)$, as a piecewise function that defines how the rate of radiometric decay evolves through time.
@@ -106,7 +106,7 @@ plt.show()
 This model has a total of 7 parameters that can either be specified or solved for, given appropriate data.
 
 - $\lambda_{bg}$: the background decay rate, what is measured today. To make things simpler, we normalize $\lambda(t)$ by $\lambda_{bg}$, so that $\lambda_{bg} = 1$ and all other decay rates are expressed as a ratio to the background decay rate. This works because of our assumption that all isotopes are affected percentage-wise the same, so that the ratio of decay rates for any isotope to the background decay rate is the same for all isotopes.
-- $t_c$: Day 7 of Creation Week, an unknown number of years before present (YBP). Note that $t$ (time in years after creation) is related to YBP as $t = t_p - \text{YBP}$, where $t_p$ is the present in years after Day 1 of creation. @eq-general-model can be re-written using this to put everything in terms of YBP if desired. 
+- $t_c$: Day 7 of Creation Week, an unknown number of years *after* Day 1 of Creation. Throughout this paper a symbol written $t$ counts years after Creation (a *date*) and a symbol written $\tau$ or $A$ counts years before present (an *age*); the two run in opposite directions and are related by $t = A_E - \tau$, where $A_E$ is the age of the Earth, which is numerically also the date of the present. @eq-general-model can be re-written using this to put everything in terms of years before present if desired.
 - $t_{F}$: the start time of accelerated decay during the Flood
 - $t_{F2}$: the end time of accelerated decay during the Flood
 - $\lambda_c$: the decay rate ($\lambda(t)$) _during_ the creation week, which equal to or greater than the background
@@ -119,13 +119,15 @@ There are other models that would be more general extensions of this model, for 
 From this general model various simplifications can be derived. 
 For example, one simplification is to assume that $t_{F} = t_{F2}$ (i.e., peak accelerated decay is instantaneous and $\lambda(t)$ immediately starts to decay back to $\lambda_{bg}$), and that $\lambda_c = \lambda_{bg}$, which would imply no acceleration of decay during the Creation week. 
 In this scenario, $\lambda(t)$ is simply the background rate until the start of the Flood, at which time it jumps up instantaneously and then decays back to the background rate over some period of time.
-Under this assumption, @eq-general-model-YBP becomes:
+Under this assumption, and writing the result in terms of the age $\tau$ (years before present) rather than the date $t$, @eq-general-model becomes:
 $$
-\lambda(t) = \begin{cases}
-\left(\lambda_F - \lambda_{bg}\right) e^{k_F (\tau - t_{F})} + \lambda_{bg} & \tau \le t_{F} \\
-\lambda_{bg} &  \tau > t_F \\
+\lambda(\tau) = \begin{cases}
+\left(\lambda_F - \lambda_{bg}\right) e^{-k_F (A_F - \tau)} + \lambda_{bg} & \tau \le A_{F} \\
+\lambda_{bg} &  \tau > A_F \\
 \end{cases}
-$$ {#eq-flood-only-model} 
+$$ {#eq-flood-only-model}
+
+where $A_F = A_E - t_F$ is the age of the Flood, i.e. the date $t_F$ expressed in years before present. Note that the exponential is anchored at the Flood: $\lambda$ is at its peak when $\tau = A_F$ and has relaxed back toward $\lambda_{bg}$ by the present ($\tau = 0$).
 
 
 Now consider the differential equation for radiometric decay, which is given by:
@@ -152,7 +154,7 @@ In the young-age model, where $\lambda$ is a function of time, we have:
 $$
 r(t_p) = e^{-\int_{t_f}^{t_p} \lambda(t') dt'}
 $$ {#eq-ratio-young-age}
-where 0 is the time of formation of the rock and $t_p$ is the present in years after Day 1 of creation.
+where $t_f$ is the time of formation of the rock and $t_p$ is the present, both in years after Day 1 of creation.
 
 We can run experiments by considering cases where the ages of a rock or geologic horizon within the two models is known. 
 The ratio of daughter to parent products is the same for both the secular and young-age models while the ages are different. 
@@ -169,16 +171,19 @@ For the integration then, $dt = -d\tau$, the limits of integration change from $
 Flipping the limits of integration (note that the two negative signs cancel) gives: -->
 $$
 \begin{aligned}
-A_{sec} & = \int_{t_f}^{t_p} \frac{\lambda(\tau)}{\lambda_{bg}} d\tau\\
-& = \left(\frac{\lambda_F - \lambda_{bg}}{\lambda_{bg}}\right) \int_{t_{limit}}^{t_{p}}  e^{-k_F \tau} d\tau + \int_{t_f}^{t_{F}} d\tau + \int_{t_F}^{t_p} d\tau \\
-& = A_{ya} + R \int_{t_{limit}}^{t_{p}}  e^{-k_F \tau} d\tau \\
-& = A_{ya} + \frac{R}{k_F} \left(e^{-k_F t_{limit}} - e^{-k_F t_{p}}  \right) \\
-& = A_{ya} + \frac{R}{k_F} \left(e^{-k_F (A_E - A_{ya})} - e^{-k_F A_E}  \right) \\
-& = A_{ya} + \frac{R}{k_F} e^{-k_F A_E} \left(e^{k_F A_{ya}} - 1  \right) \\
+A_{sec} & = \int_{t_f}^{t_p} \frac{\lambda(t')}{\lambda_{bg}} dt'\\
+& = \int_{t_f}^{t_{p}} dt' + \left(\frac{\lambda_F - \lambda_{bg}}{\lambda_{bg}}\right) \int_{t_{limit}}^{t_{p}}  e^{-k_F (t' - t_F)} dt' \\
+& = A_{ya} + R \int_{t_{limit}}^{t_{p}}  e^{-k_F (t' - t_F)} dt' \\
+& = A_{ya} + \frac{R}{k_F} \left(e^{-k_F (t_{limit} - t_F)} - e^{-k_F (t_{p} - t_F)}  \right) \\
+& = A_{ya} + \frac{R}{k_F} \left(e^{-k_F (A_F - A_{ya})} - e^{-k_F A_F}  \right) \\
+& = A_{ya} + \frac{R}{k_F} e^{-k_F A_F} \left(e^{k_F A_{ya}} - 1  \right) \\
 \end{aligned}
 $$ {#eq-integral-flood-only-1}
-where $t_{limit} = t_F$ if $t_f \le t_F$ and $t_{limit} = t_f$ if $t_{f} > t_F$. 
-$R = (\lambda_F - \lambda_{bg})/ \lambda_{bg}$ is the normalized ratio of the flood decay rate $\lambda_F$ to the background decay rate.
+where $t_{limit} = t_F$ if $t_f \le t_F$ and $t_{limit} = t_f$ if $t_{f} > t_F$, and $A_{ya} = t_p - t_f$ is the young age of the rock.
+$R = (\lambda_F - \lambda_{bg})/ \lambda_{bg}$ is the excess of the Flood decay rate $\lambda_F$ over the background decay rate, normalized by the background rate.
+The last two lines convert the dates to ages using $t_p - t_F = A_F$ and $t_{limit} - t_F = A_F - A_{ya}$, and so hold for rock formed at or after the Flood, i.e. $A_{ya} \le A_F$.
+For rock that predates the Flood ($A_{ya} \ge A_F$) we have $t_{limit} = t_F$ instead, the bracket collapses to the constant $1 - e^{-k_F A_F}$, and every such rock therefore carries the same fixed excess of apparent age.
+Note that the age of the Earth $A_E$ does not appear: the accelerated decay is anchored at the Flood, so what matters is how long ago the Flood was, not how long ago Creation was.
 <!-- If $t_{ya} < t_F$, then we simply integrate to $t_{ya}$ instead of $t_F$ in the first integral. -->
 
 Using @eq-integral-flood-only-1, we can test several hypotheses. 
@@ -199,39 +204,40 @@ print(f"Flood begins       A_F  = {FLOOD_AGE:,.0f} YBP  (secular {FLOOD_SECULAR:
 print(f"Ice Age ends       A_IA = {ICE_AGE_END_AGE:,.0f} YBP  (secular {ICE_AGE_SECULAR:.4g} yr)")
 ```
 
-Writing $A_F$ and $A_{IA}$ for these two young ages, $A_{sec,F}$ and $A_{sec,IA}$ for their secular counterparts, and $A_E$ for the age of the Earth, substituting into @eq-integral-flood-only-1 gives:
+Writing $A_F$ and $A_{IA}$ for these two young ages and $A_{sec,F}$ and $A_{sec,IA}$ for their secular counterparts, substituting into @eq-integral-flood-only-1 gives:
 $$
-A_{sec,F} - A_F = \frac{R}{k_F} e^{-k_F A_E} \left(e^{k_F A_F} - 1\right)
+A_{sec,F} - A_F = \frac{R}{k_F} \left(1 - e^{-k_F A_F}\right)
 $$ {#eq-flood-constraint}
 
 and
 $$
-A_{sec,IA} - A_{IA} = \frac{R}{k_F} e^{-k_F A_E} \left(e^{k_F A_{IA}} - 1\right)
+A_{sec,IA} - A_{IA} = \frac{R}{k_F} e^{-k_F A_F} \left(e^{k_F A_{IA}} - 1\right)
 $$ {#eq-iceAge-constraint}
 
+The Flood itself is the oldest event the model can date this way, so @eq-flood-constraint is the $A_{ya} = A_F$ endpoint of @eq-integral-flood-only-1 and its bracket is the constant offset noted above.
+Dividing @eq-flood-constraint by @eq-iceAge-constraint eliminates $R$ and leaves a single equation in $k_F$:
+$$
+\frac{A_{sec,F} - A_F}{A_{sec,IA} - A_{IA}} = \frac{e^{k_F A_F} - 1}{e^{k_F A_{IA}} - 1}
+$$ {#eq-constraint-ratio}
 
-@eq-constraint-ratio has no closed-form solution for $k_F$, but its right-hand side is monotonic in $k_F$, so the root is unique and is found immediately by bisection; $R$ then follows from either constraint.
-Rather than approximate this by hand, we solve the two constraints directly against the model, which avoids relying on the large-$k_F$ approximations that @eq-constraint-ratio would otherwise require:
+@eq-constraint-ratio has no closed-form solution for $k_F$, but its right-hand side is monotonically increasing in $k_F$ — from $A_F / A_{IA}$ in the limit $k_F \to 0$ to arbitrarily large values as $k_F$ grows — so the root is unique and is found immediately by bisection; $R$ then follows from either constraint.
+Rather than approximate this by hand, we solve the two constraints directly against the model, which avoids relying on the large-$k_F$ approximations that @eq-constraint-ratio would otherwise invite:
 
 ```{python}
 #| label: calibration
 #| code-summary: "Solve the two constraints for lambda_F and k_F"
-from scipy.optimize import fsolve
+# card.calibrate does the solve: for any candidate k_F the Flood constraint
+# pins lambda_F by a monotone 1-D root, which reduces the system to a single
+# bracketed equation in k_F.  No initial guess is involved, so the result does
+# not depend on starting the solver in the right place.
+from card import solve_flood_only
 
-flood_date = DEFAULT_CHRONOLOGY.flood_start_date
-
-def residuals(theta):
-    """Log-space misfit of both matched date pairs, evaluated on the model."""
-    model = GeneralModel.flood_only(lambda_F=10 ** theta[0],
-                                    k_F=10 ** theta[1],
-                                    t_F=flood_date)
-    return [np.log10(model.forward_age(FLOOD_AGE) / FLOOD_SECULAR),
-            np.log10(model.forward_age(ICE_AGE_END_AGE) / ICE_AGE_SECULAR)]
-
-log_lambda_F, log_k_F = fsolve(residuals, [6.5, -2.3])
-lambda_F, k_F = 10 ** log_lambda_F, 10 ** log_k_F
+result = solve_flood_only(
+    flood_age=FLOOD_AGE,           second_age=ICE_AGE_END_AGE,
+    flood_secular_age=FLOOD_SECULAR, second_secular_age=ICE_AGE_SECULAR,
+)
+lambda_F, k_F, calibrated = result.lambda_F, result.k_F, result.model
 R = lambda_F - 1
-calibrated = GeneralModel.flood_only(lambda_F=lambda_F, k_F=k_F, t_F=flood_date)
 
 print(f"lambda_F = {lambda_F:,.0f} x background   (R = {R:,.0f})")
 print(f"k_F      = {k_F:.4g} / year")
@@ -240,9 +246,29 @@ print(f"check  Flood   {FLOOD_AGE:,.0f} YBP -> "
       f"{calibrated.forward_age(FLOOD_AGE):.4g} yr  (target {FLOOD_SECULAR:.4g})")
 print(f"check  Ice Age {ICE_AGE_END_AGE:,.0f} YBP -> "
       f"{calibrated.forward_age(ICE_AGE_END_AGE):.4g} yr  (target {ICE_AGE_SECULAR:.4g})")
+print(f"largest relative residual: {result.max_abs_residual:.1e}")
 ```
 
 Both constraints are honored exactly, which is expected: two free parameters fitted to two matched date pairs.
+
+The closed form derived above and the package's own evaluation are independent statements of the same model, so it is worth checking them against each other rather than assuming they agree — an earlier draft of @eq-integral-flood-only-1 anchored the exponential at Creation instead of at the Flood, which is invisible in the algebra but not in the numbers:
+
+```{python}
+#| label: check-closed-form
+#| code-summary: "Check @eq-integral-flood-only-1 against the package"
+def closed_form(A_ya, lambda_F, k_F, A_F=FLOOD_AGE):
+    """@eq-integral-flood-only-1, written out directly."""
+    R = lambda_F - 1                       # lambda_bg == 1 by normalization
+    excess = min(A_ya, A_F)                # pre-Flood rock shares one offset
+    return A_ya + (R / k_F) * np.exp(-k_F * A_F) * (np.exp(k_F * excess) - 1)
+
+for A_ya in (1000.0, ICE_AGE_END_AGE, FLOOD_AGE, AGE_OF_EARTH):
+    algebra = closed_form(A_ya, lambda_F, k_F)
+    package = calibrated.forward_age(A_ya)
+    print(f"A_ya = {A_ya:7,.0f} YBP:  equation {algebra:14.6g}   "
+          f"model {package:14.6g}   relative difference "
+          f"{abs(algebra / package - 1):.1e}")
+```
 
 It is important to note that this derivation made several assumptions about the timing and dates of the beginning of the Flood and the Ice Age in the rock record, which could be debated. 
 Other comparative dates for these events could easily be substituted for the ones used here, and the resulting parameters would be slightly different. 

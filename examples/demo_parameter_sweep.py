@@ -6,7 +6,7 @@ This script shows how to use the new parameter sweep plotting function
 to visualize multiple GeneralModel calculations with varied parameters.
 """
 
-from card.decay_solver import GeneralModelParams, plot_general_model_parameter_sweep
+from card import GeneralModelParams, plot_general_model_parameter_sweep
 
 def demo_parameter_sweep():
     """Demonstrate the parameter sweep plotting function."""

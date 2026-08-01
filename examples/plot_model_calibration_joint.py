@@ -14,10 +14,10 @@ All young ages are in years before present (YBP).
 
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.optimize import fsolve
 
-from plot_model_calibration import (FLOOD_SECULAR, ICE_AGE_SECULAR,
-                                    build_model)
+from card import solve_flood_only
+
+from plot_model_calibration import FLOOD_SECULAR, ICE_AGE_SECULAR
 
 SCENARIOS = {
     'Scenario 1': {'flood_ybp': 5324, 'ice_age_ybp': 4200, 'color': '#e34948'},
@@ -25,21 +25,18 @@ SCENARIOS = {
 }
 
 
-def solve_lambda_F_and_k_F(flood_ybp: float, ice_age_ybp: float):
-    """Solve the 2x2 system for (lambda_F, k_F) in log10 space so both
-    paired calibration dates are honored exactly."""
-    def residuals(x):
-        lambda_F, k_F = 10.0 ** x[0], 10.0 ** x[1]
-        model = build_model(flood_ybp, k_F, lambda_F)
-        return [
-            np.log10(model.forward_age(flood_ybp) / FLOOD_SECULAR),
-            np.log10(model.forward_age(ice_age_ybp) / ICE_AGE_SECULAR),
-        ]
+def calibrate(flood_ybp: float, ice_age_ybp: float):
+    """Joint flood-only calibration, via card.calibrate.
 
-    # Initial guess from the fixed-k_F calibration (lambda_F ~ 1e6.8, k_F ~ 1e-2)
-    x0 = np.array([6.8, -2.0])
-    solution = fsolve(residuals, x0, xtol=1e-12)
-    return 10.0 ** solution[0], 10.0 ** solution[1]
+    Both matched date pairs are honored exactly.  The solve used to be a
+    2-D fsolve seeded with a hand-tuned initial guess; the package version
+    reduces it to nested bracketed 1-D solves, which need no guess and cannot
+    wander out of the valid parameter range.
+    """
+    return solve_flood_only(flood_age=flood_ybp,
+                            flood_secular_age=FLOOD_SECULAR,
+                            second_age=ice_age_ybp,
+                            second_secular_age=ICE_AGE_SECULAR)
 
 
 def main():
@@ -48,9 +45,8 @@ def main():
     young_ages = np.linspace(1, 6000, 800)
 
     for name, sc in SCENARIOS.items():
-        lambda_F, k_F = solve_lambda_F_and_k_F(sc['flood_ybp'],
-                                               sc['ice_age_ybp'])
-        model = build_model(sc['flood_ybp'], k_F, lambda_F)
+        result = calibrate(sc['flood_ybp'], sc['ice_age_ybp'])
+        lambda_F, k_F, model = result.lambda_F, result.k_F, result.model
 
         secular = np.array([model.forward_age(t) for t in young_ages])
 

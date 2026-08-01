@@ -18,7 +18,12 @@ dependencies = [
     "matplotlib",
     "emcee",
     "corner",
+    "h5py",  # MCMC chains are stored as HDF5 (card.inference)
+    "pyyaml",  # run configs for `card fit` (card.config); imported lazily
 ]
+
+[project.scripts]
+card = "card.cli:main"
 
 [project.optional-dependencies]
 dev = [

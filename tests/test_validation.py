@@ -11,7 +11,7 @@ shape of the model rather than erroring).
 import numpy as np
 import pytest
 
-from card.decay_solver import (
+from card import (
     FLOOD_END_DATE,
     FLOOD_START_DATE,
     LAMBDA_BG,
