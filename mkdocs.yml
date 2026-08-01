@@ -1,0 +1,112 @@
+site_name: CARD
+site_description: >-
+  Calibrating Accelerated Radiometric Decay — forward and inverse radiometric
+  age modeling under a time-varying decay rate.
+site_url: https://creation-research-laboratory.github.io/card-model/
+repo_url: https://github.com/creation-research-laboratory/card-model
+repo_name: creation-research-laboratory/card-model
+edit_uri: edit/main/docs/
+
+# docs/paper/ holds the Quarto write-up and its render artifacts, which are not
+# part of this site.
+exclude_docs: |
+  paper/
+  generate_figures.py
+
+theme:
+  name: material
+  icon:
+    repo: fontawesome/brands/github
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - content.action.edit
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: deep orange
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: deep orange
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          # The package lives in src/, so point the handler at it rather than
+          # relying on however the docs happen to be built.
+          paths: [src]
+          options:
+            docstring_style: google
+            docstring_section_style: table
+            heading_level: 3
+            members_order: source
+            merge_init_into_class: true
+            separate_signature: true
+            show_root_heading: true
+            show_root_full_path: false
+            show_signature_annotations: true
+            show_source: true
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            signature_crossrefs: true
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.details
+  # Lets ":material-...:" in the page source render as a Material icon.
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
+
+nav:
+  - Home: index.md
+  - The model: model.md
+  - Tutorials:
+      - 1. Forward and inverse ages: tutorials/forward-inverse.md
+      - 2. Fitting the model to dates: tutorials/fitting.md
+  - Run configs and CLI: cli.md
+  - Figure gallery: gallery.md
+  - API reference:
+      - card.models: api/models.md
+      - card.chronology: api/chronology.md
+      - card.constants: api/constants.md
+      - card.parameters: api/parameters.md
+      - card.calibrate: api/calibrate.md
+      - card.inference: api/inference.md
+      - card.plotting: api/plotting.md
+      - card.config: api/config.md
+      - card.cli: api/cli.md
