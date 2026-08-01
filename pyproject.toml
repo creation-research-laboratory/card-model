@@ -26,6 +26,7 @@ dev = [
 ]
 docs = [
     "jupyter",  # needed by Quarto to render docs/paper/CARD_model.qmd
+    "pyyaml",   # Quarto's own jupyter bootstrap imports yaml before starting the kernel
 ]
 
 [tool.setuptools.packages.find]

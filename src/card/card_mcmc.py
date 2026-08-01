@@ -18,6 +18,20 @@ lambda_bg is fixed at 1.0 as per model normalization.
 Priors are Gaussian in log-space for stability.
 Likelihood is Gaussian on secular age measurements.
 
+TIME CONVENTIONS — this class straddles both of them, so read carefully
+(see chronology.py for the naming rule):
+
+  * `data` ages are **AGEs**: years before present.
+  * `t_c`, `t_F`, `t_F2` — whether sampled or pinned via `fixed_params` —
+    are **DATEs**: years after Day 1 of Creation.
+
+Passing a DATE where an AGE belongs has produced a wrong fit before, so
+prefer the named chronology constants (FLOOD_AGE, ICE_AGE_END_AGE for ages;
+FLOOD_START_DATE, FLOOD_END_DATE for dates) over bare numbers.
+
+UNITS — `fixed_params` values are **linear**, while sampled parameters are
+log10 (theta_to_params applies 10**theta), as are `prior_means`/`prior_sigmas`.
+
 Example usage is:
 
 from card.card_mcmc import CARDMCMC
@@ -161,17 +175,22 @@ class CARDMCMC:
         try:
             params = self.theta_to_params(theta)
             model = GeneralModel(params)
-            
+
             log_like = 0.0
             for young_age, secular_age_obs, uncertainty in self.data:
                 secular_age_pred = model.forward_age(young_age)
                 residual = (secular_age_obs - secular_age_pred) / uncertainty
                 log_like += -0.5 * residual**2
-                
+
             return log_like
-            
-        except Exception as e:
-            # Return -inf for invalid parameters
+
+        except ValueError:
+            # GeneralModelParams validation and forward_age's domain check both
+            # raise ValueError for parameter vectors outside the model's
+            # support (lambda < 1, negative k, mis-ordered dates, ages before
+            # Creation).  Rejecting them here is what imposes those bounds on
+            # the sampler.  Deliberately narrow: any other exception is a bug
+            # and should surface rather than be silently turned into -inf.
             return -np.inf
     
     def log_posterior(self, theta: np.ndarray) -> float:
@@ -367,21 +386,23 @@ def example_usage():
     # For demonstration, create some fake data
     np.random.seed(42)
     
-    # True parameters (in linear space)
+    # True parameters (in linear space).  Rates are multiples of the
+    # background rate and so must be >= 1; the t's are DATEs (years after
+    # Creation) and the Flood is brief.
     true_params = GeneralModelParams(
         lambda_c=2.0,
-        lambda_F=0.5,
+        lambda_F=1e5,
         k_c=0.01,
         k_F=0.005,
         t_c=400,
         t_F=1500,
-        t_F2=2500,
+        t_F2=1501,
         lambda_bg=1.0
     )
-    
+
     true_model = GeneralModel(true_params)
-    
-    # Generate synthetic data
+
+    # Generate synthetic data.  These are AGEs (years before present).
     young_ages = np.linspace(100, 6000, 20)
     data = []
     for ya in young_ages:

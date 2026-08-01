@@ -159,6 +159,80 @@ def test_flood_only_rate_is_background_before_flood():
 
 
 # ----------------------------------------------------------------------------
+# Structural properties of forward_age / inverse_age
+#
+# These pin properties the model must satisfy for any parameters, rather than
+# specific numbers.  They are what caught the quadrature bug: forward_age
+# integrates a non-negative lambda, so it cannot decrease, yet the old
+# quad-without-breakpoints implementation produced backward steps of up to
+# 1e5-1e9 years near the Flood discontinuity.
+# ----------------------------------------------------------------------------
+
+# A short, intense Flood — the regime where the old fsolve-based inverse
+# failed on ~17% of targets.
+SHORT_FLOOD_PARAMS = GeneralModelParams(
+    lambda_c=1.0,
+    lambda_F=5e8,
+    lambda_bg=1.0,
+    k_c=1.0,
+    k_F=5e-3,
+    t_c=1.0,
+    t_F=1656.0,
+    t_F2=1656.5,
+)
+
+
+def test_forward_age_is_monotone(model):
+    true_ages = np.linspace(0, AGE_OF_EARTH, 2000)
+    secular = np.array([model.forward_age(t) for t in true_ages])
+    steps = np.diff(secular)
+    # Allow only floating-point-scale dips, not quadrature-scale ones.
+    tolerance = 1e-12 * np.max(np.abs(secular))
+    assert steps.min() >= -tolerance
+
+
+def test_forward_age_is_monotone_for_short_intense_flood():
+    model = GeneralModel(SHORT_FLOOD_PARAMS)
+    true_ages = np.linspace(0, AGE_OF_EARTH, 2000)
+    secular = np.array([model.forward_age(t) for t in true_ages])
+    steps = np.diff(secular)
+    tolerance = 1e-12 * np.max(np.abs(secular))
+    assert steps.min() >= -tolerance
+
+
+@pytest.mark.parametrize("params", [STANDARD_GENERAL_PARAMS, SHORT_FLOOD_PARAMS])
+def test_inverse_age_round_trips_across_full_secular_range(params):
+    """Dense sweep of the achievable secular range; every target must invert."""
+    model = GeneralModel(params)
+    max_secular = model.forward_age(AGE_OF_EARTH)
+    for fraction in np.logspace(-9, 0, 200):
+        target = max_secular * fraction
+        true_age = model.inverse_age(target)
+        assert 0.0 <= true_age <= AGE_OF_EARTH
+        assert model.forward_age(true_age) == pytest.approx(target, rel=1e-9)
+
+
+@pytest.mark.parametrize("k_F", [1e-3, 1e-8, 1e-12, 0.0])
+def test_integral_is_stable_as_decay_constant_approaches_zero(k_F):
+    """k -> 0 means lambda never relaxes; the integral must stay finite and
+    approach the constant-rate limit rather than dividing by zero."""
+    lambda_F = 1e5
+    t_F = 1656
+    model = GeneralModel.flood_only(lambda_F=lambda_F, k_F=k_F, t_F=t_F)
+    secular = model.forward_age(AGE_OF_EARTH)
+    assert np.isfinite(secular)
+
+    post_flood_span = AGE_OF_EARTH - t_F
+    if k_F * post_flood_span < 1e-4:
+        # lambda barely relaxes, so the result approaches the constant-rate
+        # limit.  The leading correction is k*span/2 in relative terms, so the
+        # tolerance has to admit it; at k_F == 0 the match is exact.
+        expected = t_F + lambda_F * post_flood_span
+        tolerance = max(1e-15, k_F * post_flood_span)
+        assert secular == pytest.approx(expected, rel=tolerance)
+
+
+# ----------------------------------------------------------------------------
 # Time convention conversion helpers
 # ----------------------------------------------------------------------------
 

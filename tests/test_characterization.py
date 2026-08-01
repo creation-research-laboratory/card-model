@@ -10,10 +10,11 @@ todo.md's recorded calibration solutions.
 If a deliberate model change alters these numbers, update the pins in the
 same commit and say why in the commit message.
 
-Note: the ICE_AGE_END_AGE convention ambiguity was resolved 2026-07-19 —
-it is years after Creation (3500); its YBP counterpart is ICE_AGE_END_YBP
-(2556).  These tests pin behavior for explicit numeric inputs only, so they
-were unaffected by that fix.
+Note: the Ice Age constant's convention ambiguity was resolved 2026-07-19 and
+the names were made self-describing on 2026-07-26 — ICE_AGE_END_DATE is years
+after Creation (3500) and ICE_AGE_END_AGE is years before present (2556).
+These tests pin behavior for explicit numeric inputs only, so they were
+unaffected by both changes.
 """
 
 import numpy as np
@@ -79,8 +80,13 @@ def test_posterior_model_flood_rock_secular_age():
 
 
 def test_posterior_model_max_secular_age():
+    # Re-pinned when compute_integral moved from scipy quad to the exact
+    # closed form.  The previous pin (415044227.5221515) was quadrature error:
+    # quad, given no breakpoints, misplaced ~8.7e-5 of an integral spanning the
+    # Flood discontinuity.  The value below is the analytically exact one and
+    # agrees with analytic_flood_only_secular_age() to ~1e-16.
     model = make_posterior_model()
-    assert model.forward_age(AGE_OF_EARTH) == pytest.approx(415044227.5221515, rel=1e-6)
+    assert model.forward_age(AGE_OF_EARTH) == pytest.approx(415008028.38936144, rel=1e-12)
 
 
 def test_posterior_model_inverse_of_65_myr():
@@ -172,10 +178,8 @@ def analytic_flood_only_secular_age(true_age, lambda_F, k_F, t_F,
 def test_flood_only_matches_analytic_solution(lambda_F, k_F, t_F, true_age):
     model = GeneralModel.flood_only(lambda_F=lambda_F, k_F=k_F, t_F=t_F)
     expected = analytic_flood_only_secular_age(true_age, lambda_F, k_F, t_F)
-    # KNOWN LIMITATION (discovered 2026-07-19, tracked in repo_todo.md):
-    # compute_integral calls quad without breakpoints, so when the interval
-    # spans the discontinuous Flood spike the quadrature can misplace up to
-    # ~5e-4 of the integral (worst observed: full-domain integral, t_F=1656).
-    # Passing points=[t_F] to quad reproduces this analytic value to ~1e-12.
-    # Tighten this tolerance to ~1e-9 when that fix lands.
-    assert model.forward_age(true_age) == pytest.approx(expected, rel=2e-3)
+    # compute_integral now evaluates this integral in closed form rather than
+    # by quadrature, so it should agree with the independent analytic
+    # expression above to near machine precision.  The old 2e-3 tolerance
+    # existed only to accommodate quad's misplacement of the Flood spike.
+    assert model.forward_age(true_age) == pytest.approx(expected, rel=1e-12)

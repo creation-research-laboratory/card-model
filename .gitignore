@@ -239,3 +239,9 @@ mcmc_output/
 todo.md
 repo_todo.md
 notes.md
+
+# Quarto render artifacts (docs/paper/CARD_model.qmd)
+docs/paper/*.html
+docs/paper/*.pdf
+docs/paper/*_files/
+docs/paper/*.quarto_ipynb*

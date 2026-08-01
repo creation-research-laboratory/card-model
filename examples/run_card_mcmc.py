@@ -1,4 +1,4 @@
-from card.decay_solver import AGE_OF_EARTH, FLOOD_START, FLOOD_END, FLOOD_AGE, ICE_AGE_END_YBP, plot_age_comparison
+from card.decay_solver import AGE_OF_EARTH, FLOOD_START_DATE, FLOOD_END_DATE, FLOOD_AGE, ICE_AGE_END_AGE, plot_age_comparison
 from card.card_mcmc import CARDMCMC
 from card.create_custom_plots import load_mcmc_results, create_custom_corner_plot, create_custom_trace_plot, create_summary_statistics
 
@@ -10,25 +10,23 @@ def main():
     OUT_DIR = 'mcmc_output'
 
 
-    # Data points: (young_age_YBP, secular_age, uncertainty)
-    # young_age is years before present (YBP) = AGE_OF_EARTH - t_after_creation.
-    # Constraint 1: rocks formed at the Flood (FLOOD_AGE) appear 540 Myr old.
-    # Constraint 2: rocks from the Ice Age end (ICE_AGE_END_YBP) appear 11,500 yr old.
-    # Note: earlier versions passed ICE_AGE_END_AGE (years after Creation, 3500)
-    # here instead of the YBP value (2556); fixed 2026-07-19.
+    # Data points: (young_AGE, secular_age, uncertainty).
+    # These are AGEs — years before present — not DATEs.  Constraint 1: rocks
+    # formed at the Flood appear 540 Myr old.  Constraint 2: rocks from the
+    # end of the Ice Age appear 11,500 yr old.
     data = [
         (FLOOD_AGE, 540_000_000, 10_000_000.0),
-        (ICE_AGE_END_YBP, 11_500.0, 30.0),
+        (ICE_AGE_END_AGE, 11_500.0, 30.0),
     ]
 
     # Flood-only limit of the General model: no Creation-week acceleration.
-    # t_c must be < t_F so lambda_func reaches the Flood region.
+    # These are DATEs — years after Creation — unlike the ages in `data`.
     fixed_params = {
         'lambda_c': 1.0,
         'k_c': 0.0,
         't_c': 1,
-        't_F': FLOOD_START,
-        't_F2': FLOOD_END,
+        't_F': FLOOD_START_DATE,
+        't_F2': FLOOD_END_DATE,
     }
 
 
