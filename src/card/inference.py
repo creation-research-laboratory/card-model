@@ -43,7 +43,17 @@ Example::
 import json
 import os
 import warnings
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from dataclasses import dataclass
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+)
 
 import numpy as np
 
@@ -51,7 +61,32 @@ from .constants import AGE_OF_EARTH
 from .models import GeneralModel, GeneralModelParams
 from .parameters import parameter_specs, split_fixed_and_free
 
-__all__ = ["MCMCFitter", "load_results"]
+__all__ = ["MCMCFitter", "SamplingProgress", "load_results", "save_results"]
+
+
+@dataclass(frozen=True)
+class SamplingProgress:
+    """
+    One step's worth of progress, handed to `MCMCFitter.run_mcmc`'s callback.
+
+    Attributes:
+        phase: ``"burn-in"`` or ``"sampling"``.
+        step: 1-based step within the phase.
+        total: Steps this phase will take if it is not stopped.
+        acceptance_fraction: Mean acceptance so far — the number worth showing
+            next to a progress bar, since a value near 0 or 1 means the run is
+            not working regardless of how far along it is.
+    """
+
+    phase: str
+    step: int
+    total: int
+    acceptance_fraction: float
+
+    @property
+    def fraction(self) -> float:
+        """Progress through this phase, in [0, 1] — ready for a progress bar."""
+        return self.step / self.total if self.total else 1.0
 
 #: Default prior width, in whatever space the parameter is sampled in.
 DEFAULT_PRIOR_SIGMA = 3.0
@@ -238,8 +273,20 @@ class MCMCFitter:
     # ------------------------------------------------------------- run
     def initial_positions(self, n_walkers: int,
                           initial_guess: Sequence[float] = None,
-                          init_spread: float = 1e-4) -> np.ndarray:
-        """Starting walker positions, jittered around the prior means."""
+                          init_spread: float = 1e-4,
+                          rng: Optional[np.random.Generator] = None
+                          ) -> np.ndarray:
+        """
+        Starting walker positions, jittered around the prior means.
+
+        Args:
+            n_walkers: Number of walkers to place.
+            initial_guess: Center, in sampling space; the prior means if None.
+            init_spread: Standard deviation of the jitter.
+            rng: Generator to draw the jitter from.  Defaults to a fresh
+                unseeded one rather than the global RNG, so two fits running
+                in the same process cannot perturb each other.
+        """
         if initial_guess is None:
             center = np.array([self.prior_means[n]
                                for n in self.free_param_names])
@@ -250,7 +297,9 @@ class MCMCFitter:
                     f"initial_guess must have length {self.ndim}, got "
                     f"{center.shape}"
                 )
-        return center + init_spread * np.random.randn(n_walkers, self.ndim)
+        rng = np.random.default_rng() if rng is None else rng
+        return center + init_spread * rng.standard_normal((n_walkers,
+                                                           self.ndim))
 
     def run_mcmc(self,
                  n_walkers: int = 32,
@@ -260,7 +309,12 @@ class MCMCFitter:
                  a: float = 2.0,
                  init_spread: float = 1e-4,
                  progress: bool = True,
-                 backend_path: Optional[str] = None) -> Dict[str, Any]:
+                 backend_path: Optional[str] = None,
+                 seed: Optional[int] = None,
+                 rng: Optional[np.random.Generator] = None,
+                 callback: Optional[Callable[["SamplingProgress"],
+                                             Optional[bool]]] = None
+                 ) -> Dict[str, Any]:
         """
         Sample the posterior.
 
@@ -274,13 +328,27 @@ class MCMCFitter:
             progress: Show emcee's progress bar.
             backend_path: Optional HDF5 file for emcee to stream the chain
                 into, making a long run resumable and inspectable mid-flight.
+            seed: Makes the run reproducible.  Convenience for
+                ``rng=np.random.default_rng(seed)``.
+            rng: Generator for the initial positions and the sampler's own
+                proposals.  **Nothing here touches the global numpy RNG**, so
+                concurrent fits — two requests to a web service, two tabs of a
+                GUI — cannot disturb each other or be disturbed by unrelated
+                code calling `np.random.seed`.
+            callback: Called after every step with a `SamplingProgress`.
+                Return False to stop early; the results then describe the steps
+                actually taken and carry ``stopped_early=True``.  Intended for
+                a GUI's progress bar and cancel button, which otherwise have no
+                way in: emcee's own progress bar writes to the terminal, and a
+                20000-step fit is many seconds of an unresponsive interface.
 
         Returns:
             Results dict.  `chain` and `log_prob_chain` keep their
             ``(step, walker)`` structure so nothing downstream has to guess it.
 
         Raises:
-            ValueError: If `n_walkers` is too small for the sampler to move.
+            ValueError: If `n_walkers` is too small for the sampler to move, or
+                if both `seed` and `rng` are given.
         """
         import emcee
 
@@ -290,6 +358,13 @@ class MCMCFitter:
                 f"({2 * self.ndim}); the stretch move cannot explore a space "
                 "with fewer walkers than that."
             )
+        if seed is not None and rng is not None:
+            raise ValueError(
+                "Pass either seed or rng, not both; seed is shorthand for "
+                "rng=np.random.default_rng(seed)."
+            )
+        if rng is None:
+            rng = np.random.default_rng(seed)
 
         backend = None
         if backend_path:
@@ -303,13 +378,22 @@ class MCMCFitter:
             n_walkers, self.ndim, self.log_posterior,
             moves=emcee.moves.StretchMove(a=a), backend=backend,
         )
-        pos = self.initial_positions(n_walkers, initial_guess, init_spread)
+        # emcee 3.x proposes from a legacy RandomState of its own.  Seed it
+        # from our Generator so the whole run depends on `rng` alone.
+        sampler.random_state = np.random.RandomState(
+            rng.integers(0, 2 ** 32 - 1)).get_state()
 
+        pos = self.initial_positions(n_walkers, initial_guess, init_spread,
+                                     rng=rng)
+
+        stopped_early = False
         if burn_in > 0:
-            state = sampler.run_mcmc(pos, burn_in, progress=progress)
+            pos, stopped_early = self._sample(
+                sampler, pos, burn_in, "burn-in", progress, callback)
             sampler.reset()
-            pos = state
-        sampler.run_mcmc(pos, n_steps, progress=progress)
+        if not stopped_early:
+            _, stopped_early = self._sample(
+                sampler, pos, n_steps, "sampling", progress, callback)
 
         try:
             autocorr = sampler.get_autocorr_time(quiet=True)
@@ -328,7 +412,12 @@ class MCMCFitter:
             'acceptance_fraction': float(np.mean(sampler.acceptance_fraction)),
             'autocorr_time': np.asarray(autocorr, dtype=float),
             'n_walkers': n_walkers,
-            'n_steps': n_steps,
+            # The requested count and what actually ran differ when a callback
+            # stopped the run, and a half-length chain must not be described as
+            # a full one.
+            'n_steps': int(log_prob_chain.shape[0]),
+            'n_steps_requested': n_steps,
+            'stopped_early': stopped_early,
             'burn_in': burn_in,
             'present_time': self.present_time,
             'param_names': list(self.free_param_names),
@@ -338,6 +427,33 @@ class MCMCFitter:
             'prior_means': dict(self.prior_means),
             'prior_sigmas': dict(self.prior_sigmas),
         }
+
+    @staticmethod
+    def _sample(sampler, pos, n_steps: int, phase: str, progress: bool,
+                callback) -> Tuple[Any, bool]:
+        """
+        Run one phase, reporting to `callback` and honoring its stop request.
+
+        Uses emcee's `sample` generator rather than its `run_mcmc`, which is
+        the only way to see the run step by step.  Returns the final state and
+        whether the callback asked to stop.
+        """
+        state = pos
+        for step, state in enumerate(
+                sampler.sample(pos, iterations=n_steps, progress=progress),
+                start=1):
+            if callback is None:
+                continue
+            keep_going = callback(SamplingProgress(
+                phase=phase,
+                step=step,
+                total=n_steps,
+                acceptance_fraction=float(
+                    np.mean(sampler.acceptance_fraction)),
+            ))
+            if keep_going is False:
+                return state, True
+        return state, False
 
     # ------------------------------------------------------- diagnostics
     @staticmethod

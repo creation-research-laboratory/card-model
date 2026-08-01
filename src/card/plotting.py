@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Union
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 import numpy as np
 
 from .constants import (
@@ -38,8 +39,9 @@ from .models import (
 )
 
 #: What the figure functions return: the path they wrote, the axes they drew
-#: into when the caller supplied one, or None when neither was asked for.
-FigureResult = Optional[Union[str, Axes]]
+#: into when the caller supplied one, the Figure when `return_figure` asked for
+#: it, or None when none of those applies.
+FigureResult = Optional[Union[str, Axes, Figure]]
 
 #: A model, or the parameters to build one from.
 ModelLike = Union[DecayModel, GeneralModelParams]
@@ -55,8 +57,16 @@ __all__ = [
 ]
 
 
-def _finish(fig, ax, out_file, show, owns_figure):
-    """Save/show/close only when this function created the figure."""
+def _finish(fig, ax, out_file, show, owns_figure, return_figure=False):
+    """
+    Save/show/close only when this function created the figure.
+
+    With `return_figure`, ownership passes to the caller instead: the figure is
+    still saved if a path was given, but it is not closed and it is what comes
+    back.  That is what a GUI needs — Streamlit's `st.pyplot`, a Qt canvas and
+    a notebook all want the Figure object, and closing it first is what makes
+    a library awkward to embed.  Opt-in, so existing callers are unaffected.
+    """
     if not owns_figure:
         return ax
 
@@ -65,6 +75,8 @@ def _finish(fig, ax, out_file, show, owns_figure):
         fig.savefig(out_file, dpi=180, bbox_inches="tight")
     if show:
         plt.show()
+    if return_figure:
+        return fig
     plt.close(fig)
     return out_file
 
@@ -80,6 +92,7 @@ def plot_age_comparison(
     k_F_median: Optional[float] = None,
     flood_date: Optional[float] = None,
     ax: Optional[Axes] = None,
+    return_figure: bool = False,
 ) -> FigureResult:
     """Compare secular age against young age for the constant and general models.
 
@@ -95,9 +108,12 @@ def plot_age_comparison(
         flood_date: DATE of the Flood (default: the chronology's Flood date).
         ax: Optional existing axes to draw into.  When supplied the caller owns
             the figure and this returns the axes instead of a path.
+        return_figure: Return the matplotlib Figure instead of the path, and
+            leave it open for the caller to display or embed.
 
     Returns:
-        Path to the saved figure, or the axes when `ax` was supplied.
+        Path to the saved figure; the axes when `ax` was supplied; the Figure
+        when `return_figure` is True.
     """
     if flood_date is None:
         flood_date = FLOOD_START_DATE
@@ -138,7 +154,7 @@ def plot_age_comparison(
     ax.legend()
     ax.grid(True)
 
-    return _finish(fig, ax, out_file, show, owns_figure)
+    return _finish(fig, ax, out_file, show, owns_figure, return_figure)
 
 
 def plot_lambda_history(
@@ -149,6 +165,7 @@ def plot_lambda_history(
     show: bool = False,
     shade_flood: bool = True,
     ax: Optional[Axes] = None,
+    return_figure: bool = False,
 ) -> FigureResult:
     """Plot the decay-rate history lambda(t)/lambda_bg against DATE.
 
@@ -173,9 +190,12 @@ def plot_lambda_history(
             (the instantaneous-Flood limit) is drawn as a line.
         ax: Optional existing axes to draw into.  When supplied the caller owns
             the figure and this returns the axes instead of a path.
+        return_figure: Return the matplotlib Figure instead of the path, and
+            leave it open for the caller to display or embed.
 
     Returns:
-        Path to the saved figure, or the axes when `ax` was supplied.
+        Path to the saved figure; the axes when `ax` was supplied; the Figure
+        when `return_figure` is True.
 
     Raises:
         ValueError: If `labels` is given and its length does not match `models`.
@@ -225,7 +245,7 @@ def plot_lambda_history(
     if labels is not None or (shade_flood and ax.get_legend_handles_labels()[1]):
         ax.legend()
 
-    return _finish(fig, ax, out_file, show, owns_figure)
+    return _finish(fig, ax, out_file, show, owns_figure, return_figure)
 
 
 def plot_general_model_parameter_sweep(
@@ -236,6 +256,7 @@ def plot_general_model_parameter_sweep(
     out_file: str = "general_model_sweep_plot.png",
     show: bool = False,
     ax: Optional[Axes] = None,
+    return_figure: bool = False,
 ) -> FigureResult:
     """Plot the age curve for several parameter combinations of the general model.
 
@@ -249,9 +270,12 @@ def plot_general_model_parameter_sweep(
         show: If True, display the figure (ignored when `ax` is given).
         ax: Optional existing axes to draw into.  When supplied the caller owns
             the figure and this returns the axes instead of a path.
+        return_figure: Return the matplotlib Figure instead of the path, and
+            leave it open for the caller to display or embed.
 
     Returns:
-        Path to the saved figure, or the axes when `ax` was supplied.
+        Path to the saved figure; the axes when `ax` was supplied; the Figure
+        when `return_figure` is True.
 
     Raises:
         ValueError: If `vary_params` names a parameter the model does not have.
@@ -328,7 +352,7 @@ def plot_general_model_parameter_sweep(
     ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=9)
     ax.grid(True, alpha=0.3)
 
-    return _finish(fig, ax, out_file, show, owns_figure)
+    return _finish(fig, ax, out_file, show, owns_figure, return_figure)
 
 
 # ============================================================================
@@ -426,7 +450,8 @@ def plot_mcmc_corner(samples: np.ndarray,
                      prior_sigmas: Optional[Mapping[str, float]] = None,
                      log_scale: Optional[Sequence[bool]] = None,
                      out_file: str = 'corner_plot.png',
-                     show: bool = False) -> FigureResult:
+                     show: bool = False,
+                     return_figure: bool = False) -> FigureResult:
     """Styled corner plot of the posterior, with priors overlaid.
 
     Args:
@@ -510,7 +535,7 @@ def plot_mcmc_corner(samples: np.ndarray,
             ax.tick_params(axis='both', which='major', labelsize=8)
 
     fig.suptitle('MCMC parameter posterior distributions', fontsize=16, y=0.95)
-    return _finish(fig, axes, out_file, show, True)
+    return _finish(fig, axes, out_file, show, True, return_figure)
 
 
 def plot_mcmc_traces(chain: np.ndarray,
@@ -519,7 +544,8 @@ def plot_mcmc_traces(chain: np.ndarray,
                      log_scale: Optional[Sequence[bool]] = None,
                      max_walkers: int = 10,
                      out_file: str = 'trace_plot.png',
-                     show: bool = False) -> FigureResult:
+                     show: bool = False,
+                     return_figure: bool = False) -> FigureResult:
     """Styled trace plot of the chain, one panel per parameter.
 
     Args:
@@ -578,7 +604,7 @@ def plot_mcmc_traces(chain: np.ndarray,
     if shown < n_walkers:
         fig.text(0.5, 0.005, f'Showing {shown} of {n_walkers} walkers',
                  ha='center', fontsize=9, color='0.4')
-    return _finish(fig, axes, out_file, show, True)
+    return _finish(fig, axes, out_file, show, True, return_figure)
 
 
 def _infer_walkers_from_flat_chain(samples, log_probs_flat, min_steps=10,

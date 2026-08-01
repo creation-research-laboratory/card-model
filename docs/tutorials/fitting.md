@@ -113,9 +113,11 @@ import numpy as np
 exact = solve_flood_only(FLOOD_AGE, 541e6, ICE_AGE_END_AGE, 11.7e3)
 initial_guess = [np.log10(exact.lambda_F), np.log10(exact.k_F)]
 
-np.random.seed(0)
+# `seed` makes the run reproducible.  It seeds the fitter's own generator, not
+# numpy's global one, so two fits in the same process — or in two threads of a
+# web app — cannot disturb each other.
 results = fitter.run_mcmc(n_walkers=16, n_steps=400, burn_in=100,
-                          initial_guess=initial_guess, progress=False)
+                          initial_guess=initial_guess, seed=0, progress=False)
 
 print(f"stuck walkers:        {len(results['stuck_walkers'])}")
 print(f"acceptance fraction:  {results['acceptance_fraction']:.2f}")
@@ -123,7 +125,7 @@ print(f"acceptance fraction:  {results['acceptance_fraction']:.2f}")
 
 ```text
 stuck walkers:        0
-acceptance fraction:  0.71
+acceptance fraction:  0.72
 ```
 
 This posterior is bimodal. Besides the real solution there is a local maximum
@@ -161,8 +163,8 @@ for row in summary:
 ```
 
 ```text
- lambda_F: 3.21882e+06 [3.14805e+06, 3.28596e+06]
-      k_F: 0.00595822 [0.00594554, 0.00597094]
+ lambda_F: 3.22204e+06 [3.16281e+06, 3.28574e+06]
+      k_F: 0.00595986 [0.00594769, 0.00597026]
 ```
 
 Use the `linear_*` keys whenever you feed a posterior back into a model. The

@@ -224,6 +224,112 @@ def test_results_record_the_sampling_space():
 
 
 # ----------------------------------------------------------------------------
+# Randomness: per-run, never global
+# ----------------------------------------------------------------------------
+
+@pytest.mark.filterwarnings("ignore:.*never joined the ensemble")
+def test_the_same_seed_reproduces_a_run():
+    first = make_fitter().run_mcmc(n_walkers=8, n_steps=30, burn_in=5,
+                                   seed=1, progress=False)
+    second = make_fitter().run_mcmc(n_walkers=8, n_steps=30, burn_in=5,
+                                    seed=1, progress=False)
+    np.testing.assert_array_equal(first['chain'], second['chain'])
+
+
+@pytest.mark.filterwarnings("ignore:.*never joined the ensemble")
+def test_different_seeds_give_different_runs():
+    first = make_fitter().run_mcmc(n_walkers=8, n_steps=30, burn_in=5,
+                                   seed=1, progress=False)
+    second = make_fitter().run_mcmc(n_walkers=8, n_steps=30, burn_in=5,
+                                    seed=2, progress=False)
+    assert not np.array_equal(first['chain'], second['chain'])
+
+
+@pytest.mark.filterwarnings("ignore:.*never joined the ensemble")
+def test_a_seeded_run_ignores_the_global_numpy_rng():
+    """The sampler must not read or write process-global random state.  Two
+    fits in one process — two requests to a web service, two tabs of a GUI —
+    would otherwise perturb each other, and any unrelated `np.random.seed` call
+    would silently change a 'reproducible' run."""
+    np.random.seed(11)
+    first = make_fitter().run_mcmc(n_walkers=8, n_steps=30, burn_in=5,
+                                   seed=7, progress=False)
+    np.random.seed(9999)                       # someone else reseeds
+    second = make_fitter().run_mcmc(n_walkers=8, n_steps=30, burn_in=5,
+                                    seed=7, progress=False)
+    np.testing.assert_array_equal(first['chain'], second['chain'])
+
+
+@pytest.mark.filterwarnings("ignore:.*never joined the ensemble")
+def test_an_unseeded_run_does_not_disturb_the_global_rng():
+    np.random.seed(5)
+    before = np.random.random()
+    np.random.seed(5)
+    make_fitter().run_mcmc(n_walkers=8, n_steps=20, burn_in=0, progress=False)
+    assert np.random.random() == before
+
+
+def test_seed_and_rng_together_are_rejected():
+    with pytest.raises(ValueError, match="either seed or rng"):
+        make_fitter().run_mcmc(n_walkers=8, n_steps=10, burn_in=0,
+                               seed=1, rng=np.random.default_rng(1),
+                               progress=False)
+
+
+@pytest.mark.filterwarnings("ignore:.*never joined the ensemble")
+def test_an_explicit_generator_is_honored():
+    first = make_fitter().run_mcmc(n_walkers=8, n_steps=20, burn_in=0,
+                                   rng=np.random.default_rng(3), progress=False)
+    second = make_fitter().run_mcmc(n_walkers=8, n_steps=20, burn_in=0,
+                                    rng=np.random.default_rng(3), progress=False)
+    np.testing.assert_array_equal(first['chain'], second['chain'])
+
+
+# ----------------------------------------------------------------------------
+# Progress reporting and cancellation
+# ----------------------------------------------------------------------------
+
+@pytest.mark.filterwarnings("ignore:.*never joined the ensemble")
+def test_the_callback_sees_every_step_of_both_phases():
+    """A GUI needs incremental progress; emcee's own bar writes to a terminal
+    nobody is watching."""
+    seen = []
+    make_fitter().run_mcmc(n_walkers=8, n_steps=12, burn_in=4, seed=1,
+                           progress=False, callback=seen.append)
+
+    assert [p.phase for p in seen] == ['burn-in'] * 4 + ['sampling'] * 12
+    assert [p.step for p in seen[:4]] == [1, 2, 3, 4]
+    assert seen[-1].fraction == pytest.approx(1.0)
+    assert 0.0 <= seen[-1].acceptance_fraction <= 1.0
+
+
+@pytest.mark.filterwarnings("ignore:.*never joined the ensemble")
+def test_returning_false_from_the_callback_stops_the_run():
+    """The cancel button.  The results must then describe the steps actually
+    taken, not the steps requested."""
+    def stop_at_five(progress):
+        return not (progress.phase == 'sampling' and progress.step >= 5)
+
+    results = make_fitter().run_mcmc(n_walkers=8, n_steps=100, burn_in=2,
+                                     seed=1, progress=False,
+                                     callback=stop_at_five)
+
+    assert results['stopped_early'] is True
+    assert results['n_steps'] == 5
+    assert results['n_steps_requested'] == 100
+    assert results['chain'].shape == (5, 8, 2)
+
+
+@pytest.mark.filterwarnings("ignore:.*never joined the ensemble")
+def test_a_run_that_finishes_is_not_marked_stopped():
+    results = make_fitter().run_mcmc(n_walkers=8, n_steps=10, burn_in=0,
+                                     seed=1, progress=False,
+                                     callback=lambda progress: True)
+    assert results['stopped_early'] is False
+    assert results['n_steps'] == results['n_steps_requested'] == 10
+
+
+# ----------------------------------------------------------------------------
 # Stuck-walker diagnostic
 # ----------------------------------------------------------------------------
 

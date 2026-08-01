@@ -243,3 +243,66 @@ def test_legacy_text_directory_is_still_readable(tmp_path):
     results = load_legacy_text_results(str(tmp_path))
     assert results['param_names'] == ['lambda_F', 'k_F']
     assert results['chain'].shape == (n_steps, n_walkers, ndim)
+
+
+# ----------------------------------------------------------------------------
+# Embedding in a GUI
+# ----------------------------------------------------------------------------
+
+def test_return_figure_hands_back_an_open_figure():
+    """Streamlit's st.pyplot, a Qt canvas and a notebook all want the Figure
+    object.  A library that closes it first is awkward to embed."""
+    import matplotlib.pyplot as plt
+    from matplotlib.figure import Figure
+
+    fig = plot_lambda_history(GeneralModel.flood_only(lambda_F=1e5, k_F=1e-2),
+                              n_points=30, out_file=None, return_figure=True)
+    assert isinstance(fig, Figure)
+    assert plt.fignum_exists(fig.number), "the figure was closed"
+    plt.close(fig)
+
+
+@pytest.mark.parametrize("plot", ["age", "lambda", "sweep"])
+def test_every_age_curve_figure_can_be_returned(plot, tmp_path):
+    import matplotlib.pyplot as plt
+    from matplotlib.figure import Figure
+
+    call = {
+        "age": lambda: plot_age_comparison(n_points=20, out_file=None,
+                                           return_figure=True),
+        "lambda": lambda: plot_lambda_history(
+            GeneralModelParams.defaults(), n_points=20, out_file=None,
+            return_figure=True),
+        "sweep": lambda: plot_general_model_parameter_sweep(
+            vary_params={'lambda_F': [1e5]}, n_points=20, out_file=None,
+            return_figure=True),
+    }[plot]
+    fig = call()
+    assert isinstance(fig, Figure)
+    plt.close(fig)
+
+
+def test_chain_figures_can_be_returned(fake_chain):
+    import matplotlib.pyplot as plt
+    from matplotlib.figure import Figure
+
+    chain, log_prob, names = fake_chain
+    corner = plot_mcmc_corner(chain.reshape(-1, 2), names, out_file=None,
+                              return_figure=True)
+    traces = plot_mcmc_traces(chain, log_prob, names, out_file=None,
+                              return_figure=True)
+    assert isinstance(corner, Figure) and isinstance(traces, Figure)
+    plt.close(corner)
+    plt.close(traces)
+
+
+def test_the_default_is_still_a_path(tmp_path):
+    """Opt-in only: existing callers, the examples and the paper must be
+    unaffected, and must not leak open figures."""
+    import matplotlib.pyplot as plt
+
+    before = len(plt.get_fignums())
+    out = tmp_path / "unchanged.png"
+    assert plot_lambda_history(GeneralModelParams.defaults(), n_points=20,
+                               out_file=str(out)) == str(out)
+    assert len(plt.get_fignums()) == before
