@@ -122,11 +122,24 @@ jobs:
         with:
           name: distributions
           path: dist/
-      - name: Create the release
+      - name: Attach the distributions, creating the release if needed
         env:
           GH_TOKEN: ${{ github.token }}
+        # Both orders have to work.  Writing the release notes in the GitHub UI
+        # first and then pushing the tag is a normal way to cut a release, and
+        # `gh release create` fails outright on an existing tag ("a release with
+        # the same tag name already exists").  When the release is already
+        # there, only upload — never regenerate its notes, which would discard
+        # hand-written ones.
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/* \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "CARD $GITHUB_REF_NAME" \
-            --generate-notes
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME exists; attaching the distributions to it."
+            gh release upload "$GITHUB_REF_NAME" dist/* \
+              --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            echo "No release for $GITHUB_REF_NAME yet; creating one."
+            gh release create "$GITHUB_REF_NAME" dist/* \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "CARD $GITHUB_REF_NAME" \
+              --generate-notes
+          fi
