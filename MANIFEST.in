@@ -1,0 +1,18 @@
+# What goes into the source distribution beyond the package itself.
+#
+# The wheel deliberately contains only `card/` (plus card/data/, declared as
+# package-data in pyproject.toml).  The sdist is meant to be a complete,
+# buildable snapshot, so it also carries the examples, the docs sources and the
+# project files.
+#
+# Patterns are listed by extension rather than with a blanket
+# `recursive-include docs *`, because docs/img/*.png are generated at docs-build
+# time and must not be baked into a release.
+
+include LICENSE README.md CITATION.cff mkdocs.yml
+recursive-include examples *.py
+recursive-include docs *.md *.qmd *.py
+recursive-include tests *.py
+prune docs/img
+prune site
+global-exclude *.pyc __pycache__ .DS_Store

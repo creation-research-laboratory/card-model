@@ -1,0 +1,132 @@
+name: release
+
+# Publishes to PyPI when a version tag is pushed:
+#
+#     git tag -a v0.1.0 -m "CARD 0.1.0"
+#     git push origin v0.1.0
+#
+# Authentication is PyPI Trusted Publishing (OIDC) — there is no API token to
+# create, store or rotate.  One-time setup on PyPI:
+#   https://pypi.org/manage/account/publishing/
+#   Owner: creation-research-laboratory   Repository: card-model
+#   Workflow: release.yml                 Environment: pypi
+on:
+  push:
+    tags: ["v*"]
+  # Lets you rehearse the build (and upload to TestPyPI) without tagging.
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Where to upload the built artifacts"
+        type: choice
+        options: [none, testpypi]
+        default: none
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and check the distributions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build the sdist and wheel
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build
+
+      - name: Check the metadata
+        # Catches a long_description that PyPI would reject — the failure mode
+        # that otherwise only shows up as a broken project page.
+        run: python -m twine check --strict dist/*
+
+      - name: Verify the tag matches the version in pyproject.toml
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          VERSION=$(python -c "import tomllib,pathlib; \
+            print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
+          echo "tag=$TAG  pyproject=$VERSION"
+          test "$TAG" = "$VERSION" || {
+            echo "::error::tag v$TAG does not match project version $VERSION"
+            exit 1
+          }
+
+      - name: Install the wheel in a clean environment and use it
+        # A release that imports but cannot run is still a broken release, so
+        # exercise the console script exactly as a new user would.
+        run: |
+          python -m venv /tmp/fresh
+          /tmp/fresh/bin/pip install --quiet dist/*.whl
+          /tmp/fresh/bin/card --version
+          /tmp/fresh/bin/card init /tmp/fresh/run.yaml
+          /tmp/fresh/bin/card calibrate /tmp/fresh/run.yaml
+          /tmp/fresh/bin/python -c "import card; print(card.__version__)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+
+  testpypi:
+    name: Publish to TestPyPI
+    if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/card-model
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  pypi:
+    name: Publish to PyPI
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/card-model
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  github-release:
+    name: Attach the distributions to a GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: pypi
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "CARD $GITHUB_REF_NAME" \
+            --generate-notes

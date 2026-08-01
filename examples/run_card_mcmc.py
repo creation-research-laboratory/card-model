@@ -8,17 +8,18 @@ Two matched date pairs constrain the two free parameters:
 
 Writes the chain, figures and summary to `mcmc_output/`.
 
-`examples/flood_only.yaml` is this same run as a config file, so
+The same run is bundled as a config file, so
 
-    card fit examples/flood_only.yaml
+    card init myrun.yaml
+    card fit myrun.yaml
 
 produces the same outputs without editing Python.  This script is kept as the
 readable, hardcoded version of what that config says.
 
 For an exact deterministic answer to the same two constraints — no sampling,
 no uncertainties — see `card.calibrate.solve_flood_only` (or `card calibrate
-examples/flood_only.yaml`); this script exists to get a *posterior*, which
-needs the uncertainties.
+myrun.yaml`); this script exists to get a *posterior*, which needs the
+uncertainties.
 """
 
 import math

@@ -51,4 +51,5 @@ jobs:
       - name: Check the CLI is installed and runnable
         run: |
           card --version
-          card calibrate examples/flood_only.yaml
+          card init "$RUNNER_TEMP/smoke.yaml"
+          card calibrate "$RUNNER_TEMP/smoke.yaml"

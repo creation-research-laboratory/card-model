@@ -62,7 +62,11 @@ import os
 from collections.abc import Mapping as MappingABC
 from collections.abc import Sequence as SequenceABC
 from dataclasses import dataclass, field
-from typing import Any, Dict, Mapping, Optional, Tuple
+# The ABCs above are for isinstance checks; these are for annotations.  Both
+# spellings are needed, and dropping either one is only visible on Python
+# <= 3.13: from 3.14 (PEP 649) annotations are evaluated lazily, so a missing
+# name in a signature raises nothing until something asks for the type hints.
+from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
 
 from .chronology import DEFAULT_CHRONOLOGY, Chronology
 
@@ -70,8 +74,25 @@ __all__ = [
     "Constraint",
     "RunConfig",
     "SamplerConfig",
+    "example_config_text",
     "load_config",
 ]
+
+#: Name of the worked example shipped inside the package (card/data/).
+EXAMPLE_CONFIG_NAME = "flood_only.yaml"
+
+
+def example_config_text() -> str:
+    """
+    The bundled example run config, comments and all, as text.
+
+    Shipped as package data rather than left in ``examples/``, because that
+    directory is not part of the installed distribution: a ``pip install``
+    user has no repository to point at.  `card init` writes this out.
+    """
+    from importlib.resources import files
+
+    return (files("card") / "data" / EXAMPLE_CONFIG_NAME).read_text()
 
 #: Sampler defaults.  Deliberately the driver script's production values, so a
 #: config that omits `sampler:` reproduces `examples/run_card_mcmc.py`.

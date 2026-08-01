@@ -1,11 +1,15 @@
 # The main CARD inversion, as a run config.
 #
-#     card fit examples/flood_only.yaml
+# This file ships with the package.  `card init myrun.yaml` writes a copy you
+# can edit, and `card fit myrun.yaml` runs it:
 #
-# This is the config-file form of examples/run_card_mcmc.py: the flood-only
-# limit of the general model, fitted to two matched date pairs.  For a quick
-# look without sampling, `card calibrate examples/flood_only.yaml` solves the
-# same two constraints exactly.
+#     card init myrun.yaml
+#     card fit myrun.yaml
+#
+# It is the config-file form of examples/run_card_mcmc.py: the flood-only limit
+# of the general model, fitted to two matched date pairs.  For a quick look
+# without sampling, `card calibrate myrun.yaml` solves the same two constraints
+# exactly, in milliseconds.
 #
 # Naming rule: a value ending in `_age` is an AGE (years before present), one
 # ending in `_date` is a DATE (years after Day 1 of Creation).  Anywhere a

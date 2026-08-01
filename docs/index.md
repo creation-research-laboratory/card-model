@@ -33,25 +33,19 @@ uncertainties.
 
 ## Installation
 
-!!! warning "Not on PyPI yet"
-
-    CARD has not been published to PyPI. The commands in this section are the
-    intended interface and are written here so they are ready when the first
-    release happens; until then, **install from source**.
-
-=== "From PyPI (planned)"
+=== "From PyPI"
 
     ```bash
     pip install card-model
     ```
 
-    A specific version, once releases are tagged:
+    Or pin a version:
 
     ```bash
     pip install "card-model==0.1.0"
     ```
 
-=== "From source (works today)"
+=== "From source"
 
     ```bash
     git clone https://github.com/creation-research-laboratory/card-model.git
@@ -133,5 +127,6 @@ quarto render docs/paper/CARD_model.qmd
 
 ## License and citation
 
-CARD is released under the license in the repository's `LICENSE` file. A
-`CITATION.cff` will accompany the first tagged release.
+CARD is released under the Apache-2.0 license. If you use it in published work,
+cite it with the metadata in `CITATION.cff` — GitHub renders a ready-made
+citation from it under *Cite this repository*.

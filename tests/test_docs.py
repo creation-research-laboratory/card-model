@@ -117,6 +117,22 @@ def test_every_page_is_in_the_nav():
         assert relative in nav, f"{relative} is not listed in mkdocs.yml nav"
 
 
+def test_the_config_shown_in_the_docs_is_the_one_that_ships():
+    """docs/cli.md prints a complete run config and says `card init` writes
+    exactly this.  Compare the parsed contents, not the text, so comments and
+    formatting can differ but no setting can."""
+    import yaml
+
+    from card.config import example_config_text
+
+    blocks = [body for language, body
+              in parse_blocks((DOCS_DIR / "cli.md").read_text())
+              if language == "yaml"]
+    assert blocks, "docs/cli.md no longer shows a config"
+
+    assert yaml.safe_load(blocks[0]) == yaml.safe_load(example_config_text())
+
+
 def test_api_pages_cover_every_public_module():
     """Each module of the package needs a page, or its API is undocumented."""
     package = DOCS_DIR.parent / "src" / "card"

@@ -57,7 +57,7 @@ parameters vary, via
 
 ## MCMC output
 
-`card fit examples/flood_only.yaml` writes a corner plot, trace plots and an
+`card fit myrun.yaml` writes a corner plot, trace plots and an
 age-comparison figure alongside the chain. They are not reproduced here because
 they take a few seconds of sampling to generate; see
 [tutorial 2](tutorials/fitting.md) for what they show and how to read them.
