@@ -149,6 +149,21 @@ def test_cli_help_does_not_import_the_numerical_stack():
     assert loaded.splitlines()[-1] == "HEAVY:"
 
 
+def test_package_docstring_examples_actually_run():
+    """The `>>>` example in card/__init__.py is the first thing a reader sees.
+    Nothing executed it until this test, and it had been quietly wrong since
+    the closed-form integral replaced quadrature: it advertised 537313592
+    where the model returns 533337567, the old 0.7% quadrature error frozen
+    into the docs."""
+    import doctest
+
+    import card
+
+    results = doctest.testmod(card, verbose=False)
+    assert results.attempted > 0, "the docstring example disappeared"
+    assert results.failed == 0
+
+
 def test_unknown_attribute_raises_attribute_error():
     import card
 

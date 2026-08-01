@@ -17,10 +17,11 @@ Library plotting rules observed here:
 """
 
 from itertools import product
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Union
 
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
+from matplotlib.axes import Axes
 import numpy as np
 
 from .constants import (
@@ -29,7 +30,19 @@ from .constants import (
     FLOOD_START_DATE,
     LAMBDA_BG,
 )
-from .models import ConstantDecayModel, GeneralModel, GeneralModelParams
+from .models import (
+    ConstantDecayModel,
+    DecayModel,
+    GeneralModel,
+    GeneralModelParams,
+)
+
+#: What the figure functions return: the path they wrote, the axes they drew
+#: into when the caller supplied one, or None when neither was asked for.
+FigureResult = Optional[Union[str, Axes]]
+
+#: A model, or the parameters to build one from.
+ModelLike = Union[DecayModel, GeneralModelParams]
 
 __all__ = [
     "load_legacy_text_results",
@@ -65,9 +78,9 @@ def plot_age_comparison(
     k_F: float = 0.5e-2,
     lambda_F_median: Optional[float] = None,
     k_F_median: Optional[float] = None,
-    flood_date: float = None,
-    ax=None,
-):
+    flood_date: Optional[float] = None,
+    ax: Optional[Axes] = None,
+) -> FigureResult:
     """Compare secular age against young age for the constant and general models.
 
     Args:
@@ -129,14 +142,14 @@ def plot_age_comparison(
 
 
 def plot_lambda_history(
-    models,
+    models: Union[ModelLike, Sequence[ModelLike]],
     labels: Optional[List[str]] = None,
     n_points: int = 2000,
     out_file: str = "lambda_history_plot.png",
     show: bool = False,
     shade_flood: bool = True,
-    ax=None,
-):
+    ax: Optional[Axes] = None,
+) -> FigureResult:
     """Plot the decay-rate history lambda(t)/lambda_bg against DATE.
 
     The x axis is a DATE — years after Day 1 of Creation — because that is the
@@ -222,8 +235,8 @@ def plot_general_model_parameter_sweep(
     n_points: int = 1000,
     out_file: str = "general_model_sweep_plot.png",
     show: bool = False,
-    ax=None,
-):
+    ax: Optional[Axes] = None,
+) -> FigureResult:
     """Plot the age curve for several parameter combinations of the general model.
 
     Args:
@@ -332,7 +345,7 @@ def plot_general_model_parameter_sweep(
 _CHAIN_COLORS = '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd'
 
 
-def _spec_label(name, log_scale=False):
+def _spec_label(name: str, log_scale: bool = False) -> str:
     """LaTeX axis label for a parameter, from its spec when one exists."""
     specs = GeneralModelParams.specs()
     symbol = specs[name].symbol if name in specs else name
@@ -340,7 +353,10 @@ def _spec_label(name, log_scale=False):
     return body
 
 
-def summarize_mcmc(samples, param_names, log_scale=None, out_file=None):
+def summarize_mcmc(samples: np.ndarray,
+                   param_names: Sequence[str],
+                   log_scale: Optional[Sequence[bool]] = None,
+                   out_file: Optional[str] = None) -> List[Dict[str, Any]]:
     """Summary statistics for each sampled parameter.
 
     Reports each parameter in **both** spaces: the sampling space the chain
@@ -404,8 +420,13 @@ def summarize_mcmc(samples, param_names, log_scale=None, out_file=None):
     return summary
 
 
-def plot_mcmc_corner(samples, param_names, prior_means=None, prior_sigmas=None,
-                     log_scale=None, out_file='corner_plot.png', show=False):
+def plot_mcmc_corner(samples: np.ndarray,
+                     param_names: Sequence[str],
+                     prior_means: Optional[Mapping[str, float]] = None,
+                     prior_sigmas: Optional[Mapping[str, float]] = None,
+                     log_scale: Optional[Sequence[bool]] = None,
+                     out_file: str = 'corner_plot.png',
+                     show: bool = False) -> FigureResult:
     """Styled corner plot of the posterior, with priors overlaid.
 
     Args:
@@ -492,8 +513,13 @@ def plot_mcmc_corner(samples, param_names, prior_means=None, prior_sigmas=None,
     return _finish(fig, axes, out_file, show, True)
 
 
-def plot_mcmc_traces(chain, log_prob_chain, param_names, log_scale=None,
-                     max_walkers=10, out_file='trace_plot.png', show=False):
+def plot_mcmc_traces(chain: np.ndarray,
+                     log_prob_chain: np.ndarray,
+                     param_names: Sequence[str],
+                     log_scale: Optional[Sequence[bool]] = None,
+                     max_walkers: int = 10,
+                     out_file: str = 'trace_plot.png',
+                     show: bool = False) -> FigureResult:
     """Styled trace plot of the chain, one panel per parameter.
 
     Args:
@@ -572,7 +598,7 @@ def _infer_walkers_from_flat_chain(samples, log_probs_flat, min_steps=10,
     return max(candidates, key=lambda pair: pair[0]) if candidates else (1, total)
 
 
-def load_legacy_text_results(output_dir):
+def load_legacy_text_results(output_dir: str) -> Dict[str, Any]:
     """Read a pre-HDF5 ``mcmc_output/`` directory of ``.txt`` files.
 
     Kept only so existing result directories remain readable.  The walker

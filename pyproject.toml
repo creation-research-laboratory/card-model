@@ -32,6 +32,9 @@ dev = [
 docs = [
     "jupyter",  # needed by Quarto to render docs/paper/CARD_model.qmd
     "pyyaml",   # Quarto's own jupyter bootstrap imports yaml before starting the kernel
+    "mkdocs-material",       # the documentation site (mkdocs.yml)
+    "mkdocstrings[python]",  # API reference generated from the docstrings
+    "black",                 # mkdocstrings uses it to format rendered signatures
 ]
 
 [tool.setuptools.packages.find]

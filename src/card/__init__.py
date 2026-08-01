@@ -8,7 +8,7 @@ parameters to age constraints.
     >>> from card import GeneralModel, FLOOD_AGE
     >>> model = GeneralModel.flood_only(lambda_F=3.2e6, k_F=6e-3)
     >>> round(model.forward_age(FLOOD_AGE))
-    537313592
+    533337567
 
 Layout::
 
