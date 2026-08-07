@@ -1,6 +1,8 @@
 # CARD web frontend — architecture and implementation plan
 
-Status: **proposal, for review.** Nothing here is built yet.
+Status: **Phases 1 and 2 built and merged/open; Phase 3 next.** The approach is
+no longer a proposal — it has been measured end to end in a browser. Phase 2
+confirmed the payload estimate and **inverted the loading strategy** (§3).
 
 Goal: a static web app under `web/` (structurally independent, so it can split
 into its own repo later) that (1) visualizes model output for **user-supplied
@@ -62,12 +64,21 @@ Pyodide 314.0.3, measured from the CDN:
 
 So: **~22 MB if `card.models` keeps importing numpy and scipy, ~5.8 MB if it
 doesn't.** The two wheels are 2.8× the size of the entire Python runtime.
-5.8 MB, brotli-compressed and browser-cached after first visit, is a normal
-payload for a rich web app — this is the difference between "unshippable" and
-"fine."
 
 That is why my earlier objection to Pyodide doesn't survive: it was costed
 against a dependency the model path doesn't need.
+
+**Confirmed in Phase 2.** A real browser, loading the vendored runtime plus the
+`card` wheel over HTTP with brotli, transferred **5.84 MB** against the 5.82 MB
+predicted here — with the `card` wheel itself only 0.06 MB of it. Per-file, over
+the wire: `pyodide.asm.wasm` 3.09 MB, `python_stdlib.zip` 2.43 MB,
+`pyodide.asm.mjs` 0.23 MB, the wheel 0.06 MB, `pyodide-lock.json` 0.02 MB.
+
+What that figure does *not* buy, and what I got wrong above, is the phrase
+"a normal payload for a rich web app." It is normal in size and abnormal in
+timing: it is a hard blocking prerequisite before the model can answer anything
+at all, where a typical app's megabytes stream in behind a usable page. §3 is
+rewritten around that distinction.
 
 ## 3. Architecture
 
@@ -105,28 +116,58 @@ interface ModelSource {
 by the same Python code. `PyodideSource` calls `card` for real. The UI never
 knows which is answering.
 
-### The boot experience
+### The boot experience — **revised by the Phase 2 measurements**
 
-This is where the two sources earn their keep, and it's the main UX risk to
-design around:
+Phase 2 is built and measured (`web/spike/`, and its README carries the full
+numbers). Compute came in better than assumed and cold start came in
+substantially worse, which **inverts the loading strategy this section
+originally described**.
+
+The original plan booted Pyodide eagerly on page load and listed
+lazy-load-on-interaction as a contingency if boot exceeded ~4 s. It does exceed
+it, on any connection short of good broadband. So:
 
 1. **t=0** — page paints. `PrecomputedSource` is already loaded (~40 kB
    gzipped), so the default preset's chart is on screen immediately. Parameter
-   controls are visible but disabled, with a quiet "preparing live model…"
-   indicator.
-2. **t≈2–4 s** — the Worker signals ready. `ModelSource` swaps to
-   `PyodideSource`, controls enable. If the user changed presets in the
-   meantime, the precomputed layer already served it.
-3. **thereafter** — every interaction is a real `card` call, ~5 ms of compute
-   plus worker round-trip.
+   controls are visible but disabled.
+2. **Pyodide does *not* start here.** It starts when the user first touches a
+   parameter control — or after the page has been visible and idle for a
+   moment, whichever comes first. **Lazy is the default, not the fallback.**
+3. **~1.5–3 s later on a warm cache, much longer cold** — the Worker signals
+   ready, `ModelSource` swaps to `PyodideSource`, controls enable.
+4. **thereafter** — every interaction is a real `card` call: median **6–8 ms**
+   for a calibration and **1.8 ms** for a 400-point series, against a 16.7 ms
+   frame budget. Live recalculation behind a dragged slider is comfortable,
+   with room to spare.
 
-A visitor who only wants to see the presets never waits. A visitor who wants
-to drag sliders waits a few seconds once, then never again. Cold-start cost is
-paid in the background rather than in front of a spinner.
+**Why the inversion.** Payload is a fixed **5.84 MB over the wire** — the plan's
+5.82 MB estimate, confirmed almost exactly — and boot is essentially all
+download, not interpreter startup. At a *measured* 142 kB/s (~1.1 Mbps) the
+network was busy for **42 seconds**. Scaling the fixed payload:
 
-If measurement shows boot is worse than ~4 s on a mid-range phone, the fallback
-is to load Pyodide lazily on first interaction with a parameter control, rather
-than eagerly on page load.
+| connection | download | + ~1.5 s init |
+| --- | --- | --- |
+| 1.1 Mbps *(measured)* | 42 s | 43 s |
+| 4 Mbps | ~12 s | ~13 s |
+| 10 Mbps | ~4.8 s | ~6 s |
+| 25 Mbps | ~1.9 s | ~3 s |
+| repeat visit (cached) | — | ~1.5–3 s |
+
+A first-time visitor cannot be held at a spinner for 12–42 s. But a visitor who
+only wants to look at the presets never pays that cost at all, and one who
+reaches for a slider has already signalled they want the live model and will
+tolerate a wait they understand.
+
+**This makes the precomputed first-paint layer load-bearing rather than a
+nicety.** Without it the app has no honest story for a first visit on a phone,
+and `PrecomputedSource` stops being an optimization and becomes the thing that
+makes the architecture viable. Budget it accordingly in Phase 3: it is not
+optional scaffolding to be dropped if the schedule tightens.
+
+The `card` wheel itself is **0.06 MB — about 1%** of the download. Nothing we
+write will move this number; it is Pyodide's floor. That also confirms the
+stdlib-only work was the difference between viable and not, since numpy and
+scipy would have added 16.1 MB on top of the 5.84 MB above.
 
 ## 4. Package changes — the enabling work
 
@@ -419,22 +460,43 @@ silently. Needs a `!web/public/**` negation.
 
 ## 10. Phases
 
-**Phase 1 — package work (no frontend at all).** §4.1–4.3: `_solvers.py`, the
-stdlib-only conversion, the extended structure test. Ends when the full pytest
-suite passes unchanged — and it should pass *unchanged*, because the
-substitutions are bit-identical. Reviewable as a self-contained package PR
-that's worth merging on its own merits.
+**Phase 1 — package work (no frontend at all).** ✅ **Done** (PR #8).
+`_solvers.py`, the stdlib-only conversion, the extended structure test. The
+suite passed *unchanged* — 402 passed on the first run after the conversion,
+with the single failure being the test that asserted numpy *is* loaded, which
+is precisely the behavior being inverted. Values are identical to `main` at
+`repr` precision.
 
-**Phase 2 — Pyodide spike.** Worker boots, installs the wheel, calls
-`solve_flood_only`, returns a number to the page. No UI, no charts. **Measure
-real boot time and payload on a throttled connection and a mid-range phone.**
-This is the go/no-go gate: if boot is unacceptable here, we fall back to
-lazy-load-on-interaction, and if *that* fails, to a local-only `card serve`
-backend with a precomputed public site. Cheap to run, and it de-risks
-everything after it.
+**Phase 2 — Pyodide spike.** ✅ **Done** (PR #9, `web/spike/`). **Verdict: GO.**
+Worker boots, zipimports the wheel, runs the real `solve_flood_only`. What it
+settled:
+
+- stdlib-only confirmed *in a browser* — the interpreter reports
+  `numpy_loaded: false`, `scipy_loaded: false` after a full solve;
+- the browser agrees with the interpreter to <1e-5, residual 8.88e-16;
+- a wheel needs no installer — it is a zip and the model path is pure Python,
+  so `sys.path.insert` *is* the install, median 2.8 ms. micropip is not needed;
+- compute is a non-issue: median solve 6–8 ms, 400-point series 1.8 ms;
+- cold start is the whole cost, and it rewrote the loading strategy (§3).
+
+One unresolved item carried into Phase 3: roughly half of repeated page loads
+in a single long-lived browser process stalled inside `loadPyodide` after the
+wasm had fully downloaded, with no error and no memory pressure. Headless Node
+ran 6/6 and every *first* load in a fresh browser succeeded, so it did not block
+the verdict — but it is unexplained.
 
 **Phase 3 — `ModelSource` + presets.** Both implementations, `presets.json`,
-`generate_precomputed.py`, the first-paint/live swap. Testable headlessly.
+`generate_precomputed.py`, and the lazy first-paint/live swap from §3.
+Testable headlessly. Two things this phase now owns that it did not before:
+
+- `PrecomputedSource` is **load-bearing**, not an optimization — it is what a
+  first-time visitor on a phone actually sees, possibly for 40 s. It gets
+  designed and tested as a real code path, not as scaffolding.
+- **Re-test the boot stall deliberately**, once the worker is long-lived and
+  the page is not being reloaded in a loop. `worker.terminate()` on `pagehide`
+  is in the spike but was not sufficient on its own. If it reproduces with a
+  realistic usage pattern, it is a go/no-go issue in its own right and the
+  fallback ladder in §14 applies.
 
 **Phase 4 — app shell and charts.** Vite + React, the two charts
 (`plot_age_comparison` and `plot_lambda_history` analogues), preset picker,
@@ -511,13 +573,29 @@ it is handed.
 
 ## 14. Risks
 
-- **Pyodide boot time** — the main UX risk, measured at Phase 2, mitigated by
-  the precomputed first-paint layer and the lazy-load fallback.
+- **Cold start on a slow connection** — *measured, not hypothetical*: 5.84 MB
+  fixed payload, 42 s at 1.1 Mbps, ~12 s at 4 Mbps. This is the largest
+  remaining UX risk and it cannot be engineered away — it is Pyodide's floor,
+  and the code we write is 1% of it. Mitigated structurally by lazy boot behind
+  the precomputed layer (§3), so that only users who ask for the live model
+  ever pay it.
+- **The boot stall** — unexplained; roughly half of repeated boots in one
+  long-lived browser process hung inside `loadPyodide`. Not reproduced headless
+  (6/6) or on first load in a fresh browser. Re-tested deliberately in Phase 3;
+  if it survives a realistic usage pattern, it is a go/no-go issue and the
+  fallback ladder below applies.
+- **Fallback ladder, if Phase 3 turns up a blocker**: lazy boot is already the
+  default, so the next step down is a local-only `card serve` for researchers
+  plus a precomputed-only public site — which still satisfies requirements 1–3
+  for preset inputs, losing only free parameter entry.
 - **Payload regression** — someone reintroduces numpy to `models.py` and the
-  download silently grows 16 MB. Guarded by the §4.3 pytest assertion, which
-  is why that assertion is part of the plan rather than a nice-to-have.
-- **Mobile memory** — Pyodide holds ~50–100 MB resident. Fine on modern
-  phones; verify on a low-end device in Phase 2.
+  download grows from 5.84 MB to ~22 MB. Guarded by the §4.3 pytest assertion,
+  now landed, which is why that assertion was part of the plan rather than a
+  nice-to-have.
+- **Mobile memory** — Pyodide holds ~50–100 MB resident. Untested on a real
+  low-end phone: Phase 2 measured a desktop browser and headless Node, and
+  server-side bandwidth throttling models the network but not a slower CPU or a
+  tighter memory ceiling. Carry this into Phase 3 on real hardware.
 - **Worker/main-thread complexity** — real, but bounded, and the `ModelSource`
   interface confines it to one file.
 - **The expansion path rots** — the `general` mode is authored but not shipped,
