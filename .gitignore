@@ -245,3 +245,12 @@ docs/paper/*.html
 docs/paper/*.pdf
 docs/paper/*_files/
 docs/paper/*.quarto_ipynb*
+
+# Web frontend (web/)
+#   node_modules and the vendored Pyodide runtime are ~25 MB of third-party
+#   binaries reproducible from package.json; the card wheel is a build artifact
+#   of this repo. The asset negation is because *.png above is repo-wide, for
+#   the generated figures, and would otherwise silently swallow a favicon.
+web/**/node_modules/
+web/**/vendor/
+!web/**/public/**

@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CARD — Pyodide spike</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 14px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+         margin: 0 auto; padding: 2rem 1.25rem; max-width: 60rem; }
+  h1 { font-size: 1.1rem; margin: 0 0 .25rem; }
+  p.sub { margin: 0 0 1.5rem; opacity: .7; }
+  section { border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+            border-radius: 6px; padding: .75rem 1rem; margin-bottom: 1rem; }
+  h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .08em;
+       opacity: .6; margin: 0 0 .6rem; }
+  table { border-collapse: collapse; width: 100%; }
+  td { padding: .18rem .5rem .18rem 0; vertical-align: top; }
+  td.k { opacity: .65; white-space: nowrap; width: 1%; }
+  td.v { font-variant-numeric: tabular-nums; }
+  .ok { color: #1a7f37; } .bad { color: #cf222e; } .wait { opacity: .55; }
+  @media (prefers-color-scheme: dark) { .ok { color: #3fb950; } .bad { color: #f85149; } }
+  #status { font-weight: 600; }
+</style>
+</head>
+<body>
+
+<h1>CARD — Pyodide go/no-go spike</h1>
+<p class="sub">Boots Pyodide in a worker, installs the <code>card</code> wheel by zipimport,
+   and runs the real <code>solve_flood_only</code>. No UI, no charts — this measures
+   boot cost, payload and steady-state solve time.</p>
+
+<section><h2>Status</h2><div id="status" class="wait">starting…</div></section>
+<section><h2>Boot timings</h2><table id="timings"><tr><td class="wait">waiting…</td></tr></table></section>
+<section><h2>Environment</h2><table id="env"><tr><td class="wait">waiting…</td></tr></table></section>
+<section><h2>Solve — correctness</h2><table id="solve"><tr><td class="wait">waiting…</td></tr></table></section>
+<section><h2>Steady state (after warm-up)</h2><table id="steady"><tr><td class="wait">waiting…</td></tr></table></section>
+<section><h2>Payload actually transferred</h2><table id="payload"><tr><td class="wait">waiting…</td></tr></table></section>
+
+<script type="module">
+const MASORETIC = { age_of_earth: 6056, flood_start_date: 1656,
+                    flood_end_date: 1656, ice_age_end_date: 3500 };
+const KPG = { chronology: MASORETIC, flood_secular_age: 66.0e6,
+              second_secular_age: 11500 };
+
+// Values pinned from the Python package, so the page proves the browser agrees
+// with the interpreter rather than merely producing a number.
+const EXPECTED = { lambda_F: 318754, k_F: 0.00482991 };
+
+const $ = (id) => document.getElementById(id);
+const fmt = (n, d = 1) => Number(n).toFixed(d);
+const rows = (el, pairs) => {
+  el.innerHTML = pairs.map(([k, v, cls = ""]) =>
+    `<tr><td class="k">${k}</td><td class="v ${cls}">${v}</td></tr>`).join("");
+};
+
+const worker = new Worker("./worker.mjs", { type: "module" });
+let nextId = 0;
+const pending = new Map();
+// Without this, a failure while the worker's own module graph loads is
+// completely silent: onmessage never fires and the page sits on "booting".
+worker.onerror = (e) => {
+  const msg = `worker error: ${e.message || "(no message)"} @ ${e.filename || "?"}:${e.lineno || "?"}`;
+  $("status").innerHTML = `<span class="bad">${msg}</span>`;
+  window.__spikeError = msg;
+  window.__spikeDone = true;
+};
+worker.onmessageerror = (e) => { console.error("messageerror", e); };
+// A Pyodide instance holds ~100 MB. Without this, a reload can leave the old
+// worker resident while the new one boots, and the second instance can stall
+// part-way through instantiating the wasm — which is exactly what happened
+// once during this spike. Terminating on pagehide makes reloads deterministic.
+addEventListener("pagehide", () => worker.terminate());
+worker.onmessage = (e) => {
+  const { id, ok, result, error } = e.data;
+  const { resolve, reject } = pending.get(id);
+  pending.delete(id);
+  ok ? resolve(result) : reject(new Error(error));
+};
+const send = (type, payload) => new Promise((resolve, reject) => {
+  const id = nextId++;
+  pending.set(id, { resolve, reject });
+  worker.postMessage({ id, type, payload });
+});
+
+const results = {};
+
+try {
+  // ---- boot -----------------------------------------------------------
+  $("status").textContent = "booting Pyodide…";
+  const pageStart = performance.timeOrigin;
+  const t = await send("boot");
+  results.timings = t;
+  rows($("timings"), [
+    ["import loader", `${fmt(t.import_loader_ms)} ms`],
+    ["loadPyodide", `${fmt(t.load_pyodide_ms)} ms`],
+    ["install card wheel", `${fmt(t.install_wheel_ms)} ms`],
+    ["import bridge", `${fmt(t.import_bridge_ms)} ms`],
+    ["<b>total boot</b>", `<b>${fmt(t.total_boot_ms)} ms</b>`],
+    ["time to interactive (from navigation)",
+     `${fmt(performance.now())} ms`],
+  ]);
+
+  // ---- environment ----------------------------------------------------
+  const env = await send("environment");
+  results.env = env;
+  const heavyClean = !env.numpy_loaded && !env.scipy_loaded;
+  rows($("env"), [
+    ["python", env.python],
+    ["card", env.card_version],
+    ["numpy loaded", String(env.numpy_loaded), env.numpy_loaded ? "bad" : "ok"],
+    ["scipy loaded", String(env.scipy_loaded), env.scipy_loaded ? "bad" : "ok"],
+    ["stdlib-only model path", heavyClean ? "confirmed" : "VIOLATED",
+     heavyClean ? "ok" : "bad"],
+  ]);
+
+  // ---- correctness ----------------------------------------------------
+  $("status").textContent = "solving…";
+  const c = await send("calibrate", KPG);
+  results.calibrate = c;
+  const relL = Math.abs(c.lambda_F / EXPECTED.lambda_F - 1);
+  const relK = Math.abs(c.k_F / EXPECTED.k_F - 1);
+  const agrees = relL < 1e-5 && relK < 1e-5;
+  rows($("solve"), [
+    ["lambda_F", c.lambda_F.toPrecision(9)],
+    ["k_F", c.k_F.toPrecision(9)],
+    ["expected (from Python)", `${EXPECTED.lambda_F}, ${EXPECTED.k_F}`],
+    ["agreement", agrees ? `matches to <1e-5` : `MISMATCH`, agrees ? "ok" : "bad"],
+    ["max |residual|", c.max_abs_residual.toExponential(2)],
+    ["solve time (Python side)", `${fmt(c.solve_ms, 2)} ms`],
+    ["round trip (worker→page)", `${fmt(c.round_trip_ms, 2)} ms`],
+  ]);
+
+  // ---- steady state ---------------------------------------------------
+  const N = 20;
+  const solveTimes = [], tripTimes = [];
+  for (let i = 0; i < N; i++) {
+    const r = await send("calibrate", KPG);
+    solveTimes.push(r.solve_ms); tripTimes.push(r.round_trip_ms);
+  }
+  const median = (a) => a.slice().sort((x, y) => x - y)[Math.floor(a.length / 2)];
+  const s400 = await send("series", { ...KPG, n: 400 });
+  results.steady = { solve: median(solveTimes), trip: median(tripTimes), series: s400 };
+  rows($("steady"), [
+    [`median solve over ${N} runs`, `${fmt(median(solveTimes), 2)} ms`],
+    [`median round trip over ${N} runs`, `${fmt(median(tripTimes), 2)} ms`],
+    ["400-point series (Python side)", `${fmt(s400.series_ms, 2)} ms`],
+    ["400-point series (round trip)", `${fmt(s400.round_trip_ms, 2)} ms`],
+    ["budget for a dragged slider", "16.7 ms/frame at 60 fps"],
+  ]);
+
+  // ---- payload --------------------------------------------------------
+  // Worker-fetched resources plus page-fetched ones; the runtime is all in the
+  // former, so counting only the page's would report a fictitious ~0 MB.
+  const res = [
+    ...(t.resources || []),
+    ...performance.getEntriesByType("resource").map((r) => ({
+      name: r.name.split("/").pop(),
+      transfer: r.transferSize, decoded: r.decodedBodySize })),
+  ];
+  let transferred = 0, decoded = 0;
+  const perFile = res.map((r) => {
+    transferred += r.transfer; decoded += r.decoded;
+    return [r.name, r.transfer, r.decoded];
+  }).sort((a, b) => b[1] - a[1]);
+  // Effective throughput: bytes moved divided by the wall time the network was
+  // actually busy. Quoting the payload against a nominal throttle setting
+  // would be quoting a number nobody measured.
+  const withTiming = (t.resources || []).filter((r) => r.end > 0);
+  const netStart = Math.min(...withTiming.map((r) => r.start));
+  const netEnd = Math.max(...withTiming.map((r) => r.end));
+  const netSeconds = (netEnd - netStart) / 1000;
+  const kbps = transferred / 1024 / netSeconds;
+  results.payload = { transferred, decoded, perFile, netSeconds, kbps };
+  rows($("payload"), [
+    ...perFile.filter(([, t]) => t > 1024).map(([n, tr, de]) =>
+      [n, `${(tr / 1048576).toFixed(2)} MB over the wire · ${(de / 1048576).toFixed(2)} MB decoded`]),
+    ["<b>total transferred</b>", `<b>${(transferred / 1048576).toFixed(2)} MB</b>`],
+    ["total decoded", `${(decoded / 1048576).toFixed(2)} MB`],
+    ["network busy for", `${fmt(netSeconds, 1)} s`],
+    ["<b>effective throughput</b>", `<b>${fmt(kbps, 0)} kB/s</b>`],
+  ]);
+
+  $("status").innerHTML = agrees && heavyClean
+    ? '<span class="ok">PASS — booted, stdlib-only confirmed, solve matches Python</span>'
+    : '<span class="bad">FAIL — see above</span>';
+  window.__spike = results;
+  window.__spikeDone = true;
+} catch (error) {
+  $("status").innerHTML = `<span class="bad">ERROR: ${error.message}</span>`;
+  window.__spikeError = String(error);
+  window.__spikeDone = true;
+  throw error;
+}
+</script>
+</body>
+</html>
