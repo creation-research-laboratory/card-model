@@ -48,17 +48,78 @@ def test_importing_card_pulls_in_nothing_heavy():
     assert loaded == ""
 
 
-def test_model_access_loads_only_the_numerical_core():
-    """Touching a model brings in numpy/scipy but still not matplotlib."""
+def test_model_access_loads_nothing_heavy():
+    """
+    Touching a model must not import numpy or scipy — let alone matplotlib.
+
+    Everything in models.py is scalar, so numpy was only ever a slower spelling
+    of `math.exp`/`math.expm1`/`math.isfinite`, and scipy only supplied a
+    bracketed root solve (now `card._solvers.brentq`).  This assertion is not
+    tidiness: in a Pyodide build those two wheels are 16 MB against a 5.8 MB
+    Python runtime, so re-adding `import numpy` here would nearly quadruple
+    what a browser has to download before the model can run.  If this test
+    fails, that is what it is telling you.
+    """
     loaded = run_snippet("""
         import sys
         import card
         card.GeneralModel
-        print('numpy' in sys.modules,
-              'matplotlib' in sys.modules,
-              'emcee' in sys.modules)
+        heavy = [name for name in ('numpy', 'scipy', 'matplotlib', 'emcee')
+                 if name in sys.modules]
+        print(','.join(heavy))
     """)
-    assert loaded == "True False False"
+    assert loaded == ""
+
+
+def test_calibration_loads_nothing_heavy():
+    """
+    The deterministic solve is stdlib-only for the same reason as the models.
+
+    `card.calibrate` is the entry point a browser front end actually calls, so
+    it is the one that most needs to stay free of the numerical stack.
+    """
+    loaded = run_snippet("""
+        import sys
+        from card.calibrate import solve_flood_only
+        solve_flood_only(4400.0, 5.4e8, 2556.0, 11500.0)
+        heavy = [name for name in ('numpy', 'scipy', 'matplotlib', 'emcee')
+                 if name in sys.modules]
+        print(','.join(heavy))
+    """)
+    assert loaded == ""
+
+
+def test_a_full_forward_and_inverse_solve_needs_only_the_stdlib():
+    """
+    End to end, in an interpreter that cannot import numpy or scipy at all.
+
+    The tests above would still pass if something imported numpy lazily inside
+    a method that this package's own call path happens to reach.  Blocking the
+    imports outright is the only way to prove the model runs where those wheels
+    do not exist, which is the whole premise of shipping it to a browser.
+    """
+    out = run_snippet("""
+        import sys
+
+        class Blocked:
+            def find_module(self, name, path=None):
+                if name.split('.')[0] in ('numpy', 'scipy'):
+                    raise ImportError(f'{name} is blocked by this test')
+                return None
+            def find_spec(self, name, path=None, target=None):
+                return self.find_module(name, path)
+
+        sys.meta_path.insert(0, Blocked())
+
+        from card.calibrate import solve_flood_only
+        result = solve_flood_only(4400.0, 5.4e8, 2556.0, 11500.0)
+        round_trip = result.model.inverse_age(result.model.forward_age(3000.0))
+        print(f'{result.lambda_F:.6g} {result.k_F:.6g} {round_trip:.6f}')
+    """)
+    lambda_F, k_F, round_trip = out.split()
+    assert float(lambda_F) == pytest.approx(3.22367e6, rel=1e-5)
+    assert float(k_F) == pytest.approx(0.00596981, rel=1e-5)
+    assert float(round_trip) == pytest.approx(3000.0, abs=1e-6)
 
 
 def test_fitter_access_does_not_load_emcee_or_h5py():

@@ -16,13 +16,16 @@ have uncertainties and you want a posterior.
 
 Extracted from examples/plot_model_calibration.py and its _joint variant, which
 each carried their own copy of the solve.
+
+Like `models.py`, this module is standard-library only — the root solve comes
+from `card._solvers` rather than scipy — so calibration runs anywhere CPython
+does, including a browser under Pyodide.
 """
 
 from dataclasses import dataclass
 from typing import Tuple
 
-from scipy.optimize import brentq
-
+from ._solvers import brentq
 from .chronology import DEFAULT_CHRONOLOGY, Chronology
 from .models import GeneralModel
 

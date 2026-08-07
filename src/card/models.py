@@ -23,16 +23,30 @@ ERROR CONTRACT — uniform across every model:
   * `inverse_age` additionally rejects secular ages above `max_secular_age()`,
     which no true age in the domain can produce.
   * Model parameters are validated once, at construction.
+
+DEPENDENCIES — this module imports the standard library and nothing else, and
+`tests/test_package_structure.py` enforces that.  Every quantity here is a
+scalar: numpy was only ever used as a slower spelling of `math.exp`,
+`math.expm1` and `math.isfinite`, and scipy only for a bracketed root solve
+(now `card._solvers.brentq`, a port that returns bit-identical results).
+Dropping both is what lets the numerical core run under Pyodide without a
+16 MB wheel download, and costs nothing: numpy scalars still pass the
+`numbers.Real` checks, because numpy registers its scalar types with that ABC.
+
+The one exception is the `quad` fallback in `DecayModel.compute_integral`,
+which imports scipy inside the method.  It is only reachable by a subclass
+that supplies no closed form, and `GeneralModel`/`ConstantDecayModel` both
+override it.
 """
 
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass, field, fields
+from numbers import Real
 from typing import Any, Dict, Sequence, Tuple
+import math
 import warnings
 
-import numpy as np
-from scipy.optimize import brentq
-
+from ._solvers import brentq
 from .constants import (
     AGE_OF_EARTH,
     FLOOD_START_DATE,
@@ -90,8 +104,8 @@ def _decaying_exponential_integral(k: float, t_ref: float,
         # the linear term is exact to ~1e-17 relative for |x| < 1e-8.
         scale = width * (1.0 - 0.5 * decay)
     else:
-        scale = -np.expm1(-decay) / k
-    return np.exp(-k * (a - t_ref)) * scale
+        scale = -math.expm1(-decay) / k
+    return math.exp(-k * (a - t_ref)) * scale
 
 
 # ============================================================================
@@ -160,13 +174,11 @@ class GeneralModelParams:
         for name in ("lambda_c", "lambda_F", "lambda_bg", "k_c", "k_F",
                      "t_c", "t_F", "t_F2"):
             value = getattr(self, name)
-            if isinstance(value, bool) or not isinstance(value, (int, float,
-                                                                np.integer,
-                                                                np.floating)):
+            if isinstance(value, bool) or not isinstance(value, Real):
                 raise ValueError(
                     f"{name} must be a real number, got {value!r}"
                 )
-            if not np.isfinite(value):
+            if not math.isfinite(value):
                 raise ValueError(f"{name} must be finite, got {value!r}")
 
         if self.lambda_bg <= 0:
@@ -382,12 +394,10 @@ class DecayModel(ABC):
     @staticmethod
     def _check_age(value: float, name: str) -> float:
         """Shared validation: an age must be a finite, non-negative number."""
-        if isinstance(value, bool) or not isinstance(
-            value, (int, float, np.integer, np.floating)
-        ):
+        if isinstance(value, bool) or not isinstance(value, Real):
             raise ValueError(f"{name} must be a real number, got {value!r}")
         value = float(value)
-        if not np.isfinite(value):
+        if not math.isfinite(value):
             raise ValueError(f"{name} must be finite, got {value!r}")
         if value < 0.0:
             raise ValueError(
@@ -397,14 +407,12 @@ class DecayModel(ABC):
         return value
 
     def _check_present_time(self, present_time: float) -> float:
-        if isinstance(present_time, bool) or not isinstance(
-            present_time, (int, float, np.integer, np.floating)
-        ):
+        if isinstance(present_time, bool) or not isinstance(present_time, Real):
             raise ValueError(
                 f"present_time must be a real number, got {present_time!r}"
             )
         present_time = float(present_time)
-        if not np.isfinite(present_time) or present_time <= 0.0:
+        if not math.isfinite(present_time) or present_time <= 0.0:
             raise ValueError(
                 f"present_time must be a positive, finite DATE, got "
                 f"{present_time!r}"
@@ -531,12 +539,10 @@ class ConstantDecayModel(DecayModel):
         Raises:
             ValueError: If `lambda_bg` is not positive and finite.
         """
-        if isinstance(lambda_bg, bool) or not isinstance(
-            lambda_bg, (int, float, np.integer, np.floating)
-        ):
+        if isinstance(lambda_bg, bool) or not isinstance(lambda_bg, Real):
             raise ValueError(f"lambda_bg must be a real number, got {lambda_bg!r}")
         lambda_bg = float(lambda_bg)
-        if not np.isfinite(lambda_bg) or lambda_bg <= 0.0:
+        if not math.isfinite(lambda_bg) or lambda_bg <= 0.0:
             raise ValueError(
                 f"lambda_bg must be positive and finite, got {lambda_bg!r}"
             )
@@ -641,14 +647,14 @@ class GeneralModel(DecayModel):
         elif t <= self.t_F:
             # Region 2: Post-Creation exponential relaxation
             return ((self.lambda_c - self.lambda_bg)
-                    * np.exp(-self.k_c * (t - self.t_c)) + self.lambda_bg)
+                    * math.exp(-self.k_c * (t - self.t_c)) + self.lambda_bg)
         elif t <= self.t_F2:
             # Region 3: Flood constant rate
             return self.lambda_F
         else:
             # Region 4: Post-Flood exponential relaxation
             return ((self.lambda_F - self.lambda_bg)
-                    * np.exp(-self.k_F * (t - self.t_F2)) + self.lambda_bg)
+                    * math.exp(-self.k_F * (t - self.t_F2)) + self.lambda_bg)
 
     def breakpoints(self) -> Tuple[float, ...]:
         """DATEs where lambda jumps: the ends of the Creation week and Flood."""
