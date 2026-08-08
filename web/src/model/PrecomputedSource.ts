@@ -28,7 +28,7 @@ import {
 
 /** Shape of `public/precomputed.json`, as written by generate_precomputed.py. */
 export interface PrecomputedData {
-  generator: { card_version: string; git_sha: string; series_points: number };
+  generator: { card_version: string; series_points: number };
   defaults: { chronology: string; boundary: string; mode: string };
   chronologies: Record<string, {
     label: string;
