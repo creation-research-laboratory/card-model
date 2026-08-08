@@ -1,0 +1,73 @@
+name: web
+
+# Tests the browser front end. Pulled forward from the plan's Phase 7 because
+# the live suite is the main guard on the model layer: it boots a real Pyodide
+# interpreter and checks that `card` in the browser agrees with `card` in
+# Python. Leaving that unrun until Phase 7 would mean four phases of unverified
+# work.
+#
+# Deliberately does NOT deploy — docs.yml owns the single GitHub Pages site.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "web/**"
+      - "src/card/**"        # the model the front end runs
+      - ".github/workflows/web.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v4
+        with:
+          # vitest 4 uses rolldown, which needs node:util's styleText (20.12+).
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install the card package
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e . build
+
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: The precomputed layer must not be stale
+        # It is committed (deployed content, and what lets `npm test` run in a
+        # clone without Python). A model or presets.json change that nobody
+        # regenerated fails here rather than shipping a wrong chart.
+        run: python web/tools/generate_precomputed.py --check
+
+      - name: Typecheck
+        working-directory: web
+        run: npm run typecheck
+
+      - name: Unit tests
+        working-directory: web
+        run: npm test
+
+      - name: Build the wheel and vendor the runtime
+        working-directory: web
+        run: |
+          bash tools/build_wheel.sh
+          node tools/vendor-pyodide.mjs
+
+      - name: Live tests (real Pyodide, real card wheel)
+        working-directory: web
+        run: npm run test:live

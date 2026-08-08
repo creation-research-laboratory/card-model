@@ -1,0 +1,115 @@
+{
+  "$comment": [
+    "Single source of truth for presets. Read by TypeScript (src/presets) and by",
+    "Python (tools/generate_precomputed.py), so a preset cannot be defined in the",
+    "app in a form Python never validated.",
+    "",
+    "Naming follows the package's rule: a value ending in _age is an AGE (years",
+    "before present), one ending in _date is a DATE (years after Day 1 of",
+    "Creation). Chronology fields are DATEs except age_of_earth.",
+    "",
+    "PROVISIONAL: the septuagint chronology values are placeholders chosen to",
+    "exercise a longer timeline. They are on the pre-publication checklist in",
+    "frontend_plan.md and must be reviewed, with a citation, before this ships."
+  ],
+
+  "chronologies": {
+    "masoretic": {
+      "label": "Masoretic",
+      "note": "The package default (card.chronology.DEFAULT_CHRONOLOGY).",
+      "provisional": false,
+      "age_of_earth": 6056,
+      "flood_start_date": 1656,
+      "flood_end_date": 1656,
+      "ice_age_end_date": 3500
+    },
+    "septuagint": {
+      "label": "Septuagint (LXX)",
+      "note": "PROVISIONAL — placeholder values pending review and citation.",
+      "provisional": true,
+      "age_of_earth": 7500,
+      "flood_start_date": 2262,
+      "flood_end_date": 2262,
+      "ice_age_end_date": 4100
+    }
+  },
+
+  "boundaries": {
+    "kpg": {
+      "label": "K/Pg boundary",
+      "note": "Cretaceous-Paleogene, 66.0 Ma (ICS).",
+      "secular_age": 66.0e6,
+      "uncertainty": 1.0e5
+    },
+    "nq": {
+      "label": "Neogene/Quaternary",
+      "note": "2.58 Ma (ICS).",
+      "secular_age": 2.58e6,
+      "uncertainty": 1.0e4
+    },
+    "pc_c": {
+      "label": "Precambrian-Cambrian",
+      "note": "540 Ma; the boundary the package's own run config fits.",
+      "secular_age": 540.0e6,
+      "uncertainty": 1.0e7
+    }
+  },
+
+  "second_constraint": {
+    "label": "End of the Ice Age",
+    "note": "Held across every preset; its AGE comes from the chronology.",
+    "secular_age": 11500,
+    "uncertainty": 30
+  },
+
+  "defaults": {
+    "chronology": "masoretic",
+    "boundary": "kpg",
+    "mode": "flood_only"
+  },
+
+  "modes": {
+    "flood_only": {
+      "label": "Flood only",
+      "note": "No Creation-week acceleration; instantaneous Flood.",
+      "enabled": true,
+      "fixed": {
+        "lambda_c": 1.0,
+        "k_c": 0.0,
+        "t_c": 1.0,
+        "t_F": "flood_start_date",
+        "t_F2": "flood_end_date"
+      }
+    },
+    "general": {
+      "label": "Creation week + Flood",
+      "note": [
+        "Authored but not exposed in v1. Turning this on is flipping `enabled`;",
+        "no component changes, because the parameter panel iterates the free",
+        "names Python returns rather than a hardcoded list.",
+        "",
+        "Freeing lambda_c/k_c does not disturb the calibration: both constraint",
+        "ages map to formation DATEs at or after t_F, so their integrals cover",
+        "only the Flood and post-Flood regions and the Creation-week parameters",
+        "never enter. Verified to exactly zero difference."
+      ],
+      "enabled": false,
+      "fixed": {
+        "t_c": 1.0,
+        "t_F": "flood_start_date",
+        "t_F2": "flood_end_date"
+      }
+    }
+  },
+
+  "series": {
+    "note": [
+      "Grid used for the precomputed first-paint layer. Log-spaced in true age:",
+      "the structure is all in the recent end and a linear grid spends every",
+      "point on the flat tail. Breakpoints and constraint ages are unioned in by",
+      "the generator so the Flood discontinuity renders as a step and the",
+      "calibration anchors are exact rows."
+    ],
+    "points": 600
+  }
+}
