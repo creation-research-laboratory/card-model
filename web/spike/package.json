@@ -1,0 +1,13 @@
+{
+  "name": "card-pyodide-spike",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Phase 2 go/no-go spike: boot Pyodide, install the card wheel, run a real solve.",
+  "scripts": {
+    "vendor": "node vendor-pyodide.mjs",
+    "serve": "node serve.mjs"
+  },
+  "dependencies": {
+    "pyodide": "314.0.3"
+  }
+}
