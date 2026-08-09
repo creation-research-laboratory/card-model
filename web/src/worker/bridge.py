@@ -32,6 +32,18 @@ __all__ = ["calibrate", "series", "forward_age", "inverse_age", "schema",
            "environment"]
 
 
+#: Relative offset used to place a sample just past a discontinuity.  Large
+#: enough to survive being rounded to 9 significant figures for the file, small
+#: enough to be invisible on a chart spanning thousands of years (~0.002 yr at
+#: the Flood).
+_STEP_EPSILON = 1e-6
+
+
+def _just_after(date: float) -> float:
+    """The smallest DATE past `date` that still round-trips through the file."""
+    return date * (1.0 + _STEP_EPSILON) if date > 0.0 else _STEP_EPSILON
+
+
 def _chronology(spec: Dict[str, Any]) -> Chronology:
     return Chronology(
         age_of_earth=float(spec["ageOfEarth"]),
@@ -146,6 +158,57 @@ def series(request_json: str) -> str:
             warnings.simplefilter("always")
             secular = [model.forward_age(age, present) for age in ordered]
             return _ok({"trueAge": ordered, "secularAge": secular}, caught)
+    except Exception as exc:  # noqa: BLE001
+        return _error(exc)
+
+
+def lambda_history(request_json: str) -> str:
+    """
+    Sample lambda(t) against DATE — the decay-rate history.
+
+    Mirrors `card.plotting.plot_lambda_history`: linear in DATE from 0 to the
+    present, log in lambda.  This is the one curve whose x axis is a DATE
+    (years after Day 1 of Creation) rather than an AGE, and a UI must say so.
+
+    Unlike the age curve, this one is genuinely discontinuous: `forward_age` is
+    the integral of a bounded rate and so is continuous, but lambda itself
+    steps at t_c, t_F and t_F2.  Each breakpoint therefore needs *two* samples —
+    one at the breakpoint and one just after it — or a chart draws the Flood as
+    a diagonal ramp instead of a jump.  `lambda_func` uses `<=`, so the value
+    at a breakpoint belongs to the earlier region and the partner sample has to
+    be on the later side.
+    """
+    try:
+        request = json.loads(request_json)
+        chronology = _chronology(request["chronology"])
+        params = GeneralModelParams.from_dict(request["params"])
+        model = GeneralModel(params)
+        present = chronology.present_date
+        n = max(2, int(request.get("points", 400)))
+
+        step = present / (n - 1)
+        grid = {i * step for i in range(n)}
+        grid.update({0.0, present})
+        for date in model.breakpoints():
+            if 0.0 <= date <= present:
+                grid.add(date)
+                after = _just_after(date)
+                if after <= present:
+                    grid.add(after)
+
+        ordered = sorted(grid)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            rates = [model.lambda_func(t) for t in ordered]
+            return _ok({
+                "date": ordered,
+                "lambda": rates,
+                # Handed over so a chart can mark the Flood without
+                # re-deriving it from the parameters.
+                "floodStartDate": params.t_F,
+                "floodEndDate": params.t_F2,
+                "presentDate": present,
+            }, caught)
     except Exception as exc:  # noqa: BLE001
         return _error(exc)
 

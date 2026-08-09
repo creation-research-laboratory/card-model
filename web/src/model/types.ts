@@ -78,12 +78,40 @@ export interface Calibration {
   readonly presetKey?: string;
 }
 
-/** Sampled curve. Parallel arrays rather than objects: this gets large. */
+/**
+ * Sampled curve. Parallel arrays rather than objects: this gets large.
+ *
+ * `exact` here asks a narrower question than `Calibration.exact`: did these
+ * sample values come from the model? For both sources they did — the
+ * precomputed generator called `forward_age` at exactly these ages. What is
+ * approximate about the precomputed source is answering at an *arbitrary* age,
+ * which interpolates between rows, and `Calibration.exact` governs that.
+ */
 export interface Series {
   /** AGEs, ascending. */
   readonly trueAge: readonly number[];
   /** Apparent secular age at each `trueAge`. */
   readonly secularAge: readonly number[];
+  readonly exact: boolean;
+}
+
+/**
+ * Decay-rate history: lambda against DATE.
+ *
+ * The one curve in the app whose x axis is a DATE (years after Day 1 of
+ * Creation) rather than an AGE. It is also the one that genuinely steps —
+ * `forward_age` is the integral of a bounded rate and therefore continuous,
+ * but lambda itself jumps at t_c, t_F and t_F2. Each breakpoint carries two
+ * samples so a chart draws the jump rather than a ramp.
+ */
+export interface LambdaSeries {
+  /** DATEs, ascending, from 0 to the present. */
+  readonly date: readonly number[];
+  /** lambda at each DATE, as a multiple of background. */
+  readonly lambda: readonly number[];
+  readonly floodStartDate: number;
+  readonly floodEndDate: number;
+  readonly presentDate: number;
   readonly exact: boolean;
 }
 

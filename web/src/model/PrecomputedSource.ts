@@ -20,6 +20,7 @@ import {
   type Chronology,
   type Constraint,
   type GeneralParams,
+  type LambdaSeries,
   type Series,
   UnsupportedRequestError,
   hasOverrides,
@@ -28,7 +29,7 @@ import {
 
 /** Shape of `public/precomputed.json`, as written by generate_precomputed.py. */
 export interface PrecomputedData {
-  generator: { card_version: string; series_points: number };
+  generator: { card_version: string; series_points: number; lambda_points: number };
   defaults: { chronology: string; boundary: string; mode: string };
   chronologies: Record<string, {
     label: string;
@@ -55,6 +56,7 @@ export interface PrecomputedData {
       label: string; true_age: number; secular_age: number; uncertainty: number;
     }>;
     series: { true_age: number[]; secular_age: number[] };
+    lambda_history: { date: number[]; lambda: number[] };
   }>;
 }
 
@@ -146,12 +148,32 @@ export class PrecomputedSource implements ModelSource {
 
   async series(calibration: Calibration): Promise<Series> {
     const preset = this.presetFor(calibration);
-    // `points` is ignored on purpose: resampling an interpolated table at
-    // higher density would manufacture precision the data does not have.
+    // `points` is ignored on purpose: resampling at higher density would
+    // interpolate, and manufacture precision the table does not have.
+    //
+    // `exact: true` because these sample values did come from the model — the
+    // generator called `forward_age` at exactly these ages. What is inexact
+    // about this source is `forwardAge`/`inverseAge` at an *arbitrary* age,
+    // which interpolates between rows; `Calibration.exact` governs that.
     return {
       trueAge: preset.series.true_age,
       secularAge: preset.series.secular_age,
-      exact: false,
+      exact: true,
+    };
+  }
+
+  async lambdaHistory(calibration: Calibration): Promise<LambdaSeries> {
+    const preset = this.presetFor(calibration);
+    // Returned as generated, not resampled. The step at the Flood is carried
+    // by an adjacent pair of samples; interpolating between them would turn
+    // the jump this curve exists to show back into a ramp.
+    return {
+      date: preset.lambda_history.date,
+      lambda: preset.lambda_history.lambda,
+      floodStartDate: preset.params.t_F,
+      floodEndDate: preset.params.t_F2,
+      presentDate: calibration.chronology.ageOfEarth,
+      exact: true,
     };
   }
 

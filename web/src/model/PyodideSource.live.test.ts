@@ -35,6 +35,12 @@ const preset = (chronology: string, boundary: string): CalibrationRequest => ({
 let live: PyodideSource;
 let precomputed: PrecomputedSource;
 
+/** Relative agreement, with an absolute fallback for values at or near zero. */
+function closeEnough(a: number, b: number, tolerance = 1e-8): boolean {
+  const scale = Math.max(Math.abs(a), Math.abs(b));
+  return scale < 1e-12 ? Math.abs(a - b) < 1e-12 : Math.abs(a - b) / scale < tolerance;
+}
+
 beforeAll(async () => {
   const transport = new DirectTransport({
     indexURL: join(WEB, "node_modules", "pyodide"),
@@ -140,6 +146,54 @@ describe("the precomputed layer is a faithful stand-in", () => {
       expect(preCal.params.lambda_F / liveCal.params.lambda_F - 1).toBeCloseTo(0, 8);
       expect(preCal.maxSecularAge / liveCal.maxSecularAge - 1).toBeCloseTo(0, 8);
     }
+  });
+});
+
+describe("lambda history agrees between the two sources", () => {
+  it("matches the precomputed curve sample for sample", async () => {
+    const request = preset("masoretic", "kpg");
+    const liveCal = await live.calibrate(request);
+    const preCal = await precomputed.calibrate(request);
+    const pre = await precomputed.lambdaHistory(preCal);
+
+    // Ask the live source for lambda at exactly the precomputed DATEs by
+    // matching the grid size; both use the same construction, so the grids
+    // coincide and the values must too.
+    const liveHistory = await live.lambdaHistory(liveCal, data.generator.lambda_points);
+    expect(liveHistory.date.length).toBe(pre.date.length);
+    for (let i = 0; i < pre.date.length; i += 11) {
+      // Relative, because the file stores 9 significant figures: a date like
+      // 1138.345864661654 is written 1138.34586, and a fixed absolute
+      // tolerance would tighten as the values grow. Falls back to absolute at
+      // the origin, where the grid starts at exactly 0 and a ratio is 0/0.
+      expect(closeEnough(liveHistory.date[i], pre.date[i])).toBe(true);
+      // 1e-6, not tighter: the file stores DATEs at 9 significant figures, so
+      // the live source samples lambda at a fractionally different t than the
+      // generator did, and k_F * dt turns a ~1e-9 shift in date into ~1e-8 in
+      // lambda. That is the floor of this comparison, not a disagreement about
+      // the model — the two evaluate the same function.
+      expect(closeEnough(liveHistory.lambda[i], pre.lambda[i], 1e-6)).toBe(true);
+    }
+  });
+
+  it("steps at the Flood in the live source too", async () => {
+    const cal = await live.calibrate(preset("masoretic", "kpg"));
+    const history = await live.lambdaHistory(cal);
+    const i = history.date.findIndex((d) => d === cal.params.t_F);
+    expect(i).toBeGreaterThan(-1);
+    expect(history.lambda[i]).toBeCloseTo(1, 9);
+    expect(history.lambda[i + 1]).toBeCloseTo(cal.params.lambda_F, -1);
+  });
+
+  it("reflects a Creation-week override the age curve barely shows", async () => {
+    // lambda(t) is where the Creation-week parameters are actually visible;
+    // they leave both constraints untouched, so the age curve's fitted region
+    // does not move at all.
+    const cal = await live.calibrate({
+      ...preset("masoretic", "kpg"), overrides: { lambda_c: 1e6, k_c: 1e-2 },
+    });
+    const history = await live.lambdaHistory(cal);
+    expect(history.lambda[0]).toBeCloseTo(1e6, -1);
   });
 });
 

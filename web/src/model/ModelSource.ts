@@ -18,6 +18,7 @@
 import type {
   Calibration,
   CalibrationRequest,
+  LambdaSeries,
   Series,
 } from "./types.js";
 
@@ -54,6 +55,15 @@ export interface ModelSource {
    * manufacture precision it does not possess.
    */
   series(calibration: Calibration, points?: number): Promise<Series>;
+
+  /**
+   * Sample lambda against DATE — the decay-rate history.
+   *
+   * Separate from `series` because it is a different curve on a different
+   * axis: DATE rather than AGE, and genuinely discontinuous where the age
+   * curve only has a kink.
+   */
+  lambdaHistory(calibration: Calibration, points?: number): Promise<LambdaSeries>;
 
   /** Apparent secular age for a true age. Both AGEs. */
   forwardAge(calibration: Calibration, trueAge: number): Promise<number>;

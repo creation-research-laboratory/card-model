@@ -16,6 +16,7 @@ import {
   type Chronology,
   type Constraint,
   type GeneralParams,
+  type LambdaSeries,
   type Series,
   ModelError,
   UnsupportedRequestError,
@@ -146,6 +147,18 @@ export class PyodideSource implements ModelSource {
       })),
     );
     return { trueAge: payload.trueAge, secularAge: payload.secularAge, exact: true };
+  }
+
+  async lambdaHistory(calibration: Calibration, points = 400): Promise<LambdaSeries> {
+    const payload = this.unwrap<{
+      date: number[]; lambda: number[];
+      floodStartDate: number; floodEndDate: number; presentDate: number;
+    }>(await this.transport.call("lambda_history", JSON.stringify({
+      chronology: calibration.chronology,
+      params: calibration.params,
+      points,
+    })));
+    return { ...payload, exact: true };
   }
 
   async forwardAge(calibration: Calibration, trueAge: number): Promise<number> {

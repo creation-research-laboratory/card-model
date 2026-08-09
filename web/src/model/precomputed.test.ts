@@ -116,6 +116,76 @@ describe("series", () => {
   });
 });
 
+describe("lambda history", () => {
+  it("is ascending in DATE and spans zero to the present", async () => {
+    for (const key of source.presetKeys) {
+      const p = data.presets[key];
+      const chron = data.chronologies[p.chronology];
+      const dates = p.lambda_history.date;
+      expect(dates[0]).toBe(0);
+      expect(dates[dates.length - 1]).toBe(chron.age_of_earth);
+      for (let i = 1; i < dates.length; i++) {
+        expect(dates[i]).toBeGreaterThan(dates[i - 1]);
+      }
+    }
+  });
+
+  it("carries a genuine step at the Flood, not a ramp", async () => {
+    // This is the whole reason the lambda grid straddles its breakpoints and
+    // the age grid does not. An earlier straddle attempt collapsed under
+    // rounding and would have drawn a diagonal; the generator now refuses to
+    // emit that, and this checks the result from the other side.
+    for (const key of source.presetKeys) {
+      const p = data.presets[key];
+      const { date, lambda } = p.lambda_history;
+      const i = date.indexOf(p.params.t_F);
+      expect(i).toBeGreaterThan(-1);
+
+      const width = date[i + 1] - date[i];
+      const jump = lambda[i + 1] / lambda[i];
+      // Two samples a fraction of a year apart, spanning the full rise to
+      // lambda_F: a vertical edge at any plottable scale.
+      expect(width).toBeLessThan(0.01);
+      // Not exactly lambda_F: the second sample sits at t_F*(1 + 1e-6), by
+      // which point the rate has already relaxed by ~k_F * 0.002 yr. Relative,
+      // because lambda_F spans 7.9e3 to 3.2e6 across the presets and an
+      // absolute tolerance cannot cover both.
+      expect(Math.abs(jump / p.params.lambda_F - 1)).toBeLessThan(1e-4);
+    }
+  });
+
+  it("starts at background and has substantially relaxed by the present", async () => {
+    // Flood-only has no Creation-week acceleration, so it starts at exactly 1.
+    //
+    // The tail only *approaches* 1 — relaxation is exponential — and how close
+    // it gets varies by more than two orders of magnitude across the presets:
+    // N/Q still sits 1.07% above background today, because it has both the
+    // smallest k_F and the smallest excursion to decay from. An absolute bound
+    // would encode one preset's physics and reject another's, so this measures
+    // what actually matters: the fraction of the excursion still outstanding.
+    for (const key of source.presetKeys) {
+      const p = data.presets[key];
+      const { lambda } = p.lambda_history;
+      expect(lambda[0]).toBe(1);
+
+      const final = lambda[lambda.length - 1];
+      expect(final).toBeGreaterThanOrEqual(1);
+      const remaining = (final - 1) / (p.params.lambda_F - 1);
+      expect(remaining).toBeLessThan(1e-4);
+    }
+  });
+
+  it("is returned as generated, without resampling", async () => {
+    const cal = await source.calibrate(preset("masoretic", "kpg"));
+    const history = await source.lambdaHistory(cal);
+    expect(history.date).toEqual(data.presets["masoretic:kpg"].lambda_history.date);
+    expect(history.floodStartDate).toBe(1656);
+    // These samples came from the model, so they are exact — unlike a scalar
+    // query at an arbitrary age, which interpolates.
+    expect(history.exact).toBe(true);
+  });
+});
+
 describe("interpolation accuracy", () => {
   it("is within the tolerance the UI is told to expect", async () => {
     // Measured against the live model at grid midpoints: 0.275% worst case

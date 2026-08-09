@@ -12,7 +12,6 @@
     "exercise a longer timeline. They are on the pre-publication checklist in",
     "frontend_plan.md and must be reviewed, with a citation, before this ships."
   ],
-
   "chronologies": {
     "masoretic": {
       "label": "Masoretic",
@@ -25,7 +24,7 @@
     },
     "septuagint": {
       "label": "Septuagint (LXX)",
-      "note": "PROVISIONAL — placeholder values pending review and citation.",
+      "note": "PROVISIONAL \u2014 placeholder values pending review and citation.",
       "provisional": true,
       "age_of_earth": 7500,
       "flood_start_date": 2262,
@@ -33,41 +32,37 @@
       "ice_age_end_date": 4100
     }
   },
-
   "boundaries": {
     "kpg": {
       "label": "K/Pg boundary",
       "note": "Cretaceous-Paleogene, 66.0 Ma (ICS).",
-      "secular_age": 66.0e6,
-      "uncertainty": 1.0e5
+      "secular_age": 66000000.0,
+      "uncertainty": 100000.0
     },
     "nq": {
       "label": "Neogene/Quaternary",
       "note": "2.58 Ma (ICS).",
-      "secular_age": 2.58e6,
-      "uncertainty": 1.0e4
+      "secular_age": 2580000.0,
+      "uncertainty": 10000.0
     },
     "pc_c": {
       "label": "Precambrian-Cambrian",
       "note": "540 Ma; the boundary the package's own run config fits.",
-      "secular_age": 540.0e6,
-      "uncertainty": 1.0e7
+      "secular_age": 540000000.0,
+      "uncertainty": 10000000.0
     }
   },
-
   "second_constraint": {
     "label": "End of the Ice Age",
     "note": "Held across every preset; its AGE comes from the chronology.",
     "secular_age": 11500,
     "uncertainty": 30
   },
-
   "defaults": {
     "chronology": "masoretic",
     "boundary": "kpg",
     "mode": "flood_only"
   },
-
   "modes": {
     "flood_only": {
       "label": "Flood only",
@@ -101,7 +96,6 @@
       }
     }
   },
-
   "series": {
     "note": [
       "Grid used for the precomputed first-paint layer. Log-spaced in true age:",
@@ -110,6 +104,7 @@
       "the generator so the Flood discontinuity renders as a step and the",
       "calibration anchors are exact rows."
     ],
-    "points": 600
+    "points": 600,
+    "lambda_points": 400
   }
 }

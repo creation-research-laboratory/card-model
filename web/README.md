@@ -7,8 +7,8 @@ there is exactly one implementation of the numerics and it is the tested one.
 Self-contained: own `package.json`, own lockfile, own CI workflow, so
 `git subtree split --prefix=web` extracts it into its own repository later.
 
-**Status: Phase 3.** The model layer and presets are built and tested; there is
-no UI yet. See `../frontend_plan.md` for the phased plan and
+**Status: Phase 4.** The app shell and both charts are built; free parameters
+are Phase 5. See `../frontend_plan.md` for the phased plan and
 [`spike/README.md`](spike/README.md) for the Phase 2 measurements that shaped
 the architecture.
 
@@ -24,16 +24,33 @@ npm install
 npm run setup     # build the card wheel, vendor Pyodide, regenerate presets
 npm test          # fast unit tests
 npm run test:live # boots a real Pyodide interpreter (~2 s)
-npm run dev       # developer harness at http://localhost:8423
+npm run dev       # the app at http://localhost:8423
 ```
 
-`npm run dev` serves `index.html`, a **developer harness** — Phase 3 has no app
-UI. It exists because the headless tests use `DirectTransport` in Node, so the
-actual Worker path (`pyodide.worker.ts` + `WorkerTransport`) would otherwise
-never be executed. It shows first paint from the precomputed layer with Pyodide
-deliberately unstarted, boots the live source on demand or when you type a
-custom λ_F, and compares the two sources directly. Phase 4 replaces it with the
-real app.
+`/harness.html` on the same server is a **developer harness** kept from Phase 3.
+The headless tests use `DirectTransport` in Node, so it is still the only thing
+that exercises the Worker path by hand, and it is where the Phase 2 boot stall
+would be reproduced.
+
+## The two charts
+
+**Apparent age vs. true age** mirrors `card.plotting.plot_age_comparison`: two
+series on log-log axes, the model against the constant-rate reference where
+apparent equals true. The gap between them is the claim. The curve has a *kink*
+at the Flood, not a step — `forward_age` is the integral of a bounded rate and
+so is continuous.
+
+**Decay rate through time** mirrors `plot_lambda_history`. Its x axis is a
+**DATE** — years after Day 1 of Creation — the only chart in the app running
+that direction, and the convention whose confusion once caused a real fitting
+error in this package. This curve *does* step at the Flood, so its grid carries
+two samples a fraction of a year apart and the generator refuses to emit a
+version where rounding has collapsed them.
+
+Colors are the first two categorical slots of the reference palette, validated
+in both modes: worst CVD separation ΔE 24.7 light / 26.8 dark against a ≥ 8
+target, contrast ≥ 3:1. Both charts carry a crosshair tooltip and a collapsed
+data table, so no value is reachable only by hovering a chart.
 
 ## How it fits together
 

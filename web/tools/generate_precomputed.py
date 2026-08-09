@@ -91,11 +91,66 @@ def _true_age_grid(chronology: Chronology, model: GeneralModel,
     return sorted(rounded)
 
 
+#: Relative offset placing a sample just past a discontinuity.  Must exceed the
+#: resolution of SIGFIGS rounding or the pair collapses into a duplicate row —
+#: which is exactly what happened to an earlier straddle attempt, silently.
+_STEP_EPSILON = 1e-6
+
+
+def _lambda_grid(chronology: Chronology, model: GeneralModel,
+                 points: int) -> List[float]:
+    """
+    DATEs at which to sample lambda(t), linear plus the discontinuities.
+
+    lambda genuinely steps at t_c, t_F and t_F2 — unlike `forward_age`, which
+    is the integral of a bounded rate and therefore continuous.  So this grid
+    *does* need a point either side of each breakpoint, and the age grid
+    deliberately does not.  Without the pair, a chart renders the Flood as a
+    diagonal ramp rather than a jump.
+
+    `lambda_func` uses `<=`, so the sample at a breakpoint belongs to the
+    earlier region and its partner must sit just after.
+    """
+    present = chronology.present_date
+    step = present / (points - 1)
+    candidates = [i * step for i in range(points)]
+    candidates.extend((0.0, present))
+    for date in model.breakpoints():
+        if 0.0 <= date <= present:
+            candidates.append(date)
+            after = date * (1.0 + _STEP_EPSILON) if date > 0.0 else _STEP_EPSILON
+            if after <= present:
+                candidates.append(after)
+
+    grid = sorted({_round(d) for d in candidates if 0.0 <= d <= present})
+
+    # Fail loudly rather than shipping a chart that draws a ramp: if rounding
+    # merged a breakpoint with its partner, the step is gone and nothing
+    # downstream would notice.
+    for date in model.breakpoints():
+        if not 0.0 < date < present:
+            continue
+        rounded = _round(date)
+        after = _round(date * (1.0 + _STEP_EPSILON))
+        if rounded == after:
+            raise ValueError(
+                f"the straddle around breakpoint {date!r} collapsed under "
+                f"{SIGFIGS}-significant-figure rounding; increase SIGFIGS or "
+                "_STEP_EPSILON."
+            )
+        if rounded not in grid or after not in grid:
+            raise ValueError(
+                f"breakpoint {date!r} lost its straddling pair in the grid."
+            )
+    return grid
+
+
 def build(presets: Dict[str, Any]) -> Dict[str, Any]:
     chronologies = presets["chronologies"]
     boundaries = presets["boundaries"]
     second = presets["second_constraint"]
     points = int(presets["series"]["points"])
+    lambda_points = int(presets["series"].get("lambda_points", 400))
 
     out_chronologies: Dict[str, Any] = {}
     out_presets: Dict[str, Any] = {}
@@ -135,6 +190,7 @@ def build(presets: Dict[str, Any]) -> Dict[str, Any]:
             # actually produced.
             grid = _true_age_grid(chronology, model, [flood_age, second_age], points)
             secular = [model.forward_age(age, present) for age in grid]
+            lambda_grid = _lambda_grid(chronology, model, lambda_points)
 
             out_presets[f"{chron_key}:{bound_key}"] = {
                 "chronology": chron_key,
@@ -162,6 +218,12 @@ def build(presets: Dict[str, Any]) -> Dict[str, Any]:
                     "true_age": grid,  # already rounded, already deduplicated
                     "secular_age": [_round(s) for s in secular],
                 },
+                # lambda(t) against DATE — the one curve whose x axis is a DATE
+                # rather than an AGE, and the one that genuinely steps.
+                "lambda_history": {
+                    "date": lambda_grid,
+                    "lambda": [_round(model.lambda_func(d)) for d in lambda_grid],
+                },
             }
 
     return {
@@ -178,6 +240,7 @@ def build(presets: Dict[str, Any]) -> Dict[str, Any]:
         "generator": {
             "card_version": CARD_VERSION,
             "series_points": points,
+            "lambda_points": lambda_points,
         },
         "defaults": presets["defaults"],
         "boundaries": {k: {"label": v["label"],
