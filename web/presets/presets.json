@@ -60,8 +60,9 @@
   },
   "defaults": {
     "chronology": "masoretic",
-    "boundary": "kpg",
-    "mode": "flood_only"
+    "boundary": "pc_c",
+    "mode": "flood_only",
+    "$comment": "Precambrian-Cambrian by default: it is the only boundary whose calibration reaches the whole geologic column, and it is the configuration the package's own run config and the paper's headline result use. Pinning the Flood to a younger boundary caps the oldest apparent age the model can produce, which is correct but makes the column chart open half empty."
   },
   "modes": {
     "flood_only": {

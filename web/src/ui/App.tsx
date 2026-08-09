@@ -57,6 +57,19 @@ export function App({ data }: Props) {
     [precomputed, data],
   );
 
+  // Which boundary, if any, reaches every unit of the geologic column. Read
+  // from the data rather than hardcoded, so adding a boundary to presets.json
+  // is still a data-only change.
+  const fullColumnBoundary = useMemo(() => {
+    for (const [key, preset] of Object.entries(data.presets)) {
+      if (preset.geologic_column.every((u) => u.in_range)) {
+        return { key: preset.boundary, label: data.boundaries[preset.boundary].label };
+      }
+      void key;
+    }
+    return null;
+  }, [data]);
+
   const [state, setState] = useState<ManagerState>(manager.state);
   const [request, setRequest] = useState<CalibrationRequest>({
     chronology: data.defaults.chronology,
@@ -217,7 +230,13 @@ export function App({ data }: Props) {
           {history ? <LambdaHistoryChart history={history} /> : null}
 
           {column && calibration ? (
-            <GeologicColumnChart column={column} calibration={calibration} />
+            <GeologicColumnChart
+              column={column}
+              calibration={calibration}
+              fullColumnBoundary={fullColumnBoundary}
+              onSelectBoundary={(boundary) =>
+                setRequest((r) => ({ ...r, boundary }))}
+            />
           ) : null}
 
           {series && calibration ? (

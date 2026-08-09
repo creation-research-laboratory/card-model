@@ -30,6 +30,13 @@ interface Props {
   /** Year the "present" refers to, for the calendar-date axis. */
   presentYear?: number;
   width?: number;
+  /**
+   * A boundary whose calibration reaches every unit, if one exists. Offered
+   * from the out-of-range notice so the reader can act on it rather than being
+   * told what they cannot see.
+   */
+  fullColumnBoundary?: { key: string; label: string } | null;
+  onSelectBoundary?(key: string): void;
 }
 
 const ROW_HEIGHT = 22;
@@ -37,6 +44,7 @@ const MARGIN = { top: 46, right: 20, bottom: 34, left: 104 };
 
 export function GeologicColumnChart({
   column, calibration, presentYear = new Date().getUTCFullYear(), width = 720,
+  fullColumnBoundary = null, onSelectBoundary,
 }: Props) {
   const [hover, setHover] = useState<number | null>(null);
 
@@ -223,11 +231,26 @@ export function GeologicColumnChart({
             {rows.length - inRangeCount} of {rows.length} units are outside this
             calibration.
           </strong>{" "}
-          Pinning the Flood to a younger boundary caps the oldest apparent age
-          the model can produce at{" "}
-          {formatAge(column.maxSecularAge)}, so anything older has no
-          young-earth date here. Choose an older boundary to see the full
-          column.
+          This is the calibration talking, not missing data. Pinning the Flood
+          to this boundary means Flood rock appears exactly that old, and
+          everything formed before it decayed at background rate — which adds
+          only{" "}
+          {formatAge(column.maxSecularAge - calibration.constraints[0].secularAge)}{" "}
+          of apparent age. So the model tops out at{" "}
+          {formatAge(column.maxSecularAge)}, and no true age whatsoever looks
+          older than that.
+          {fullColumnBoundary && onSelectBoundary ? (
+            <>
+              {" "}
+              <button
+                className="action"
+                style={{ marginTop: ".5rem" }}
+                onClick={() => onSelectBoundary(fullColumnBoundary.key)}
+              >
+                Show the full column ({fullColumnBoundary.label})
+              </button>
+            </>
+          ) : null}
         </p>
       ) : null}
 
