@@ -80,19 +80,6 @@ export class ModelSourceManager {
     };
   }
 
-  /**
-   * Pick the source that can answer this request.
-   *
-   * Returns the precomputed source for a plain preset even after the live one
-   * is up: it is already correct, already loaded, and answers without a worker
-   * round trip. The live source is for questions the table cannot answer.
-   */
-  sourceFor(request: CalibrationRequest): ModelSource {
-    if (this.live) return this.live;
-    if (this.precomputed.supports(request)) return this.precomputed;
-    return this.precomputed; // will throw UnsupportedRequestError, informatively
-  }
-
   /** True when this request needs the live source that is not up yet. */
   needsLive(request: CalibrationRequest): boolean {
     return !this.live && !this.precomputed.supports(request);
@@ -137,8 +124,16 @@ export class ModelSourceManager {
   }
 
   /**
-   * Convenience for the common UI gesture: get whatever can answer this,
-   * booting the live source only if the request actually requires it.
+   * Get whatever can answer this, booting the live source only if the request
+   * actually requires it. The single entry point the UI should use.
+   *
+   * **Once the live source is up, everything routes to it — presets included.**
+   * The precomputed layer is a stand-in until Pyodide arrives, not a permanent
+   * fast path for presets. Keeping it in service afterwards would trade exact
+   * answers for ~13 ms, and worse, would make the UI inconsistent with itself:
+   * the "≈" marker would flicker on and off as the user switched between a
+   * preset and a custom value, and displayed digits would shift for no reason
+   * visible to them.
    */
   async resolve(request: CalibrationRequest): Promise<ModelSource> {
     if (this.live) return this.live;

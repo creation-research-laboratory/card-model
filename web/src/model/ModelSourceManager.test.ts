@@ -102,6 +102,21 @@ describe("lazy boot", () => {
     expect(first).toBe(second);
     expect(createLive).toHaveBeenCalledTimes(1);
   });
+
+  it("routes presets to the live source once it is up", async () => {
+    // The precomputed layer is a stand-in until Pyodide arrives, not a
+    // permanent fast path. Keeping it in service for presets afterwards would
+    // trade exact answers for ~13 ms and make the UI inconsistent with itself:
+    // the "≈" marker would flicker as the user moved between a preset and a
+    // custom value. A stale comment on a since-deleted `sourceFor` claimed the
+    // opposite policy, so this pins which one is real.
+    const { manager } = makeManager();
+    expect((await manager.resolve(presetRequest)).kind).toBe("precomputed");
+
+    await manager.ensureLive();
+    expect((await manager.resolve(presetRequest)).kind).toBe("live");
+    expect(manager.current.kind).toBe("live");
+  });
 });
 
 describe("failure handling", () => {
