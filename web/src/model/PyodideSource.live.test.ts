@@ -51,7 +51,8 @@ beforeAll(async () => {
   live = new PyodideSource(transport, {
     chronologies: data.chronologies,
     boundaries: data.boundaries,
-    secondConstraint: data.second_constraint,
+    floodStartBoundary: data.flood_start_boundary,
+    floodDurationYears: data.flood_duration_years,
     geologicUnits: Object.values(data.presets)[0].geologic_column.map((u) => ({
       name: u.name, rank: u.rank, baseSecularAge: u.base_secular_age,
     })),
@@ -78,8 +79,8 @@ describe("environment", () => {
 describe("agreement with the Python package", () => {
   it("reproduces the pinned solve", async () => {
     const cal = await live.calibrate(preset("masoretic", "kpg"));
-    expect(cal.params.lambda_F).toBeCloseTo(318753.882, 2);
-    expect(cal.params.k_F).toBeCloseTo(0.00482991111, 10);
+    expect(cal.params.lambda_F / 1.13506e9 - 1).toBeCloseTo(0, 4);
+    expect(cal.params.k_F).toBeCloseTo(2.10197, 4);
     expect(cal.maxAbsResidual).toBeLessThan(1e-12);
     expect(cal.exact).toBe(true);
   });
@@ -185,7 +186,12 @@ describe("lambda history agrees between the two sources", () => {
     const i = history.date.findIndex((d) => d === cal.params.t_F);
     expect(i).toBeGreaterThan(-1);
     expect(history.lambda[i]).toBeCloseTo(1, 9);
-    expect(history.lambda[i + 1]).toBeCloseTo(cal.params.lambda_F, -1);
+    // The sample past the step has already relaxed a little, so compare
+    // against the decay the model predicts over that gap rather than against
+    // lambda_F itself — an absolute tolerance is meaningless at 1e9.
+    const gap = history.date[i + 1] - cal.params.t_F;
+    const expected = cal.params.lambda_F * Math.exp(-cal.params.k_F * gap);
+    expect(closeEnough(history.lambda[i + 1], expected, 1e-6)).toBe(true);
   });
 
   it("reflects a Creation-week override the age curve barely shows", async () => {
@@ -227,7 +233,7 @@ describe("geologic column agrees between the two sources", () => {
     // The precomputed layer cannot answer this at all, which is the whole
     // reason the live source implements it too.
     const request: CalibrationRequest = {
-      ...preset("masoretic", "pc_c"), overrides: { lambda_F: 1.0e7 },
+      ...preset("masoretic", "kpg"), overrides: { lambda_F: 3.0e9 },
     };
     expect(precomputed.supports(request)).toBe(false);
 
@@ -235,7 +241,7 @@ describe("geologic column agrees between the two sources", () => {
     expect(column.units.every((u) => u.inRange)).toBe(true);
     // A faster Flood rate packs the column into less young-earth time.
     const base = await live.geologicColumn(
-      await live.calibrate(preset("masoretic", "pc_c")));
+      await live.calibrate(preset("masoretic", "kpg")));
     const cambrian = (c: typeof column) =>
       c.units.find((u) => u.name === "Cambrian")!.durationTrue!;
     expect(cambrian(column)).toBeLessThan(cambrian(base));
@@ -245,14 +251,14 @@ describe("geologic column agrees between the two sources", () => {
 describe("custom parameters — the thing only the live source can do", () => {
   it("accepts an override the precomputed layer must refuse", async () => {
     const request: CalibrationRequest = {
-      ...preset("masoretic", "kpg"), overrides: { lambda_F: 5.0e5 },
+      ...preset("masoretic", "kpg"), overrides: { lambda_F: 5.0e8 },
     };
     expect(precomputed.supports(request)).toBe(false);
 
     const cal = await live.calibrate(request);
-    expect(cal.params.lambda_F).toBeCloseTo(5.0e5, 6);
+    expect(cal.params.lambda_F / 5.0e8 - 1).toBeCloseTo(0, 6);
     // k_F still comes from the solve; only what was overridden changed.
-    expect(cal.params.k_F).toBeCloseTo(0.00482991111, 10);
+    expect(cal.params.k_F).toBeCloseTo(2.10197, 4);
   });
 
   it("leaves the constraints undisturbed by Creation-week overrides", async () => {

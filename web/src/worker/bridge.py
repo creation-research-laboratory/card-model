@@ -34,9 +34,9 @@ __all__ = ["calibrate", "series", "lambda_history", "geologic_column",
 
 #: Relative offset used to place a sample just past a discontinuity.  Large
 #: enough to survive being rounded to 9 significant figures for the file, small
-#: enough to be invisible on a chart spanning thousands of years (~0.002 yr at
+#: enough to be invisible on a chart spanning thousands of years (~0.0002 yr at
 #: the Flood).
-_STEP_EPSILON = 1e-6
+_STEP_EPSILON = 1e-7
 
 
 def _just_after(date: float) -> float:
@@ -89,12 +89,18 @@ def calibrate(request_json: str) -> str:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
 
+            # Both matched pairs are the ends of the Flood: it begins at the
+            # pre-Flood/Flood boundary and ends at the selected
+            # Flood/post-Flood one.
+            flood_age = chronology.flood_start_age
+            second_age = flood_age - float(request["floodDurationYears"])
             result = solve_flood_only(
-                flood_age=chronology.flood_start_age,
-                flood_secular_age=float(request["floodSecularAge"]),
-                second_age=chronology.ice_age_end_age,
-                second_secular_age=float(request["secondSecularAge"]),
+                flood_age=flood_age,
+                flood_secular_age=float(request["floodStartSecularAge"]),
+                second_age=second_age,
+                second_secular_age=float(request["floodEndSecularAge"]),
                 chronology=chronology,
+                k_F_bracket=(1e-6, 1e3),
             )
             params = result.model.params
 
@@ -118,7 +124,12 @@ def calibrate(request_json: str) -> str:
                 "maxSecularAge": model.max_secular_age(present),
                 "floodDate": result.flood_date,
                 "floodStartAge": chronology.flood_start_age,
+                "floodEndAge": second_age,
                 "iceAgeEndAge": chronology.ice_age_end_age,
+                # Not a constraint: what the model predicts for the Ice Age now
+                # that acceleration is confined to the Flood.
+                "iceAgePrediction": model.forward_age(
+                    chronology.ice_age_end_age, present),
             }, caught)
     except Exception as exc:  # noqa: BLE001 — the boundary reports, never crashes
         return _error(exc)

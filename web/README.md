@@ -125,6 +125,30 @@ and why the UI must mark interpolated scalars. The solved *parameters* and
 residuals are not interpolated — the generator ran the real solver — so those
 are exact in both sources.
 
+## What the two matched pairs are
+
+Both pairs are the Flood's own stratigraphic contacts, and the *start* is not a
+variable:
+
+1. **The Flood begins at the Precambrian–Cambrian boundary** — the pre-Flood
+   contact, where λ spikes. Fixed in every scenario.
+2. **Flood deposition ceases at the boundary you select** — K/Pg or N/Q, the
+   Flood/post-Flood contact, one year later in true time.
+
+The *acceleration* is instantaneous (`t_F == t_F2`) and relaxes as a single
+exponential. The Flood's one-year span is a depositional fact, not a model
+interval: it only sets where the second pair sits on the decay curve. Because λ
+is still falling across that year, each unit laid down during the Flood records
+a different acceleration — which is why the ratios climb all the way to the
+Cambrian rather than plateauing.
+
+Two consequences worth knowing. The model's ceiling is 540 Ma for every preset,
+so the whole geologic column is always reachable. And **the Ice Age is a
+prediction, not a constraint**: with acceleration confined to the Flood,
+post-Flood rock is essentially uninflated, so the end of the Ice Age dates to
+about its true age rather than the 11.5 kyr the package's own run config fits.
+The readout shows it as a prediction for exactly that reason.
+
 ## Presets are data
 
 `presets/presets.json` is the single source of truth, read by both TypeScript

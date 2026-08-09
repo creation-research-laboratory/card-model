@@ -64,7 +64,7 @@ describe("lazy boot", () => {
 
     expect(createLive).not.toHaveBeenCalled();
     expect(source.kind).toBe("precomputed");
-    expect(cal.params.lambda_F).toBeCloseTo(318754, -1);
+    expect(cal.params.lambda_F / 1.13506e9 - 1).toBeCloseTo(0, 4);
   });
 
   it("boots when a request needs custom parameters", async () => {
@@ -130,7 +130,7 @@ describe("failure handling", () => {
 
     // The app is not dead: presets still work.
     const cal = await manager.current.calibrate(presetRequest);
-    expect(cal.params.lambda_F).toBeCloseTo(318754, -1);
+    expect(cal.params.lambda_F / 1.13506e9 - 1).toBeCloseTo(0, 4);
   });
 
   it("allows a retry after a failed boot", async () => {

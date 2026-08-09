@@ -29,7 +29,13 @@ import {
 export interface PresetCatalog {
   chronologies: PrecomputedData["chronologies"];
   boundaries: PrecomputedData["boundaries"];
-  secondConstraint: PrecomputedData["second_constraint"];
+  floodStartBoundary: PrecomputedData["flood_start_boundary"];
+  /**
+   * The Flood's depositional span. Not a model interval — the acceleration
+   * onset is instantaneous — but it sets where the second matched pair sits on
+   * the decay curve, so the solve needs it.
+   */
+  floodDurationYears: number;
   /**
    * The ICS unit list, name and base age only. Passed through to `bridge.py`
    * rather than read there: the browser already has it, and `card` has no
@@ -109,26 +115,32 @@ export class PyodideSource implements ModelSource {
       maxAbsResidual: number;
       maxSecularAge: number;
       floodStartAge: number;
+      floodEndAge: number;
       iceAgeEndAge: number;
+      iceAgePrediction: number;
     }>(await this.transport.call("calibrate", JSON.stringify({
       chronology,
-      floodSecularAge: boundary.secular_age,
-      secondSecularAge: this.catalog.secondConstraint.secular_age,
+      // The two pairs are the ends of the Flood: a fixed pre-Flood/Flood
+      // boundary and the selected Flood/post-Flood one.
+      floodStartSecularAge: this.catalog.floodStartBoundary.secular_age,
+      floodEndSecularAge: boundary.secular_age,
+      floodDurationYears: this.catalog.floodDurationYears,
       overrides: request.overrides ?? {},
     })));
 
+    const start = this.catalog.floodStartBoundary;
     const constraints: Constraint[] = [
       {
-        label: boundary.label,
+        label: `Flood begins — ${start.label}`,
         trueAge: payload.floodStartAge,
-        secularAge: boundary.secular_age,
-        uncertainty: boundary.uncertainty,
+        secularAge: start.secular_age,
+        uncertainty: start.uncertainty,
       },
       {
-        label: this.catalog.secondConstraint.label,
-        trueAge: payload.iceAgeEndAge,
-        secularAge: this.catalog.secondConstraint.secular_age,
-        uncertainty: this.catalog.secondConstraint.uncertainty,
+        label: `Flood ends — ${boundary.label}`,
+        trueAge: payload.floodEndAge,
+        secularAge: boundary.secular_age,
+        uncertainty: boundary.uncertainty,
       },
     ];
 

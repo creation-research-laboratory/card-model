@@ -44,7 +44,8 @@ export function App({ data }: Props) {
           {
             chronologies: data.chronologies,
             boundaries: data.boundaries,
-            secondConstraint: data.second_constraint,
+            floodStartBoundary: data.flood_start_boundary,
+            floodDurationYears: data.flood_duration_years,
             // Every preset carries the same unit list, including the units it
             // cannot reach, so any one of them is a complete catalogue.
             geologicUnits: Object.values(data.presets)[0].geologic_column.map((u) => ({
@@ -131,9 +132,10 @@ export function App({ data }: Props) {
         <h1>CARD — accelerated radiometric decay</h1>
         <p>
           Converting between young-earth ages and the apparent ages rock would
-          yield under a time-varying decay rate. Pick a chronology and the
-          stratigraphic boundary the Flood is identified with; the model is
-          calibrated to honour both constraints exactly.
+          yield under a time-varying decay rate. The Flood begins at the
+          Precambrian–Cambrian boundary and its deposition ceases a year later
+          at the contact you choose; the model is calibrated so that both
+          contacts carry exactly their stratigraphic ages.
         </p>
       </header>
 
@@ -148,7 +150,14 @@ export function App({ data }: Props) {
           />
 
           {calibration ? (
-            <CalibrationReadout calibration={calibration} sourceKind={sourceKind} />
+            <CalibrationReadout
+              calibration={calibration}
+              sourceKind={sourceKind}
+              iceAgePrediction={
+                data.presets[`${request.chronology}:${request.boundary}`]
+                  ?.ice_age_prediction
+              }
+            />
           ) : null}
 
           <section className="panel" aria-labelledby="source-heading">

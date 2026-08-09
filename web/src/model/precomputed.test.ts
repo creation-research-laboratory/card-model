@@ -27,9 +27,10 @@ const preset = (chronology: string, boundary: string): CalibrationRequest => ({
 
 describe("generated data", () => {
   it("carries all six presets", () => {
+    // Two chronologies x two terminal boundaries. The Flood's *start* is not
+    // a variable — it is always the pre-Flood/Flood contact.
     expect(source.presetKeys.sort()).toEqual([
-      "masoretic:kpg", "masoretic:nq", "masoretic:pc_c",
-      "septuagint:kpg", "septuagint:nq", "septuagint:pc_c",
+      "masoretic:kpg", "masoretic:nq", "septuagint:kpg", "septuagint:nq",
     ]);
   });
 
@@ -47,8 +48,36 @@ describe("generated data", () => {
 
   it("reproduces the values pinned from the Python package", async () => {
     const cal = await source.calibrate(preset("masoretic", "kpg"));
-    expect(cal.params.lambda_F).toBeCloseTo(318754, -1);
-    expect(cal.params.k_F).toBeCloseTo(0.00482991, 8);
+    expect(cal.params.lambda_F / 1.13506e9 - 1).toBeCloseTo(0, 4);
+    expect(cal.params.k_F).toBeCloseTo(2.10197, 4);
+  });
+
+  it("keeps the acceleration onset instantaneous", async () => {
+    // t_F == t_F2: lambda spikes and relaxes as a single exponential. The
+    // Flood's one-year depositional span is a constraint age, not a model
+    // interval — which is why lambda keeps falling across it and each unit
+    // laid down during the Flood records a different acceleration.
+    const cal = await source.calibrate(preset("masoretic", "kpg"));
+    expect(cal.params.t_F2).toBe(cal.params.t_F);
+  });
+
+  it("separates the two Flood contacts by the depositional span", async () => {
+    const cal = await source.calibrate(preset("masoretic", "kpg"));
+    const [onset, cease] = cal.constraints;
+    expect(onset.trueAge - cease.trueAge).toBeCloseTo(1, 9);
+    expect(onset.secularAge).toBe(540e6);
+    expect(cease.secularAge).toBe(66e6);
+  });
+
+  it("predicts, rather than constrains, the Ice Age", async () => {
+    // With acceleration confined to the Flood, post-Flood rock is essentially
+    // uninflated — the Ice Age dates to about its true age, not 11.5 kyr.
+    for (const key of source.presetKeys) {
+      const p = data.presets[key];
+      const ratio = p.ice_age_prediction.secular_age / p.ice_age_prediction.true_age;
+      expect(ratio).toBeGreaterThan(0.99);
+      expect(ratio).toBeLessThan(1.05);
+    }
   });
 
   it("flags the provisional chronology so the UI can say so", () => {
@@ -146,11 +175,13 @@ describe("lambda history", () => {
       // Two samples a fraction of a year apart, spanning the full rise to
       // lambda_F: a vertical edge at any plottable scale.
       expect(width).toBeLessThan(0.01);
-      // Not exactly lambda_F: the second sample sits at t_F*(1 + 1e-6), by
-      // which point the rate has already relaxed by ~k_F * 0.002 yr. Relative,
-      // because lambda_F spans 7.9e3 to 3.2e6 across the presets and an
-      // absolute tolerance cannot cover both.
-      expect(Math.abs(jump / p.params.lambda_F - 1)).toBeLessThan(1e-4);
+      // Not exactly lambda_F: the sample sits just past t_F, by which point
+      // the rate has already relaxed. Checked against the decay the model
+      // actually predicts over that gap rather than a hand-picked tolerance,
+      // so this stays correct whatever k_F the calibration lands on.
+      const gap = date[i + 1] - p.params.t_F;
+      const expected = Math.exp(-p.params.k_F * gap);
+      expect(jump / p.params.lambda_F).toBeCloseTo(expected, 6);
     }
   });
 
@@ -197,21 +228,24 @@ describe("geologic column", () => {
   });
 
   it("marks units the calibration cannot reach rather than dropping them", async () => {
-    // Pinning the Flood to K/Pg caps the model at 66 Myr, so the Cretaceous
-    // and everything older has no young-earth date. Silently omitting those
-    // rows would make the column look complete when it is not.
-    const kpg = data.presets["masoretic:kpg"].geologic_column;
-    expect(kpg.filter((u) => u.in_range).map((u) => u.name)).toEqual([
-      "Holocene", "Pleistocene", "Pliocene", "Miocene", "Paleogene",
-    ]);
-    for (const unit of kpg.filter((u) => !u.in_range)) {
-      expect(unit.duration_true).toBeUndefined();
-      expect(unit.base_true_age).toBeUndefined();
+    // Defensive rather than exercised by the presets: now that the Flood
+    // begins at the Precambrian-Cambrian boundary, the ceiling is 540 Ma for
+    // every preset and the whole column is reachable. A custom parameter set
+    // can still fall short, and an omitted row would make the column look
+    // complete when it is not.
+    for (const key of source.presetKeys) {
+      for (const unit of data.presets[key].geologic_column.filter((u) => !u.in_range)) {
+        expect(unit.duration_true).toBeUndefined();
+        expect(unit.base_true_age).toBeUndefined();
+      }
     }
 
-    // The widest boundary reaches all of them.
-    expect(data.presets["masoretic:pc_c"].geologic_column
-      .every((u) => u.in_range)).toBe(true);
+    // And with the Flood starting at the Precambrian-Cambrian boundary, every
+    // preset now reaches the whole column — the ceiling is 540 Ma regardless
+    // of where the Flood ends.
+    for (const key of source.presetKeys) {
+      expect(data.presets[key].geologic_column.every((u) => u.in_range)).toBe(true);
+    }
   });
 
   it("tiles the timeline without gaps or overlaps", async () => {
@@ -242,12 +276,15 @@ describe("geologic column", () => {
   });
 
   it("compresses monotonically into the deep past", async () => {
-    // Older units sit further into the acceleration, so each should run at
-    // least as fast as the one above it. If this ever fails the model has
-    // changed shape, not the chart.
-    const col = data.presets["masoretic:pc_c"].geologic_column;
-    for (let i = 1; i < col.length; i++) {
-      expect(col[i].acceleration!).toBeGreaterThan(col[i - 1].acceleration!);
+    // lambda is still falling throughout the Flood's depositional year, so
+    // every unit runs strictly faster than the one above it — right down to
+    // the Cambrian. A plateau here would mean the acceleration had been
+    // modelled as constant across the Flood, which is a different model.
+    for (const key of source.presetKeys) {
+      const col = data.presets[key].geologic_column;
+      for (let i = 1; i < col.length; i++) {
+        expect(col[i].acceleration!).toBeGreaterThan(col[i - 1].acceleration!);
+      }
     }
   });
 
@@ -255,7 +292,7 @@ describe("geologic column", () => {
     // Durations are differences of inverse ages agreeing to four or five
     // significant figures; interpolating them would put 13.7% error on the
     // Silurian. The generator ships numbers the solver produced instead.
-    const cal = await source.calibrate(preset("masoretic", "pc_c"));
+    const cal = await source.calibrate(preset("masoretic", "kpg"));
     const column = await source.geologicColumn(cal);
     expect(column.exact).toBe(true);
     expect(column.units).toHaveLength(14);
@@ -263,24 +300,21 @@ describe("geologic column", () => {
 });
 
 describe("interpolation accuracy", () => {
-  it("is within the tolerance the UI is told to expect", async () => {
-    // Measured against the live model at grid midpoints: 0.275% worst case
-    // forward. The UI renders these with a "≈"; this test is what keeps that
-    // claim true as the grid or the presets change.
+  it("reproduces the table exactly at its own nodes", async () => {
+    // Interpolation must be an identity on the grid points themselves. The
+    // real accuracy question — how wrong it is *between* nodes — is answered
+    // against the live model in the live suite, which is the only place it can
+    // honestly be measured.
     for (const key of source.presetKeys) {
       const { true_age, secular_age } = data.presets[key].series;
-      let worst = 0;
-      for (let i = 0; i < true_age.length - 1; i++) {
-        const x = Math.sqrt(Math.max(true_age[i], 1e-9) * true_age[i + 1]);
-        const interpolated = interpolateLogLog(true_age, secular_age, x);
-        // Compare against the chord in the other direction as a self-check on
-        // smoothness; the absolute check against Python lives in the live test.
-        const linear = secular_age[i] +
-          ((x - true_age[i]) / (true_age[i + 1] - true_age[i])) *
-          (secular_age[i + 1] - secular_age[i]);
-        if (linear > 0) worst = Math.max(worst, Math.abs(interpolated / linear - 1));
+      for (let i = 0; i < true_age.length; i += 37) {
+        if (true_age[i] <= 0) continue;
+        // Relative: these span 1 to 5.4e8, and an absolute tolerance that
+        // suits one end is meaningless at the other. The log-log round trip
+        // costs an ulp or two, which is the floor here.
+        const got = interpolateLogLog(true_age, secular_age, true_age[i]);
+        expect(Math.abs(got / secular_age[i] - 1)).toBeLessThan(1e-12);
       }
-      expect(worst).toBeLessThan(0.05);
     }
   });
 

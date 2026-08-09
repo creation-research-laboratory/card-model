@@ -13,9 +13,13 @@ import { formatAge, formatMultiplier, trim } from "../charts/format.js";
 interface Props {
   calibration: Calibration;
   sourceKind: SourceKind;
+  /** Not a constraint: what the model says the Ice Age should date to. */
+  iceAgePrediction?: { true_age: number; secular_age: number };
 }
 
-export function CalibrationReadout({ calibration, sourceKind }: Props) {
+export function CalibrationReadout({
+  calibration, sourceKind, iceAgePrediction,
+}: Props) {
   const { params, constraints, residuals, maxAbsResidual, exact } = calibration;
 
   return (
@@ -55,6 +59,24 @@ export function CalibrationReadout({ calibration, sourceKind }: Props) {
           ) : null}
         </dd>
       </dl>
+
+      {iceAgePrediction ? (
+        <>
+          <h2 style={{ marginTop: "1.1rem" }}>Prediction</h2>
+          <dl className="readout">
+            <dt>End of the Ice Age</dt>
+            <dd>
+              {formatAge(iceAgePrediction.true_age)} →{" "}
+              {formatAge(iceAgePrediction.secular_age)}
+              <br />
+              <span style={{ color: "var(--text-muted)" }}>
+                not a constraint — with the acceleration confined to the Flood,
+                post-Flood rock is essentially uninflated
+              </span>
+            </dd>
+          </dl>
+        </>
+      ) : null}
 
       {sourceKind === "precomputed" ? (
         <p className="notice" style={{ marginTop: "1rem", marginBottom: 0 }}>

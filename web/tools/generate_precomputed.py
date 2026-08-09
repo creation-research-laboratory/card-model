@@ -92,10 +92,13 @@ def _true_age_grid(chronology: Chronology, model: GeneralModel,
     return sorted(rounded)
 
 
-#: Relative offset placing a sample just past a discontinuity.  Must exceed the
-#: resolution of SIGFIGS rounding or the pair collapses into a duplicate row —
-#: which is exactly what happened to an earlier straddle attempt, silently.
-_STEP_EPSILON = 1e-6
+#: Relative offset placing a sample just past a discontinuity.  Two competing
+#: pressures: it must exceed the resolution of SIGFIGS rounding or the pair
+#: collapses into a duplicate row (which happened, silently, to an earlier
+#: attempt), and it must be small against 1/k_F or the sample records a lambda
+#: that has already relaxed.  k_F reaches ~2/yr in this configuration, so 1e-6
+#: cost 0.35% of the peak; 1e-7 costs 0.035% and still survives rounding.
+_STEP_EPSILON = 1e-7
 
 
 def _lambda_grid(chronology: Chronology, model: GeneralModel,
@@ -199,8 +202,9 @@ def _geologic_column(model: GeneralModel, chronology: Chronology,
 
 def build(presets: Dict[str, Any]) -> Dict[str, Any]:
     chronologies = presets["chronologies"]
-    boundaries = presets["boundaries"]
-    second = presets["second_constraint"]
+    boundaries = presets["terminal_boundaries"]
+    start_boundary = presets["flood_start_boundary"]
+    flood_years = float(presets["flood_duration_years"])
     points = int(presets["series"]["points"])
     lambda_points = int(presets["series"].get("lambda_points", 400))
     ics = json.loads(ICS_PATH.read_text())
@@ -210,10 +214,14 @@ def build(presets: Dict[str, Any]) -> Dict[str, Any]:
     out_presets: Dict[str, Any] = {}
 
     for chron_key, chron_spec in chronologies.items():
+        # t_F == t_F2: the acceleration is instantaneous and relaxes as a
+        # single exponential. The Flood's depositional span is separate, and
+        # only sets where the second constraint sits on that decay curve.
+        flood_start = float(chron_spec["flood_start_date"])
         chronology = Chronology(
             age_of_earth=float(chron_spec["age_of_earth"]),
-            flood_start_date=float(chron_spec["flood_start_date"]),
-            flood_end_date=float(chron_spec["flood_end_date"]),
+            flood_start_date=flood_start,
+            flood_end_date=flood_start,
             ice_age_end_date=float(chron_spec["ice_age_end_date"]),
         )
         out_chronologies[chron_key] = {
@@ -221,19 +229,25 @@ def build(presets: Dict[str, Any]) -> Dict[str, Any]:
             "provisional": bool(chron_spec.get("provisional", False)),
             **chronology.to_dict(),
             "flood_start_age": chronology.flood_start_age,
+            "flood_deposition_end_age": chronology.flood_start_age - flood_years,
             "ice_age_end_age": chronology.ice_age_end_age,
         }
 
         for bound_key, bound_spec in boundaries.items():
+            # The two pairs are the Flood's two stratigraphic contacts: its
+            # onset, and the instant a year later when deposition ceased.
             flood_age = chronology.flood_start_age
-            second_age = chronology.ice_age_end_age
+            second_age = flood_age - flood_years
 
             result = solve_flood_only(
                 flood_age=flood_age,
-                flood_secular_age=float(bound_spec["secular_age"]),
+                flood_secular_age=float(start_boundary["secular_age"]),
                 second_age=second_age,
-                second_secular_age=float(second["secular_age"]),
+                second_secular_age=float(bound_spec["secular_age"]),
                 chronology=chronology,
+                # Confining the acceleration to an instant forces a fast
+                # relaxation: k_F lands near 2 here, past the default bracket.
+                k_F_bracket=(1e-6, 1e3),
             )
             model = result.model
             present = chronology.present_date
@@ -249,7 +263,7 @@ def build(presets: Dict[str, Any]) -> Dict[str, Any]:
             out_presets[f"{chron_key}:{bound_key}"] = {
                 "chronology": chron_key,
                 "boundary": bound_key,
-                "label": f"{chron_spec['label']} / {bound_spec['label']}",
+                "label": f"{chron_spec['label']} — Flood ends at {bound_spec['label']}",
                 "mode": "flood_only",
                 "params": {
                     "lambda_c": model.lambda_c, "lambda_F": _round(model.lambda_F),
@@ -261,13 +275,22 @@ def build(presets: Dict[str, Any]) -> Dict[str, Any]:
                 "max_abs_residual": _round(result.max_abs_residual),
                 "max_secular_age": _round(model.max_secular_age(present)),
                 "constraints": [
-                    {"label": bound_spec["label"], "true_age": flood_age,
+                    {"label": f"Flood begins — {start_boundary['label']}",
+                     "true_age": flood_age,
+                     "secular_age": float(start_boundary["secular_age"]),
+                     "uncertainty": float(start_boundary["uncertainty"])},
+                    {"label": f"Flood ends — {bound_spec['label']}",
+                     "true_age": second_age,
                      "secular_age": float(bound_spec["secular_age"]),
                      "uncertainty": float(bound_spec["uncertainty"])},
-                    {"label": second["label"], "true_age": second_age,
-                     "secular_age": float(second["secular_age"]),
-                     "uncertainty": float(second["uncertainty"])},
                 ],
+                # Not a constraint any more: with acceleration confined to the
+                # Flood, this is what the model *predicts* for the Ice Age.
+                "ice_age_prediction": {
+                    "true_age": chronology.ice_age_end_age,
+                    "secular_age": _round(
+                        model.forward_age(chronology.ice_age_end_age, present)),
+                },
                 "series": {
                     "true_age": grid,  # already rounded, already deduplicated
                     "secular_age": [_round(s) for s in secular],
@@ -302,9 +325,10 @@ def build(presets: Dict[str, Any]) -> Dict[str, Any]:
                            "secular_age": float(v["secular_age"]),
                            "uncertainty": float(v["uncertainty"])}
                        for k, v in boundaries.items()},
-        "second_constraint": {"label": second["label"],
-                              "secular_age": float(second["secular_age"]),
-                              "uncertainty": float(second["uncertainty"])},
+        "flood_start_boundary": {"label": start_boundary["label"],
+                                 "secular_age": float(start_boundary["secular_age"]),
+                                 "uncertainty": float(start_boundary["uncertainty"])},
+        "flood_duration_years": flood_years,
         "ics": {"version": ics["source"]["version"],
                 "url": ics["source"]["url"],
                 "reviewed": bool(ics["source"].get("reviewed", False))},

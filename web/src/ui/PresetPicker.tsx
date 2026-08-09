@@ -54,7 +54,7 @@ export function PresetPicker({
       ) : null}
 
       <label className="field">
-        <span>Flood boundary</span>
+        <span>Flood ends at</span>
         <select
           value={boundary}
           disabled={disabled}
@@ -66,13 +66,26 @@ export function PresetPicker({
         </select>
       </label>
 
+      <p style={{ fontSize: ".8rem", color: "var(--text-secondary)", margin: "0 0 .8rem" }}>
+        The Flood <em>begins</em> at the {data.flood_start_boundary.label}{" "}
+        boundary in every scenario — that is the pre-Flood contact, and it is
+        where the decay rate spikes. What you choose here is where Flood
+        deposition <em>ceased</em>.
+      </p>
+
       <dl className="readout">
         <dt>Earth</dt>
         <dd>{formatAge(chron.age_of_earth)}</dd>
-        <dt>Flood</dt>
-        <dd>{formatAge(chron.flood_start_age)} before present</dd>
-        <dt>appears</dt>
-        <dd>{formatAge(bound.secular_age)}</dd>
+        <dt>Flood onset</dt>
+        <dd>
+          {formatAge(chron.flood_start_age)} BP → appears{" "}
+          {formatAge(data.flood_start_boundary.secular_age)}
+        </dd>
+        <dt>Flood ends</dt>
+        <dd>
+          {formatAge(chron.flood_deposition_end_age)} BP → appears{" "}
+          {formatAge(bound.secular_age)}
+        </dd>
       </dl>
     </section>
   );

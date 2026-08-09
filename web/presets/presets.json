@@ -4,14 +4,46 @@
     "Python (tools/generate_precomputed.py), so a preset cannot be defined in the",
     "app in a form Python never validated.",
     "",
-    "Naming follows the package's rule: a value ending in _age is an AGE (years",
-    "before present), one ending in _date is a DATE (years after Day 1 of",
-    "Creation). Chronology fields are DATEs except age_of_earth.",
+    "THE TWO MATCHED DATE PAIRS ARE THE TWO ENDS OF THE FLOOD.",
+    "",
+    "  1. The Flood BEGINS at the Precambrian-Cambrian boundary. This is the",
+    "     pre-Flood/Flood contact and a fixed assumption of the model, not a",
+    "     variable -- see `flood_start_boundary` below.",
+    "  2. The Flood ENDS at the boundary the reader selects: Cretaceous-Paleogene",
+    "     or Neogene-Quaternary. This is the Flood/post-Flood contact and it is",
+    "     the variable input -- see `terminal_boundaries`.",
+    "",
+    "The ACCELERATION is instantaneous -- lambda spikes at t_F and decays as a",
+    "single exponential, so t_F == t_F2. What lasts a year is the Flood's",
+    "DEPOSITION: `flood_duration_years` gives how long after the onset the",
+    "Flood/post-Flood contact was laid down, and that later instant is the",
+    "second pair's true age. Because lambda is still falling across that year,",
+    "each unit deposited during it records a different acceleration, which is",
+    "why the ratios keep climbing into the deep past rather than plateauing.",
+    "",
+    "Everything between those two boundaries is Flood deposition, laid down in a",
+    "single year under an enormously accelerated decay rate. Everything above the",
+    "terminal boundary is post-Flood, and carries essentially no acceleration.",
+    "",
+    "Naming rule: a value ending in _age is an AGE (years before present), one",
+    "ending in _date is a DATE (years after Day 1 of Creation).",
     "",
     "PROVISIONAL: the septuagint chronology values are placeholders chosen to",
     "exercise a longer timeline. They are on the pre-publication checklist in",
     "frontend_plan.md and must be reviewed, with a citation, before this ships."
   ],
+
+  "flood_start_boundary": {
+    "label": "Precambrian-Cambrian",
+    "note": "Pre-Flood/Flood contact. Fixed: the acceleration onset.",
+    "secular_age": 540.0e6,
+    "uncertainty": 1.0e7
+  },
+
+  "flood_duration_years": 1.0,
+
+  "$flood_duration_note": "Depositional span, not the acceleration window. Sets the second pair's true age at flood_start_date + this.",
+
   "chronologies": {
     "masoretic": {
       "label": "Masoretic",
@@ -19,55 +51,47 @@
       "provisional": false,
       "age_of_earth": 6056,
       "flood_start_date": 1656,
-      "flood_end_date": 1656,
       "ice_age_end_date": 3500
     },
     "septuagint": {
       "label": "Septuagint (LXX)",
-      "note": "PROVISIONAL \u2014 placeholder values pending review and citation.",
+      "note": "PROVISIONAL — placeholder values pending review and citation.",
       "provisional": true,
       "age_of_earth": 7500,
       "flood_start_date": 2262,
-      "flood_end_date": 2262,
       "ice_age_end_date": 4100
     }
   },
-  "boundaries": {
+
+  "terminal_boundaries": {
     "kpg": {
-      "label": "K/Pg boundary",
-      "note": "Cretaceous-Paleogene, 66.0 Ma (ICS).",
-      "secular_age": 66000000.0,
-      "uncertainty": 100000.0
+      "label": "Cretaceous-Paleogene (K/Pg)",
+      "note": "Flood/post-Flood contact at 66.0 Ma (ICS).",
+      "secular_age": 66.0e6,
+      "uncertainty": 1.0e5
     },
     "nq": {
-      "label": "Neogene/Quaternary",
-      "note": "2.58 Ma (ICS).",
-      "secular_age": 2580000.0,
-      "uncertainty": 10000.0
-    },
-    "pc_c": {
-      "label": "Precambrian-Cambrian",
-      "note": "540 Ma; the boundary the package's own run config fits.",
-      "secular_age": 540000000.0,
-      "uncertainty": 10000000.0
+      "label": "Neogene-Quaternary (N/Q)",
+      "note": "Flood/post-Flood contact at 2.58 Ma (ICS).",
+      "secular_age": 2.58e6,
+      "uncertainty": 1.0e4
     }
   },
-  "second_constraint": {
-    "label": "End of the Ice Age",
-    "note": "Held across every preset; its AGE comes from the chronology.",
-    "secular_age": 11500,
-    "uncertainty": 30
-  },
+
   "defaults": {
     "chronology": "masoretic",
-    "boundary": "pc_c",
-    "mode": "flood_only",
-    "$comment": "Precambrian-Cambrian by default: it is the only boundary whose calibration reaches the whole geologic column, and it is the configuration the package's own run config and the paper's headline result use. Pinning the Flood to a younger boundary caps the oldest apparent age the model can produce, which is correct but makes the column chart open half empty."
+    "boundary": "kpg",
+    "mode": "flood_only"
   },
+
   "modes": {
     "flood_only": {
       "label": "Flood only",
-      "note": "No Creation-week acceleration; instantaneous Flood.",
+      "note": [
+        "No Creation-week acceleration, and an instantaneous acceleration onset",
+        "(t_F == t_F2) relaxing as a single exponential. The Flood's one-year",
+        "depositional span is a constraint age, not a model interval."
+      ],
       "enabled": true,
       "fixed": {
         "lambda_c": 1.0,
@@ -97,13 +121,14 @@
       }
     }
   },
+
   "series": {
     "note": [
       "Grid used for the precomputed first-paint layer. Log-spaced in true age:",
       "the structure is all in the recent end and a linear grid spends every",
       "point on the flat tail. Breakpoints and constraint ages are unioned in by",
-      "the generator so the Flood discontinuity renders as a step and the",
-      "calibration anchors are exact rows."
+      "the generator so the Flood interval renders correctly and the calibration",
+      "anchors are exact rows."
     ],
     "points": 600,
     "lambda_points": 400
