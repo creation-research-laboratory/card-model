@@ -19,11 +19,21 @@ importable from `../src`.
 
 ```bash
 cd web
+nvm use           # Node 18 is EOL and cannot run vitest 4 / vite 8
 npm install
 npm run setup     # build the card wheel, vendor Pyodide, regenerate presets
 npm test          # fast unit tests
 npm run test:live # boots a real Pyodide interpreter (~2 s)
+npm run dev       # developer harness at http://localhost:8423
 ```
+
+`npm run dev` serves `index.html`, a **developer harness** — Phase 3 has no app
+UI. It exists because the headless tests use `DirectTransport` in Node, so the
+actual Worker path (`pyodide.worker.ts` + `WorkerTransport`) would otherwise
+never be executed. It shows first paint from the precomputed layer with Pyodide
+deliberately unstarted, boots the live source on demand or when you type a
+custom λ_F, and compares the two sources directly. Phase 4 replaces it with the
+real app.
 
 ## How it fits together
 

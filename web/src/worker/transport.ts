@@ -53,7 +53,14 @@ export class WorkerTransport implements BridgeTransport {
   private readonly pending = new Map<number, PendingCall>();
   private disposed = false;
 
-  constructor(private readonly worker: Worker) {
+  /**
+   * @param worker  The Pyodide worker.
+   * @param baseUrl Absolute URL of the directory holding `pyodide/`, the card
+   *   wheel and `bridge.py`. Required because the worker does not live where
+   *   its assets do — in dev it is served from /src/worker/, in production it
+   *   is a hashed bundle, and the app deploys under a subpath.
+   */
+  constructor(private readonly worker: Worker, baseUrl: string) {
     worker.onmessage = (event: MessageEvent) => {
       const { id, ok, result, error } = event.data ?? {};
       const entry = this.pending.get(id);
@@ -72,6 +79,10 @@ export class WorkerTransport implements BridgeTransport {
         `@ ${event.filename || "?"}:${event.lineno ?? "?"}`;
       this.failAll(new Error(message));
     };
+
+    // Sent before anything else so the worker knows where its assets live.
+    // Fire-and-forget: any later call queues behind it in the message order.
+    worker.postMessage({ id: this.nextId++, fn: "init", base: baseUrl });
   }
 
   private failAll(error: Error): void {
