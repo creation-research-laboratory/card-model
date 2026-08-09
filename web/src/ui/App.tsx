@@ -44,8 +44,7 @@ export function App({ data }: Props) {
           {
             chronologies: data.chronologies,
             boundaries: data.boundaries,
-            floodStartBoundary: data.flood_start_boundary,
-            floodDurationYears: data.flood_duration_years,
+            calibration: data.calibration,
             // Every preset carries the same unit list, including the units it
             // cannot reach, so any one of them is a complete catalogue.
             geologicUnits: Object.values(data.presets)[0].geologic_column.map((u) => ({
@@ -154,9 +153,9 @@ export function App({ data }: Props) {
             <CalibrationReadout
               calibration={calibration}
               sourceKind={sourceKind}
-              iceAgePrediction={
+              floodEnd={
                 data.presets[`${request.chronology}:${request.boundary}`]
-                  ?.ice_age_prediction
+                  ?.flood_end
               }
             />
           ) : null}

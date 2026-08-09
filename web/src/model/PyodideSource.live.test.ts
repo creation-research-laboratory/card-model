@@ -51,8 +51,7 @@ beforeAll(async () => {
   live = new PyodideSource(transport, {
     chronologies: data.chronologies,
     boundaries: data.boundaries,
-    floodStartBoundary: data.flood_start_boundary,
-    floodDurationYears: data.flood_duration_years,
+    calibration: data.calibration,
     geologicUnits: Object.values(data.presets)[0].geologic_column.map((u) => ({
       name: u.name, rank: u.rank, baseSecularAge: u.base_secular_age,
     })),
@@ -79,8 +78,8 @@ describe("environment", () => {
 describe("agreement with the Python package", () => {
   it("reproduces the pinned solve", async () => {
     const cal = await live.calibrate(preset("masoretic", "kpg"));
-    expect(cal.params.lambda_F / 1.13506e9 - 1).toBeCloseTo(0, 4);
-    expect(cal.params.k_F).toBeCloseTo(2.10197, 4);
+    expect(cal.params.lambda_F / 3.21423e6 - 1).toBeCloseTo(0, 4);
+    expect(cal.params.k_F).toBeCloseTo(0.00594132, 7);
     expect(cal.maxAbsResidual).toBeLessThan(1e-12);
     expect(cal.exact).toBe(true);
   });
@@ -240,7 +239,7 @@ describe("geologic column agrees between the two sources", () => {
     // The precomputed layer cannot answer this at all, which is the whole
     // reason the live source implements it too.
     const request: CalibrationRequest = {
-      ...preset("masoretic", "kpg"), overrides: { lambda_F: 3.0e9 },
+      ...preset("masoretic", "kpg"), overrides: { lambda_F: 1.0e7 },
     };
     expect(precomputed.supports(request)).toBe(false);
 
@@ -258,14 +257,14 @@ describe("geologic column agrees between the two sources", () => {
 describe("custom parameters — the thing only the live source can do", () => {
   it("accepts an override the precomputed layer must refuse", async () => {
     const request: CalibrationRequest = {
-      ...preset("masoretic", "kpg"), overrides: { lambda_F: 5.0e8 },
+      ...preset("masoretic", "kpg"), overrides: { lambda_F: 5.0e6 },
     };
     expect(precomputed.supports(request)).toBe(false);
 
     const cal = await live.calibrate(request);
-    expect(cal.params.lambda_F / 5.0e8 - 1).toBeCloseTo(0, 6);
+    expect(cal.params.lambda_F / 5.0e6 - 1).toBeCloseTo(0, 6);
     // k_F still comes from the solve; only what was overridden changed.
-    expect(cal.params.k_F).toBeCloseTo(2.10197, 4);
+    expect(cal.params.k_F).toBeCloseTo(0.00594132, 7);
   });
 
   it("leaves the constraints undisturbed by Creation-week overrides", async () => {
@@ -339,7 +338,7 @@ describe("the parameter schema comes from the package, not from TypeScript", () 
     const result = await live.schema("septuagint", {
       t_F: "flood_start_date", t_F2: "flood_end_date",
     });
-    expect(result.fixed.t_F).toBe(2262);
+    expect(result.fixed.t_F).toBe(2176);
   });
 
   it("gives date parameters bounds from the loaded chronology", async () => {

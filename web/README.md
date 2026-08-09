@@ -127,27 +127,34 @@ are exact in both sources.
 
 ## What the two matched pairs are
 
-Both pairs are the Flood's own stratigraphic contacts, and the *start* is not a
-variable:
+From the model author's presentation, the calibration anchors are:
 
-1. **The Flood begins at the Precambrian–Cambrian boundary** — the pre-Flood
-   contact, where λ spikes. Fixed in every scenario.
-2. **Flood deposition ceases at the boundary you select** — K/Pg or N/Q, the
-   Flood/post-Flood contact, one year later in true time.
+1. **The Precambrian–Cambrian boundary (~541 Ma)** matched to the beginning of
+   the Flood.
+2. **A conventional Ice Age endpoint (~12 ka)** matched to the chronology's
+   young-earth Ice Age date.
 
-The *acceleration* is instantaneous (`t_F == t_F2`) and relaxes as a single
-exponential. The Flood's one-year span is a depositional fact, not a model
-interval: it only sets where the second pair sits on the decay curve. Because λ
-is still falling across that year, each unit laid down during the Flood records
-a different acceleration — which is why the ratios climb all the way to the
-Cambrian rather than plateauing.
+**K/Pg and N/Q are not calibration inputs.** They are competing *Flood-boundary
+models* — claims about where in the column Flood deposition ends. Each
+chronology yields one curve; selecting a model only asks where that curve puts
+the boundary, which is reported as an **output**. Under Masoretic, K/Pg lands
+354 years after the Flood and N/Q at 900. Testing a Flood model means reading
+that off, not calibrating to it.
 
-Two consequences worth knowing. The model's ceiling is 540 Ma for every preset,
-so the whole geologic column is always reachable. And **the Ice Age is a
-prediction, not a constraint**: with acceleration confined to the Flood,
-post-Flood rock is essentially uninflated, so the end of the Ice Age dates to
-about its true age rather than the 11.5 kyr the package's own run config fits.
-The readout shows it as a prediction for exactly that reason.
+This produces the behaviour the author describes: k_F ≈ 0.006 (Masoretic) /
+0.010 (LXX), post-Flood acceleration persisting for centuries rather than
+years. Independent cross-checks against figures not fitted to — the Grand
+Canyon spillover at 5.5 Ma, La Brea at 32 ka, the Miocene base — land in the
+ranges the presentation quotes.
+
+> **Two chronology caveats.** The Masoretic entry uses the package default, in
+> which `ice_age_end_date` is a DATE (years after Creation) giving **2556 BP**.
+> The presentation quotes **3500 years before present** for the same event —
+> the same numeral read the other way round, and this package's history records
+> fitting at 3500 YBP rather than 2556 as a bug. The DATE reading is used
+> deliberately. The Septuagint entry is still provisional and, unlike the
+> Masoretic one, takes the author's stated ages at face value, so the two are
+> **not on the same footing** until Rick confirms them.
 
 ## Presets are data
 

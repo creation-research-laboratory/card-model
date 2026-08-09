@@ -29,13 +29,8 @@ import {
 export interface PresetCatalog {
   chronologies: PrecomputedData["chronologies"];
   boundaries: PrecomputedData["boundaries"];
-  floodStartBoundary: PrecomputedData["flood_start_boundary"];
-  /**
-   * The Flood's depositional span. Not a model interval — the acceleration
-   * onset is instantaneous — but it sets where the second matched pair sits on
-   * the decay curve, so the solve needs it.
-   */
-  floodDurationYears: number;
+  /** The two matched pairs: PC/C at the Flood, and the Ice Age endpoint. */
+  calibration: PrecomputedData["calibration"];
   /**
    * The ICS unit list, name and base age only. Passed through to `bridge.py`
    * rather than read there: the browser already has it, and `card` has no
@@ -115,32 +110,31 @@ export class PyodideSource implements ModelSource {
       maxAbsResidual: number;
       maxSecularAge: number;
       floodStartAge: number;
-      floodEndAge: number;
       iceAgeEndAge: number;
-      iceAgePrediction: number;
     }>(await this.transport.call("calibrate", JSON.stringify({
       chronology,
       // The two pairs are the ends of the Flood: a fixed pre-Flood/Flood
       // boundary and the selected Flood/post-Flood one.
-      floodStartSecularAge: this.catalog.floodStartBoundary.secular_age,
+      floodStartSecularAge: this.catalog.calibration.flood_start.secular_age,
+      iceAgeSecularAge: this.catalog.calibration.ice_age_end.secular_age,
+      // Not a constraint — passed so the bridge can report where it lands.
       floodEndSecularAge: boundary.secular_age,
-      floodDurationYears: this.catalog.floodDurationYears,
       overrides: request.overrides ?? {},
     })));
 
-    const start = this.catalog.floodStartBoundary;
+    const calib = this.catalog.calibration;
     const constraints: Constraint[] = [
       {
-        label: `Flood begins — ${start.label}`,
+        label: `Flood begins — ${calib.flood_start.label}`,
         trueAge: payload.floodStartAge,
-        secularAge: start.secular_age,
-        uncertainty: start.uncertainty,
+        secularAge: calib.flood_start.secular_age,
+        uncertainty: 0,
       },
       {
-        label: `Flood ends — ${boundary.label}`,
-        trueAge: payload.floodEndAge,
-        secularAge: boundary.secular_age,
-        uncertainty: boundary.uncertainty,
+        label: calib.ice_age_end.label,
+        trueAge: payload.iceAgeEndAge,
+        secularAge: calib.ice_age_end.secular_age,
+        uncertainty: 0,
       },
     ];
 

@@ -55,8 +55,7 @@ const manager = new ModelSourceManager({
       {
         chronologies: data.chronologies,
         boundaries: data.boundaries,
-        floodStartBoundary: data.flood_start_boundary,
-        floodDurationYears: data.flood_duration_years,
+        calibration: data.calibration,
         // Every preset carries the same unit list, including the ones it
         // cannot reach, so any one of them is a complete catalogue.
         geologicUnits: Object.values(data.presets)[0].geologic_column.map((u) => ({

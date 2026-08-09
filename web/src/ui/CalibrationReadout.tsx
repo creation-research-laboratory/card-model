@@ -13,12 +13,18 @@ import { formatAge, formatMultiplier, trim } from "../charts/format.js";
 interface Props {
   calibration: Calibration;
   sourceKind: SourceKind;
-  /** Not a constraint: what the model says the Ice Age should date to. */
-  iceAgePrediction?: { true_age: number; secular_age: number };
+  /**
+   * Where the selected Flood-boundary model lands on this curve. An output of
+   * the calibration, never an input — which is how a Flood model gets tested.
+   */
+  floodEnd?: {
+    label: string; secular_age: number; in_range: boolean;
+    true_age?: number; years_after_flood?: number; flood_days?: number;
+  };
 }
 
 export function CalibrationReadout({
-  calibration, sourceKind, iceAgePrediction,
+  calibration, sourceKind, floodEnd,
 }: Props) {
   const { params, constraints, residuals, maxAbsResidual, exact } = calibration;
 
@@ -60,19 +66,30 @@ export function CalibrationReadout({
         </dd>
       </dl>
 
-      {iceAgePrediction ? (
+      {floodEnd ? (
         <>
-          <h2 style={{ marginTop: "1.1rem" }}>Prediction</h2>
+          <h2 style={{ marginTop: "1.1rem" }}>Flood boundary — result</h2>
           <dl className="readout stacked">
-            <dt>End of the Ice Age</dt>
+            <dt>{floodEnd.label}</dt>
             <dd>
-              {formatAge(iceAgePrediction.true_age)} →{" "}
-              {formatAge(iceAgePrediction.secular_age)}
-              <br />
-              <span style={{ color: "var(--text-muted)" }}>
-                not a constraint — with the acceleration confined to the Flood,
-                post-Flood rock is essentially uninflated
-              </span>
+              {floodEnd.in_range ? (
+                <>
+                  {formatAge(floodEnd.secular_age)} lands at{" "}
+                  {formatAge(floodEnd.true_age!, 5)} BP —{" "}
+                  <strong>
+                    {floodEnd.flood_days! < 400
+                      ? `Flood day ${Math.round(floodEnd.flood_days!)}`
+                      : `${Math.round(floodEnd.years_after_flood!)} yr after the Flood`}
+                  </strong>
+                  <br />
+                  <span style={{ color: "var(--text-muted)" }}>
+                    an output, not an input — this is what testing a Flood model
+                    means
+                  </span>
+                </>
+              ) : (
+                <>beyond this calibration&rsquo;s range</>
+              )}
             </dd>
           </dl>
         </>

@@ -216,11 +216,37 @@ def _geologic_column(model: GeneralModel, chronology: Chronology,
     return rows
 
 
+def _flood_end(model: GeneralModel, chronology: Chronology,
+               spec: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Where a Flood-boundary model puts the end of Flood deposition.
+
+    An output of the calibration, never an input.  The author's framework
+    calibrates on the Precambrian-Cambrian boundary and the Ice Age endpoint;
+    K/Pg and N/Q are competing claims about where in the column the Flood
+    stops, and testing one means asking where the calibrated curve places it.
+    """
+    present = chronology.present_date
+    secular = float(spec["secular_age"])
+    if secular > model.max_secular_age(present):
+        return {"label": spec["label"], "secular_age": secular,
+                "in_range": False}
+    true_age = model.inverse_age(secular, present)
+    after = chronology.flood_start_age - true_age
+    return {
+        "label": spec["label"],
+        "secular_age": secular,
+        "in_range": True,
+        "true_age": _round(true_age),
+        "years_after_flood": _round(after),
+        "flood_days": _round(after * 365.25),
+    }
+
+
 def build(presets: Dict[str, Any]) -> Dict[str, Any]:
     chronologies = presets["chronologies"]
-    boundaries = presets["terminal_boundaries"]
-    start_boundary = presets["flood_start_boundary"]
-    flood_years = float(presets["flood_duration_years"])
+    boundaries = presets["flood_end_models"]
+    calib = presets["calibration"]
     points = int(presets["series"]["points"])
     lambda_points = int(presets["series"].get("lambda_points", 400))
     ics = json.loads(ICS_PATH.read_text())
@@ -231,8 +257,7 @@ def build(presets: Dict[str, Any]) -> Dict[str, Any]:
 
     for chron_key, chron_spec in chronologies.items():
         # t_F == t_F2: the acceleration is instantaneous and relaxes as a
-        # single exponential. The Flood's depositional span is separate, and
-        # only sets where the second constraint sits on that decay curve.
+        # single exponential.
         flood_start = float(chron_spec["flood_start_date"])
         chronology = Chronology(
             age_of_earth=float(chron_spec["age_of_earth"]),
@@ -245,25 +270,24 @@ def build(presets: Dict[str, Any]) -> Dict[str, Any]:
             "provisional": bool(chron_spec.get("provisional", False)),
             **chronology.to_dict(),
             "flood_start_age": chronology.flood_start_age,
-            "flood_deposition_end_age": chronology.flood_start_age - flood_years,
             "ice_age_end_age": chronology.ice_age_end_age,
         }
 
         for bound_key, bound_spec in boundaries.items():
-            # The two pairs are the Flood's two stratigraphic contacts: its
-            # onset, and the instant a year later when deposition ceased.
+            # The two matched pairs are the Precambrian-Cambrian boundary at
+            # the Flood's beginning, and the conventional Ice Age endpoint at
+            # the chronology's Ice Age date.  The selected Flood-end model does
+            # NOT enter the calibration -- it is read off the result below.
             flood_age = chronology.flood_start_age
-            second_age = flood_age - flood_years
+            second_age = chronology.ice_age_end_age
 
             result = solve_flood_only(
                 flood_age=flood_age,
-                flood_secular_age=float(start_boundary["secular_age"]),
+                flood_secular_age=float(calib["flood_start"]["secular_age"]),
                 second_age=second_age,
-                second_secular_age=float(bound_spec["secular_age"]),
+                second_secular_age=float(calib["ice_age_end"]["secular_age"]),
                 chronology=chronology,
-                # Confining the acceleration to an instant forces a fast
-                # relaxation: k_F lands near 2 here, past the default bracket.
-                k_F_bracket=(1e-6, 1e3),
+                k_F_bracket=(1e-9, 100.0),
             )
             model = result.model
             present = chronology.present_date
@@ -291,22 +315,20 @@ def build(presets: Dict[str, Any]) -> Dict[str, Any]:
                 "max_abs_residual": _round(result.max_abs_residual),
                 "max_secular_age": _round(model.max_secular_age(present)),
                 "constraints": [
-                    {"label": f"Flood begins — {start_boundary['label']}",
+                    {"label": f"Flood begins — {calib['flood_start']['label']}",
                      "true_age": flood_age,
-                     "secular_age": float(start_boundary["secular_age"]),
-                     "uncertainty": float(start_boundary["uncertainty"])},
-                    {"label": f"Flood ends — {bound_spec['label']}",
+                     "secular_age": float(calib["flood_start"]["secular_age"]),
+                     "uncertainty": float(calib["flood_start"]["uncertainty"])},
+                    {"label": calib["ice_age_end"]["label"],
                      "true_age": second_age,
-                     "secular_age": float(bound_spec["secular_age"]),
-                     "uncertainty": float(bound_spec["uncertainty"])},
+                     "secular_age": float(calib["ice_age_end"]["secular_age"]),
+                     "uncertainty": float(calib["ice_age_end"]["uncertainty"])},
                 ],
-                # Not a constraint any more: with acceleration confined to the
-                # Flood, this is what the model *predicts* for the Ice Age.
-                "ice_age_prediction": {
-                    "true_age": chronology.ice_age_end_age,
-                    "secular_age": _round(
-                        model.forward_age(chronology.ice_age_end_age, present)),
-                },
+                # An OUTPUT, not an input: where this Flood-end model puts the
+                # end of Flood deposition on the calibrated timeline.  Testing
+                # a Flood model means reading this off, which is why the two
+                # models share a calibration and differ only here.
+                "flood_end": _flood_end(model, chronology, bound_spec),
                 "series": {
                     "true_age": grid,  # already rounded, already deduplicated
                     "secular_age": [_round(s) for s in secular],
@@ -338,13 +360,14 @@ def build(presets: Dict[str, Any]) -> Dict[str, Any]:
         },
         "defaults": presets["defaults"],
         "boundaries": {k: {"label": v["label"],
-                           "secular_age": float(v["secular_age"]),
-                           "uncertainty": float(v["uncertainty"])}
+                           "secular_age": float(v["secular_age"])}
                        for k, v in boundaries.items()},
-        "flood_start_boundary": {"label": start_boundary["label"],
-                                 "secular_age": float(start_boundary["secular_age"]),
-                                 "uncertainty": float(start_boundary["uncertainty"])},
-        "flood_duration_years": flood_years,
+        "calibration": {
+            "flood_start": {"label": calib["flood_start"]["label"],
+                            "secular_age": float(calib["flood_start"]["secular_age"])},
+            "ice_age_end": {"label": calib["ice_age_end"]["label"],
+                            "secular_age": float(calib["ice_age_end"]["secular_age"])},
+        },
         "ics": {"version": ics["source"]["version"],
                 "url": ics["source"]["url"],
                 "reviewed": bool(ics["source"].get("reviewed", False))},

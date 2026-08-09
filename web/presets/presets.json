@@ -1,53 +1,55 @@
 {
   "$comment": [
-    "Single source of truth for presets. Read by TypeScript (src/presets) and by",
-    "Python (tools/generate_precomputed.py), so a preset cannot be defined in the",
-    "app in a form Python never validated.",
+    "Single source of truth for presets. Read by TypeScript and by",
+    "tools/generate_precomputed.py, so a preset cannot be defined in the app in",
+    "a form Python never validated.",
     "",
-    "THE TWO MATCHED DATE PAIRS ARE THE TWO ENDS OF THE FLOOD.",
+    "THE TWO MATCHED DATE PAIRS, per the model author's presentation:",
     "",
-    "  1. The Flood BEGINS at the Precambrian-Cambrian boundary. This is the",
-    "     pre-Flood/Flood contact and a fixed assumption of the model, not a",
-    "     variable -- see `flood_start_boundary` below.",
-    "  2. The Flood ENDS at the boundary the reader selects: Cretaceous-Paleogene",
-    "     or Neogene-Quaternary. This is the Flood/post-Flood contact and it is",
-    "     the variable input -- see `terminal_boundaries`.",
+    "  1. The Precambrian-Cambrian boundary (~541 Ma) matched to the beginning",
+    "     of the Flood.",
+    "  2. A conventional Ice Age endpoint (~12 ka) matched to the chronology's",
+    "     young-earth Ice Age date.",
     "",
-    "The ACCELERATION is instantaneous -- lambda spikes at t_F and decays as a",
-    "single exponential, so t_F == t_F2. What lasts a year is the Flood's",
-    "DEPOSITION: `flood_duration_years` gives how long after the onset the",
-    "Flood/post-Flood contact was laid down, and that later instant is the",
-    "second pair's true age. Because lambda is still falling across that year,",
-    "each unit deposited during it records a different acceleration, which is",
-    "why the ratios keep climbing into the deep past rather than plateauing.",
-    "",
-    "Everything between those two boundaries is Flood deposition, laid down in a",
-    "single year under an enormously accelerated decay rate. Everything above the",
-    "terminal boundary is post-Flood, and carries essentially no acceleration.",
+    "K/Pg AND N/Q ARE NOT CALIBRATION INPUTS. They are competing Flood-boundary",
+    "models -- claims about where in the column Flood deposition ends. The",
+    "calibration does not depend on which is selected: each chronology gives one",
+    "curve, and the choice only asks where that curve puts the boundary. Testing",
+    "a Flood model means reading off where its boundary lands, which is what",
+    "`flood_end_models` is for.",
     "",
     "Naming rule: a value ending in _age is an AGE (years before present), one",
-    "ending in _date is a DATE (years after Day 1 of Creation).",
-    "",
-    "PROVISIONAL: the septuagint chronology values are placeholders chosen to",
-    "exercise a longer timeline. They are on the pre-publication checklist in",
-    "frontend_plan.md and must be reviewed, with a citation, before this ships."
+    "ending in _date is a DATE (years after Day 1 of Creation). The two run in",
+    "opposite directions; conflating them is a documented past bug in this",
+    "package, and the masoretic note below is exactly that hazard."
   ],
-
-  "flood_start_boundary": {
-    "label": "Precambrian-Cambrian",
-    "note": "Pre-Flood/Flood contact. Fixed: the acceleration onset.",
-    "secular_age": 540.0e6,
-    "uncertainty": 1.0e7
+  "calibration": {
+    "flood_start": {
+      "label": "Precambrian-Cambrian",
+      "note": "Pre-Flood/Flood contact, matched to the Flood's beginning.",
+      "secular_age": 541000000.0,
+      "uncertainty": 10000000.0
+    },
+    "ice_age_end": {
+      "label": "End of the Ice Age",
+      "note": "Conventional Ice Age endpoint, matched to the chronology's date.",
+      "secular_age": 12000.0,
+      "uncertainty": 1000.0
+    }
   },
-
-  "flood_duration_years": 1.0,
-
-  "$flood_duration_note": "Depositional span, not the acceleration window. Sets the second pair's true age at flood_start_date + this.",
-
   "chronologies": {
     "masoretic": {
       "label": "Masoretic",
-      "note": "The package default (card.chronology.DEFAULT_CHRONOLOGY).",
+      "note": [
+        "The package default (card.chronology.DEFAULT_CHRONOLOGY), in the",
+        "package's DATE convention: ice_age_end_date counts years AFTER",
+        "Creation, so the Ice Age ends at 2556 BP.",
+        "",
+        "The author's presentation quotes 3500 years BEFORE present for the same",
+        "event. That is the same numeral read the other way round, and this",
+        "package's history records fitting at 3500 YBP rather than 2556 as a",
+        "bug -- so the DATE reading is used here deliberately."
+      ],
       "provisional": false,
       "age_of_earth": 6056,
       "flood_start_date": 1656,
@@ -55,42 +57,42 @@
     },
     "septuagint": {
       "label": "Septuagint (LXX)",
-      "note": "PROVISIONAL — placeholder values pending review and citation.",
+      "note": [
+        "PROVISIONAL. The Flood at 5324 BP is the author's figure. age_of_earth",
+        "is still a placeholder, and the Ice Age date is the author's 4200 BP",
+        "taken at face value -- unlike the Masoretic entry, which follows the",
+        "package default. The two chronologies are therefore NOT on the same",
+        "footing; this needs Rick's confirmation before publication."
+      ],
       "provisional": true,
       "age_of_earth": 7500,
-      "flood_start_date": 2262,
-      "ice_age_end_date": 4100
+      "flood_start_date": 2176,
+      "ice_age_end_date": 3300
     }
   },
-
-  "terminal_boundaries": {
+  "flood_end_models": {
     "kpg": {
       "label": "Cretaceous-Paleogene (K/Pg)",
-      "note": "Flood/post-Flood contact at 66.0 Ma (ICS).",
-      "secular_age": 66.0e6,
-      "uncertainty": 1.0e5
+      "note": "Flood deposition ends at 66.0 Ma (ICS).",
+      "secular_age": 66000000.0
     },
     "nq": {
       "label": "Neogene-Quaternary (N/Q)",
-      "note": "Flood/post-Flood contact at 2.58 Ma (ICS).",
-      "secular_age": 2.58e6,
-      "uncertainty": 1.0e4
+      "note": "Flood deposition ends at 2.58 Ma (ICS) -- the late-Cenozoic option.",
+      "secular_age": 2580000.0
     }
   },
-
   "defaults": {
     "chronology": "masoretic",
     "boundary": "kpg",
     "mode": "flood_only"
   },
-
   "modes": {
     "flood_only": {
       "label": "Flood only",
       "note": [
-        "No Creation-week acceleration, and an instantaneous acceleration onset",
-        "(t_F == t_F2) relaxing as a single exponential. The Flood's one-year",
-        "depositional span is a constraint age, not a model interval."
+        "No Creation-week acceleration; an instantaneous onset at t_F relaxing",
+        "as a single exponential. t_F == t_F2."
       ],
       "enabled": true,
       "fixed": {
@@ -121,16 +123,13 @@
       }
     }
   },
-
   "series": {
     "note": [
-      "Grid used for the precomputed first-paint layer. Log-spaced in true age:",
-      "the structure is all in the recent end and a linear grid spends every",
-      "point on the flat tail. Breakpoints and constraint ages are unioned in by",
-      "the generator so the Flood interval renders correctly and the calibration",
-      "anchors are exact rows."
+      "Grid for the precomputed first-paint layer. Log-spaced in true age: the",
+      "structure is all in the recent end. Breakpoints, constraint ages and the",
+      "relaxation regions are unioned in by the generator."
     ],
-    "points": 600,
+    "points": 1200,
     "lambda_points": 400
   }
 }

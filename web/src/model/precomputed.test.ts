@@ -48,8 +48,8 @@ describe("generated data", () => {
 
   it("reproduces the values pinned from the Python package", async () => {
     const cal = await source.calibrate(preset("masoretic", "kpg"));
-    expect(cal.params.lambda_F / 1.13506e9 - 1).toBeCloseTo(0, 4);
-    expect(cal.params.k_F).toBeCloseTo(2.10197, 4);
+    expect(cal.params.lambda_F / 3.21423e6 - 1).toBeCloseTo(0, 4);
+    expect(cal.params.k_F).toBeCloseTo(0.00594132, 7);
   });
 
   it("keeps the acceleration onset instantaneous", async () => {
@@ -61,23 +61,44 @@ describe("generated data", () => {
     expect(cal.params.t_F2).toBe(cal.params.t_F);
   });
 
-  it("separates the two Flood contacts by the depositional span", async () => {
-    const cal = await source.calibrate(preset("masoretic", "kpg"));
-    const [onset, cease] = cal.constraints;
-    expect(onset.trueAge - cease.trueAge).toBeCloseTo(1, 9);
-    expect(onset.secularAge).toBe(540e6);
-    expect(cease.secularAge).toBe(66e6);
+  it("relaxes over centuries, not years", async () => {
+    // The author's framework has post-Flood acceleration persisting for
+    // hundreds of years. k_F ~ 0.006 gives a decay measured in millennia; an
+    // earlier misreading of the anchors gave k_F ~ 2 and a five-year decay,
+    // which is the failure this pins against.
+    for (const key of source.presetKeys) {
+      expect(data.presets[key].params.k_F).toBeLessThan(0.1);
+      expect(data.presets[key].params.k_F).toBeGreaterThan(0.001);
+    }
   });
 
-  it("predicts, rather than constrains, the Ice Age", async () => {
-    // With acceleration confined to the Flood, post-Flood rock is essentially
-    // uninflated — the Ice Age dates to about its true age, not 11.5 kyr.
+  it("calibrates on the Precambrian-Cambrian and Ice Age pairs", async () => {
     for (const key of source.presetKeys) {
-      const p = data.presets[key];
-      const ratio = p.ice_age_prediction.secular_age / p.ice_age_prediction.true_age;
-      expect(ratio).toBeGreaterThan(0.99);
-      expect(ratio).toBeLessThan(1.05);
+      const [first, second] = data.presets[key].constraints;
+      expect(first.secular_age).toBe(541e6);
+      expect(second.secular_age).toBe(12000);
     }
+  });
+
+  it("shares one calibration between the two Flood-boundary models", async () => {
+    // The models are competing claims about where the Flood ends, not inputs.
+    // If selecting one ever changed lambda_F or k_F, it would have leaked into
+    // the solve.
+    for (const chron of ["masoretic", "septuagint"]) {
+      const a = data.presets[`${chron}:kpg`].params;
+      const b = data.presets[`${chron}:nq`].params;
+      expect(a.lambda_F).toBe(b.lambda_F);
+      expect(a.k_F).toBe(b.k_F);
+    }
+  });
+
+  it("reports where each Flood-boundary model lands, as an output", async () => {
+    const kpg = data.presets["masoretic:kpg"].flood_end;
+    const nq = data.presets["masoretic:nq"].flood_end;
+    expect(kpg.in_range && nq.in_range).toBe(true);
+    // N/Q is higher in the column, so it lands later than K/Pg.
+    expect(nq.years_after_flood!).toBeGreaterThan(kpg.years_after_flood!);
+    expect(kpg.years_after_flood!).toBeGreaterThan(0);
   });
 
   it("flags the provisional chronology so the UI can say so", () => {

@@ -26,7 +26,6 @@ export function PresetPicker({
   data, chronology, boundary, onChronology, onBoundary, disabled,
 }: Props) {
   const chron = data.chronologies[chronology];
-  const bound = data.boundaries[boundary];
 
   return (
     <section className="panel" aria-labelledby="preset-heading">
@@ -54,7 +53,7 @@ export function PresetPicker({
       ) : null}
 
       <label className="field">
-        <span>Flood ends at</span>
+        <span>Flood-boundary model</span>
         <select
           value={boundary}
           disabled={disabled}
@@ -67,25 +66,25 @@ export function PresetPicker({
       </label>
 
       <p style={{ fontSize: ".8rem", color: "var(--text-secondary)", margin: "0 0 .8rem" }}>
-        The Flood <em>begins</em> at the {data.flood_start_boundary.label}{" "}
-        boundary in every scenario — that is the pre-Flood contact, and it is
-        where the decay rate spikes. What you choose here is where Flood
-        deposition <em>ceased</em>.
+        This does <em>not</em> change the calibration. Both models share one
+        curve per chronology; choosing one asks where that curve puts the end
+        of Flood deposition.
       </p>
 
-      <dl className="readout">
-        <dt>Earth</dt>
-        <dd>{formatAge(chron.age_of_earth)}</dd>
-        <dt>Flood onset</dt>
+      <h2 style={{ marginTop: "1.1rem" }}>Calibrated on</h2>
+      <dl className="readout stacked">
+        <dt>{data.calibration.flood_start.label} — the Flood begins</dt>
         <dd>
           {formatAge(chron.flood_start_age)} BP → appears{" "}
-          {formatAge(data.flood_start_boundary.secular_age)}
+          {formatAge(data.calibration.flood_start.secular_age)}
         </dd>
-        <dt>Flood ends</dt>
+        <dt>{data.calibration.ice_age_end.label}</dt>
         <dd>
-          {formatAge(chron.flood_deposition_end_age)} BP → appears{" "}
-          {formatAge(bound.secular_age)}
+          {formatAge(chron.ice_age_end_age)} BP → appears{" "}
+          {formatAge(data.calibration.ice_age_end.secular_age)}
         </dd>
+        <dt>Age of the Earth</dt>
+        <dd>{formatAge(chron.age_of_earth)}</dd>
       </dl>
     </section>
   );

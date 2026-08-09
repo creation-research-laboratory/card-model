@@ -44,6 +44,17 @@ def _just_after(date: float) -> float:
     return date * (1.0 + _STEP_EPSILON) if date > 0.0 else _STEP_EPSILON
 
 
+def _flood_end(model: GeneralModel, chronology: Chronology,
+               secular: float, present: float) -> Dict[str, Any]:
+    """Where a Flood-boundary model lands on the calibrated curve."""
+    if secular > model.max_secular_age(present):
+        return {"secularAge": secular, "inRange": False}
+    true_age = model.inverse_age(secular, present)
+    after = chronology.flood_start_age - true_age
+    return {"secularAge": secular, "inRange": True, "trueAge": true_age,
+            "yearsAfterFlood": after, "floodDays": after * 365.25}
+
+
 def _chronology(spec: Dict[str, Any]) -> Chronology:
     return Chronology(
         age_of_earth=float(spec["ageOfEarth"]),
@@ -92,15 +103,19 @@ def calibrate(request_json: str) -> str:
             # Both matched pairs are the ends of the Flood: it begins at the
             # pre-Flood/Flood boundary and ends at the selected
             # Flood/post-Flood one.
+            # Two matched pairs: the Precambrian-Cambrian boundary at the
+            # Flood's beginning, and the conventional Ice Age endpoint at the
+            # chronology's Ice Age date.  The Flood-end model (K/Pg or N/Q)
+            # does not enter here -- it is read off the result.
             flood_age = chronology.flood_start_age
-            second_age = flood_age - float(request["floodDurationYears"])
+            second_age = chronology.ice_age_end_age
             result = solve_flood_only(
                 flood_age=flood_age,
                 flood_secular_age=float(request["floodStartSecularAge"]),
                 second_age=second_age,
-                second_secular_age=float(request["floodEndSecularAge"]),
+                second_secular_age=float(request["iceAgeSecularAge"]),
                 chronology=chronology,
-                k_F_bracket=(1e-6, 1e3),
+                k_F_bracket=(1e-9, 100.0),
             )
             params = result.model.params
 
@@ -124,12 +139,12 @@ def calibrate(request_json: str) -> str:
                 "maxSecularAge": model.max_secular_age(present),
                 "floodDate": result.flood_date,
                 "floodStartAge": chronology.flood_start_age,
-                "floodEndAge": second_age,
                 "iceAgeEndAge": chronology.ice_age_end_age,
-                # Not a constraint: what the model predicts for the Ice Age now
-                # that acceleration is confined to the Flood.
-                "iceAgePrediction": model.forward_age(
-                    chronology.ice_age_end_age, present),
+                # An output: where the selected Flood-end model lands on this
+                # calibrated curve.
+                "floodEnd": _flood_end(model, chronology,
+                                       float(request["floodEndSecularAge"]),
+                                       present),
             }, caught)
     except Exception as exc:  # noqa: BLE001 — the boundary reports, never crashes
         return _error(exc)

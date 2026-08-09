@@ -40,12 +40,13 @@ export interface PrecomputedData {
     flood_end_date: number;
     ice_age_end_date: number;
     flood_start_age: number;
-    flood_deposition_end_age: number;
     ice_age_end_age: number;
   }>;
-  boundaries: Record<string, { label: string; secular_age: number; uncertainty: number }>;
-  flood_start_boundary: { label: string; secular_age: number; uncertainty: number };
-  flood_duration_years: number;
+  boundaries: Record<string, { label: string; secular_age: number }>;
+  calibration: {
+    flood_start: { label: string; secular_age: number };
+    ice_age_end: { label: string; secular_age: number };
+  };
   presets: Record<string, {
     chronology: string;
     boundary: string;
@@ -58,7 +59,11 @@ export interface PrecomputedData {
     constraints: Array<{
       label: string; true_age: number; secular_age: number; uncertainty: number;
     }>;
-    ice_age_prediction: { true_age: number; secular_age: number };
+    /** An output, not an input: where this Flood-end model lands. */
+    flood_end: {
+      label: string; secular_age: number; in_range: boolean;
+      true_age?: number; years_after_flood?: number; flood_days?: number;
+    };
     series: { true_age: number[]; secular_age: number[] };
     lambda_history: { date: number[]; lambda: number[] };
     geologic_column: Array<{
