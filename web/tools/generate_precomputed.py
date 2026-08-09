@@ -114,6 +114,14 @@ def _lambda_grid(chronology: Chronology, model: GeneralModel,
 
     `lambda_func` uses `<=`, so the sample at a breakpoint belongs to the
     earlier region and its partner must sit just after.
+
+    The linear part alone is not enough.  Calibrating the Flood as an
+    instantaneous onset drives k_F to ~2/yr, so lambda relaxes within about
+    five years — while a 400-point linear grid over six millennia samples every
+    fifteen.  The whole decay fell between two samples and the curve rendered
+    as a bare spike.  So the relaxation regions are additionally sampled
+    log-spaced in time-since-the-breakpoint, which resolves the shape for any
+    k_F rather than for the one that happened to be in front of us.
     """
     present = chronology.present_date
     step = present / (points - 1)
@@ -125,6 +133,14 @@ def _lambda_grid(chronology: Chronology, model: GeneralModel,
             after = date * (1.0 + _STEP_EPSILON) if date > 0.0 else _STEP_EPSILON
             if after <= present:
                 candidates.append(after)
+            # Resolve the relaxation that starts here, log-spaced so the shape
+            # is captured whatever the decay constant turns out to be.
+            span = present - date
+            if span > 0:
+                lo = max(1e-4, span * 1e-9)
+                steps = 120
+                ratio = (span / lo) ** (1.0 / (steps - 1))
+                candidates.extend(date + lo * ratio ** i for i in range(steps))
 
     grid = sorted({_round(d) for d in candidates if 0.0 <= d <= present})
 

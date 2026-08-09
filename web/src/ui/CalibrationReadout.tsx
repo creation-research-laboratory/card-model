@@ -38,7 +38,7 @@ export function CalibrationReadout({
       </dl>
 
       <h2 style={{ marginTop: "1.1rem" }}>Constraints</h2>
-      <dl className="readout">
+      <dl className="readout stacked">
         {constraints.map((c, i) => (
           <div key={c.label} style={{ display: "contents" }}>
             <dt>{c.label}</dt>
@@ -63,7 +63,7 @@ export function CalibrationReadout({
       {iceAgePrediction ? (
         <>
           <h2 style={{ marginTop: "1.1rem" }}>Prediction</h2>
-          <dl className="readout">
+          <dl className="readout stacked">
             <dt>End of the Ice Age</dt>
             <dd>
               {formatAge(iceAgePrediction.true_age)} →{" "}

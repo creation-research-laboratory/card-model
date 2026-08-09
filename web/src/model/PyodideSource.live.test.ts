@@ -154,30 +154,37 @@ describe("the precomputed layer is a faithful stand-in", () => {
 });
 
 describe("lambda history agrees between the two sources", () => {
-  it("matches the precomputed curve sample for sample", async () => {
+  it("matches the precomputed curve wherever the two grids coincide", async () => {
     const request = preset("masoretic", "kpg");
     const liveCal = await live.calibrate(request);
     const preCal = await precomputed.calibrate(request);
     const pre = await precomputed.lambdaHistory(preCal);
-
-    // Ask the live source for lambda at exactly the precomputed DATEs by
-    // matching the grid size; both use the same construction, so the grids
-    // coincide and the values must too.
     const liveHistory = await live.lambdaHistory(liveCal, data.generator.lambda_points);
-    expect(liveHistory.date.length).toBe(pre.date.length);
-    for (let i = 0; i < pre.date.length; i += 11) {
-      // Relative, because the file stores 9 significant figures: a date like
-      // 1138.345864661654 is written 1138.34586, and a fixed absolute
-      // tolerance would tighten as the values grow. Falls back to absolute at
-      // the origin, where the grid starts at exactly 0 and a ratio is 0/0.
-      expect(closeEnough(liveHistory.date[i], pre.date[i])).toBe(true);
-      // 1e-6, not tighter: the file stores DATEs at 9 significant figures, so
-      // the live source samples lambda at a fractionally different t than the
-      // generator did, and k_F * dt turns a ~1e-9 shift in date into ~1e-8 in
-      // lambda. That is the floor of this comparison, not a disagreement about
-      // the model — the two evaluate the same function.
-      expect(closeEnough(liveHistory.lambda[i], pre.lambda[i], 1e-6)).toBe(true);
+
+    // Neither an exact length match nor nearest-neighbour matching. The file
+    // rounds dates to 9 significant figures, which merges a couple of samples
+    // the live grid keeps distinct; and just past t_F lambda falls fast enough
+    // that pairing a sample with its *neighbour* rather than itself shifts
+    // lambda by ~1e-5. So compare only where the dates genuinely coincide, and
+    // require that to be nearly all of them.
+    const liveAt = new Map<string, number>();
+    liveHistory.date.forEach((d, i) => {
+      liveAt.set(d.toPrecision(9), liveHistory.lambda[i]);
+    });
+
+    let compared = 0;
+    for (let i = 0; i < pre.date.length; i++) {
+      const match = liveAt.get(pre.date[i].toPrecision(9));
+      if (match === undefined) continue;
+      compared++;
+      // 1e-4, and the floor is arithmetic rather than arbitrary: the file
+      // stores dates to 9 significant figures, so a date near 1656 carries
+      // ~1e-6 yr of rounding, and k_F ~ 2/yr turns that into ~2e-6 of relative
+      // error in lambda. It was 1e-8 when k_F was 0.005; the tolerance has to
+      // track the calibration, so this leaves an order of magnitude of room.
+      expect(closeEnough(match, pre.lambda[i], 1e-4)).toBe(true);
     }
+    expect(compared).toBeGreaterThan(pre.date.length * 0.9);
   });
 
   it("steps at the Flood in the live source too", async () => {

@@ -18,16 +18,23 @@ import { useMemo, useRef, useState } from "react";
 import { scaleLinear, scaleLog } from "d3-scale";
 
 import { DEFAULT_MARGIN, linearTicks, logDecadeTicks, nearestIndex, polyline } from "./axes.js";
-import { formatDate, formatMultiplier } from "./format.js";
+import { formatDate, formatMultiplier, trim } from "./format.js";
 import type { LambdaSeries } from "../model/types.js";
+
+/** Which slice of the timeline the x axis covers. */
+export type LambdaZoom = "full" | "flood";
 
 interface Props {
   history: LambdaSeries;
+  zoom: LambdaZoom;
+  onZoom?(zoom: LambdaZoom): void;
   width?: number;
   height?: number;
 }
 
-export function LambdaHistoryChart({ history, width = 720, height = 300 }: Props) {
+export function LambdaHistoryChart({
+  history, zoom, onZoom, width = 720, height = 300,
+}: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<{ index: number; left: number; top: number } | null>(null);
   // Extra headroom over the shared margin: the Flood annotation sits above
@@ -39,20 +46,43 @@ export function LambdaHistoryChart({ history, width = 720, height = 300 }: Props
 
   const view = useMemo(() => {
     const maxLambda = Math.max(...history.lambda);
-    const x = scaleLinear().domain([0, history.presentDate]).range([0, innerW]);
+
+    // How long the relaxation actually takes, read from the data rather than
+    // assumed: the last date at which lambda is still meaningfully above
+    // background. Calibrating an instantaneous onset drives k_F to ~2/yr, so
+    // this is a handful of years out of six millennia — 0.08% of the full
+    // axis, which is why the full view renders it as a bare vertical line. It
+    // is not an artifact; it is what the model looks like at that scale.
+    let settled = history.floodEndDate;
+    for (let i = 0; i < history.date.length; i++) {
+      if (history.lambda[i] > 1.001) settled = history.date[i];
+    }
+    const decaySpan = Math.max(settled - history.floodStartDate, 1e-3);
+
+    const domain: [number, number] = zoom === "flood"
+      ? [
+          Math.max(0, history.floodStartDate - decaySpan * 0.08),
+          Math.min(history.presentDate, history.floodEndDate + decaySpan * 1.15),
+        ]
+      : [0, history.presentDate];
+
+    const x = scaleLinear().domain(domain).range([0, innerW]);
     // Domain starts at 1 because λ is normalized to background and cannot go
     // below it — the model describes accelerated decay, never slower.
     const y = scaleLog().domain([1, maxLambda * 1.2]).range([innerH, 0]).clamp(true);
-    return { x, y, maxLambda };
-  }, [history, innerW, innerH]);
+    return { x, y, maxLambda, domain, decaySpan };
+  }, [history, innerW, innerH, zoom]);
 
   const { x, y, maxLambda } = view;
+  // Clip to the visible domain, with one sample either side so the line
+  // reaches the edges instead of stopping short.
   const path = polyline(
     history.date, history.lambda, x, y,
-    (_d, l) => l > 0,
+    (d, l) => l > 0 && d >= view.domain[0] - view.decaySpan
+      && d <= view.domain[1] + view.decaySpan,
   );
 
-  const xTicks = linearTicks(0, history.presentDate, 6);
+  const xTicks = linearTicks(view.domain[0], view.domain[1], 6);
   const yTicks = logDecadeTicks(1, maxLambda * 1.2, 6);
 
   function onMove(event: React.PointerEvent<SVGSVGElement>) {
@@ -79,8 +109,32 @@ export function LambdaHistoryChart({ history, width = 720, height = 300 }: Props
         <p>
           λ(t) as a multiple of the present-day rate. The horizontal axis is a{" "}
           <strong>date</strong> — years <em>after</em> Day 1 of Creation — which
-          runs opposite to the ages on the chart above.
+          runs opposite to the ages on the chart above.{" "}
+          {zoom === "full" ? (
+            <>The relaxation takes about{" "}
+            {view.decaySpan < 1
+              ? `${(view.decaySpan * 365.25).toFixed(0)} days`
+              : `${view.decaySpan.toFixed(1)} years`}
+            , which is why it reads as a vertical line across six millennia.</>
+          ) : (
+            <>Zoomed to the decay itself.</>
+          )}
         </p>
+        {onZoom ? (
+          <div className="segmented" style={{ marginTop: ".5rem" }} role="group"
+               aria-label="Decay chart time range">
+            <button type="button" aria-pressed={zoom === "full"}
+                    className={zoom === "full" ? "on" : ""}
+                    onClick={() => onZoom("full")}>
+              Full timeline
+            </button>
+            <button type="button" aria-pressed={zoom === "flood"}
+                    className={zoom === "flood" ? "on" : ""}
+                    onClick={() => onZoom("flood")}>
+              The decay
+            </button>
+          </div>
+        ) : null}
       </figcaption>
 
       <div className="chart-wrap" ref={wrapRef}>
@@ -109,7 +163,7 @@ export function LambdaHistoryChart({ history, width = 720, height = 300 }: Props
               <g key={`x${t}`} transform={`translate(${x(t)},0)`}>
                 <line className="grid-line" y1={0} y2={innerH} />
                 <text className="axis-label" y={innerH + 16} textAnchor="middle">
-                  {formatDate(t)}
+                  {zoom === "flood" ? trim(t, 8) : formatDate(t)}
                 </text>
               </g>
             ))}

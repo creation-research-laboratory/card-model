@@ -212,3 +212,11 @@ details.table-view summary {
   background: var(--surface-2); color: var(--text-primary); font-weight: 600;
 }
 .segmented button:focus-visible { outline: 2px solid var(--series-1); outline-offset: -2px; }
+
+/* Constraint rows carry long labels ("Flood begins — Precambrian-Cambrian"),
+   which in the two-column readout squeeze the value into a vertical sliver.
+   Stack them instead: the label reads as a heading, the value beneath it. */
+dl.readout.stacked { grid-template-columns: 1fr; gap: .1rem; }
+dl.readout.stacked dt { white-space: normal; margin-top: .45rem; }
+dl.readout.stacked dt:first-child { margin-top: 0; }
+dl.readout.stacked dd { padding-left: .1rem; }

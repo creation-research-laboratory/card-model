@@ -206,6 +206,17 @@ def lambda_history(request_json: str) -> str:
                 after = _just_after(date)
                 if after <= present:
                     grid.add(after)
+                # A linear grid cannot resolve the relaxation: k_F reaches
+                # ~2/yr here, so lambda is back at background within about five
+                # years while a 400-point grid over six millennia samples every
+                # fifteen.  Log-spaced points from the breakpoint capture the
+                # shape for any decay constant.
+                span = present - date
+                if span > 0:
+                    lo = max(1e-4, span * 1e-9)
+                    steps = 120
+                    ratio = (span / lo) ** (1.0 / (steps - 1))
+                    grid.update(date + lo * ratio ** i for i in range(steps))
 
         ordered = sorted(grid)
         with warnings.catch_warnings(record=True) as caught:

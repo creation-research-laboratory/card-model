@@ -12,7 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AgeComparisonChart, type AgeOrientation } from "../charts/AgeComparisonChart.js";
 import { GeologicColumnChart } from "../charts/GeologicColumnChart.js";
-import { LambdaHistoryChart } from "../charts/LambdaHistoryChart.js";
+import { LambdaHistoryChart, type LambdaZoom } from "../charts/LambdaHistoryChart.js";
 import { CalibrationReadout } from "./CalibrationReadout.js";
 import { PresetPicker } from "./PresetPicker.js";
 import { SeriesTable } from "./SeriesTable.js";
@@ -85,6 +85,7 @@ export function App({ data }: Props) {
   // Which way round the age chart is read. Both directions are the same
   // model; a reader arriving with a published radiometric age wants "true".
   const [orientation, setOrientation] = useState<AgeOrientation>("apparent");
+  const [lambdaZoom, setLambdaZoom] = useState<LambdaZoom>("full");
 
   useEffect(() => manager.subscribe(setState), [manager]);
 
@@ -236,7 +237,13 @@ export function App({ data }: Props) {
             </>
           ) : null}
 
-          {history ? <LambdaHistoryChart history={history} /> : null}
+          {history ? (
+            <LambdaHistoryChart
+              history={history}
+              zoom={lambdaZoom}
+              onZoom={setLambdaZoom}
+            />
+          ) : null}
 
           {column && calibration ? (
             <GeologicColumnChart
