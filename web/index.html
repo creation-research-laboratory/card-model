@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CARD — Phase 3 model layer harness</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 14px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+         margin: 0 auto; padding: 2rem 1.25rem; max-width: 68rem; }
+  h1 { font-size: 1.1rem; margin: 0 0 .25rem; }
+  p.sub { margin: 0 0 1.5rem; opacity: .7; max-width: 60ch; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(21rem, 1fr)); gap: 1rem; }
+  section { border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+            border-radius: 6px; padding: .75rem 1rem; }
+  h2 { font-size: .75rem; text-transform: uppercase; letter-spacing: .08em;
+       opacity: .6; margin: 0 0 .6rem; }
+  table { border-collapse: collapse; width: 100%; }
+  td { padding: .18rem .5rem .18rem 0; vertical-align: top; }
+  td.k { opacity: .65; white-space: nowrap; width: 1%; }
+  td.v { font-variant-numeric: tabular-nums; word-break: break-word; }
+  .ok { color: #1a7f37; } .bad { color: #cf222e; } .warn { color: #9a6700; }
+  @media (prefers-color-scheme: dark) {
+    .ok { color: #3fb950; } .bad { color: #f85149; } .warn { color: #d29922; }
+  }
+  label { display: block; margin: .5rem 0 .15rem; opacity: .7; font-size: .8rem; }
+  select, input, button { font: inherit; padding: .3rem .4rem; width: 100%;
+    border-radius: 4px; border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+    background: transparent; color: inherit; }
+  button { cursor: pointer; margin-top: .6rem; }
+  button:hover { background: color-mix(in srgb, currentColor 10%, transparent); }
+  #log { max-height: 12rem; overflow-y: auto; font-size: .78rem; line-height: 1.5; }
+  #log div { padding: .05rem 0; opacity: .85; }
+  code { background: color-mix(in srgb, currentColor 10%, transparent);
+         padding: .05rem .25rem; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<h1>CARD — Phase 3 model layer harness</h1>
+<p class="sub">
+  Phase 3 has no app UI; this is a developer harness. It exercises the model
+  layer in a real browser, which the headless tests cannot: they use
+  <code>DirectTransport</code> in Node, so the actual Worker path is otherwise
+  never executed. Phase 4 replaces this page with the real app.
+</p>
+
+<div class="grid">
+
+  <section>
+    <h2>Source</h2>
+    <table>
+      <tr><td class="k">answering</td><td class="v" id="source">—</td></tr>
+      <tr><td class="k">live status</td><td class="v" id="liveStatus">idle</td></tr>
+    </table>
+    <button id="bootNow">Boot Pyodide now (~5.8 MB)</button>
+    <button id="compare">Compare precomputed vs live</button>
+  </section>
+
+  <section>
+    <h2>Startup</h2>
+    <table id="boot"></table>
+  </section>
+
+  <section>
+    <h2>Preset</h2>
+    <label for="chronology">Chronology</label>
+    <select id="chronology"></select>
+    <label for="boundary">Flood boundary</label>
+    <select id="boundary"></select>
+    <label for="lambda_F">Custom λ<sub>F</sub> — needs the live source</label>
+    <input id="lambda_F" type="text" inputmode="decimal" placeholder="leave blank for the preset">
+  </section>
+
+  <section>
+    <h2>Calibration</h2>
+    <table id="result"></table>
+  </section>
+
+  <section>
+    <h2>Constraints</h2>
+    <table id="constraints"></table>
+  </section>
+
+  <section>
+    <h2>Converter — secular age → true age</h2>
+    <label for="secular">Apparent secular age (years)</label>
+    <input id="secular" type="text" inputmode="decimal" value="66000000">
+    <table id="converter" style="margin-top:.6rem"></table>
+  </section>
+
+  <section>
+    <h2>Precomputed vs live</h2>
+    <table id="compareOut"></table>
+  </section>
+
+  <section>
+    <h2>Log</h2>
+    <div id="log"></div>
+  </section>
+
+</div>
+
+<script type="module" src="/src/harness.ts"></script>
+</body>
+</html>
