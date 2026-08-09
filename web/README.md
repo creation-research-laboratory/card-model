@@ -127,34 +127,37 @@ are exact in both sources.
 
 ## What the two matched pairs are
 
-From the model author's presentation, the calibration anchors are:
+Both pairs are the Flood year's two ends:
 
-1. **The Precambrian–Cambrian boundary (~541 Ma)** matched to the beginning of
-   the Flood.
-2. **A conventional Ice Age endpoint (~12 ka)** matched to the chronology's
-   young-earth Ice Age date.
+1. **Flood onset ↔ the Precambrian–Cambrian boundary (~541 Ma)** — the pre-Flood
+   contact. Fixed in every scenario.
+2. **Flood onset + 1 year ↔ the selected post-Flood boundary**, K/Pg or N/Q.
+   The variable input.
 
-**K/Pg and N/Q are not calibration inputs.** They are competing *Flood-boundary
-models* — claims about where in the column Flood deposition ends. Each
-chronology yields one curve; selecting a model only asks where that curve puts
-the boundary, which is reported as an **output**. Under Masoretic, K/Pg lands
-354 years after the Flood and N/Q at 900. Testing a Flood model means reading
-that off, not calibrating to it.
+The decay rate begins declining *immediately* at the onset — λ spikes at `t_F`
+and relaxes as a single exponential, so `t_F == t_F2` and there is no
+constant-rate plateau across the Flood year.
 
-This produces the behaviour the author describes: k_F ≈ 0.006 (Masoretic) /
-0.010 (LXX), post-Flood acceleration persisting for centuries rather than
-years. Independent cross-checks against figures not fitted to — the Grand
-Canyon spillover at 5.5 Ma, La Brea at 32 ka, the Miocene base — land in the
-ranges the presentation quotes.
+This reproduces the author's Mesozoic and Paleozoic durations closely:
 
-> **Two chronology caveats.** The Masoretic entry uses the package default, in
-> which `ice_age_end_date` is a DATE (years after Creation) giving **2556 BP**.
-> The presentation quotes **3500 years before present** for the same event —
-> the same numeral read the other way round, and this package's history records
-> fitting at 3500 YBP rather than 2556 as a bug. The DATE reading is used
-> deliberately. The Septuagint entry is still provisional and, unlike the
-> Masoretic one, takes the author's stated ages at face value, so the two are
-> **not on the same footing** until Rick confirms them.
+| unit | this model | author's figure |
+| --- | --- | --- |
+| Cambrian | 17.6 d · 1.1e9× | 19.1 d · 1.1e9× |
+| Jurassic | 57.0 d · 3.6e8× | 68.0 d · 3.6e8× |
+| Cretaceous | 136.7 d · 2.1e8× | 238.8 d · 2.1e8× |
+
+> **Open question with the model author.** Pinning two points one year apart
+> forces `k_F × 1 yr = ln(541 Ma / boundary)`, so `k_F ≈ 2` and the relaxation
+> is over within about a decade. Two other things in the author's material
+> imply a far gentler decay: his λ(t) schematic shows k = 0.005–0.1, and his own
+> column figure's Cenozoic (Pleistocene 724 yr, Holocene 2.8×) fits k ≈ 0.012.
+> Fitting his figure's two ends independently gives k_F = 1.70 from K/Pg and
+> k_F = 0.0125 from the Holocene base — a factor of 136 apart, which **a single
+> post-Flood exponential cannot span**. Reproducing the whole figure would need
+> two relaxation timescales, which the published λ(t) does not have. The
+> one-year reading is implemented here because it is the stated use case and it
+> matches the deep column; the Cenozoic consequently does not match, and the
+> Ice Age becomes a prediction (~its true age) rather than an anchor.
 
 ## Presets are data
 

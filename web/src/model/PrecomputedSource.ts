@@ -40,13 +40,12 @@ export interface PrecomputedData {
     flood_end_date: number;
     ice_age_end_date: number;
     flood_start_age: number;
+    post_flood_boundary_age: number;
     ice_age_end_age: number;
   }>;
-  boundaries: Record<string, { label: string; secular_age: number }>;
-  calibration: {
-    flood_start: { label: string; secular_age: number };
-    ice_age_end: { label: string; secular_age: number };
-  };
+  boundaries: Record<string, { label: string; secular_age: number; uncertainty: number }>;
+  calibration: { flood_start: { label: string; secular_age: number } };
+  flood_duration_years: number;
   presets: Record<string, {
     chronology: string;
     boundary: string;
@@ -59,11 +58,8 @@ export interface PrecomputedData {
     constraints: Array<{
       label: string; true_age: number; secular_age: number; uncertainty: number;
     }>;
-    /** An output, not an input: where this Flood-end model lands. */
-    flood_end: {
-      label: string; secular_age: number; in_range: boolean;
-      true_age?: number; years_after_flood?: number; flood_days?: number;
-    };
+    /** Not a constraint here: what this calibration says the Ice Age dates to. */
+    ice_age_prediction: { true_age: number; secular_age: number };
     series: { true_age: number[]; secular_age: number[] };
     lambda_history: { date: number[]; lambda: number[] };
     geologic_column: Array<{
@@ -83,7 +79,7 @@ export class PrecomputedSource implements ModelSource {
 
   constructor(private readonly data: PrecomputedData) {}
 
-  /** Load from a URL. The file is ~26 kB gzipped, so this is a cheap fetch. */
+  /** Load from a URL. ~57 kB gzipped, so this is a fetch rather than a download. */
   static async load(url = "./precomputed.json"): Promise<PrecomputedSource> {
     const response = await fetch(url);
     if (!response.ok) {

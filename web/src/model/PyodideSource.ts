@@ -29,8 +29,10 @@ import {
 export interface PresetCatalog {
   chronologies: PrecomputedData["chronologies"];
   boundaries: PrecomputedData["boundaries"];
-  /** The two matched pairs: PC/C at the Flood, and the Ice Age endpoint. */
+  /** The fixed first pair: the pre-Flood contact at the Flood's onset. */
   calibration: PrecomputedData["calibration"];
+  /** True years between the two pairs — the Flood year. */
+  floodDurationYears: number;
   /**
    * The ICS unit list, name and base age only. Passed through to `bridge.py`
    * rather than read there: the browser already has it, and `card` has no
@@ -110,15 +112,16 @@ export class PyodideSource implements ModelSource {
       maxAbsResidual: number;
       maxSecularAge: number;
       floodStartAge: number;
+      postFloodBoundaryAge: number;
       iceAgeEndAge: number;
+      iceAgePrediction: number;
     }>(await this.transport.call("calibrate", JSON.stringify({
       chronology,
       // The two pairs are the ends of the Flood: a fixed pre-Flood/Flood
       // boundary and the selected Flood/post-Flood one.
       floodStartSecularAge: this.catalog.calibration.flood_start.secular_age,
-      iceAgeSecularAge: this.catalog.calibration.ice_age_end.secular_age,
-      // Not a constraint — passed so the bridge can report where it lands.
-      floodEndSecularAge: boundary.secular_age,
+      postFloodSecularAge: boundary.secular_age,
+      floodDurationYears: this.catalog.floodDurationYears,
       overrides: request.overrides ?? {},
     })));
 
@@ -131,10 +134,10 @@ export class PyodideSource implements ModelSource {
         uncertainty: 0,
       },
       {
-        label: calib.ice_age_end.label,
-        trueAge: payload.iceAgeEndAge,
-        secularAge: calib.ice_age_end.secular_age,
-        uncertainty: 0,
+        label: `Flood ends — ${boundary.label}`,
+        trueAge: payload.postFloodBoundaryAge,
+        secularAge: boundary.secular_age,
+        uncertainty: boundary.uncertainty,
       },
     ];
 

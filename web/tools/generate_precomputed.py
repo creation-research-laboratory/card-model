@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from pathlib import Path
 from typing import Any, Dict, List
@@ -47,13 +48,35 @@ OUTPUT_PATH = WEB / "public" / "precomputed.json"
 # the grid itself carries, while keeping the file small.
 SIGFIGS = 9
 
+# The series arrays dominate the file, and interpolating them is only good to
+# ~0.3%, so storing nine significant figures spends bytes on digits nobody can
+# use.  Seven is still three orders of magnitude finer than the interpolation.
+SERIES_SIGFIGS = 7
 
-def _round(value: float) -> float:
-    """Round to SIGFIGS, and to a plain int when that is exact — JSON is smaller."""
+
+def _round(value: float, sigfigs: int = SIGFIGS) -> float:
+    """Round to `sigfigs`, and to a plain int when exact — JSON is smaller."""
     if value == 0.0:
         return 0.0
-    rounded = float(f"%.{SIGFIGS}g" % value)
+    rounded = float(f"%.{sigfigs}g" % value)
     return int(rounded) if rounded.is_integer() and abs(rounded) < 1e15 else rounded
+
+
+def _relaxation_span(model: GeneralModel) -> float:
+    """
+    Years over which the post-Flood rate is still meaningfully above background.
+
+    Derived from the model rather than assumed, because k_F swings by three
+    orders of magnitude between calibrations: ~2/yr when the two matched pairs
+    sit a year apart, ~0.006/yr when they sit millennia apart.  A hardcoded
+    window would be far too wide for one and far too narrow for the other.
+    """
+    k = getattr(model, "k_F", 0.0)
+    excess = getattr(model, "lambda_F", 1.0) - 1.0
+    if k <= 0.0 or excess <= 0.0:
+        return float("inf")
+    # Where the excess has fallen to a millionth of background, with margin.
+    return 1.5 * math.log(excess * 1e6) / k
 
 
 def _true_age_grid(chronology: Chronology, model: GeneralModel,
@@ -87,6 +110,27 @@ def _true_age_grid(chronology: Chronology, model: GeneralModel,
     candidates.extend((0.0, present))
     candidates.extend(chronology.date_to_age(d) for d in model.breakpoints())
     candidates.extend(anchors)
+
+    # The log grid is uniform in true age, but the curve is not: just younger
+    # than a breakpoint, `forward_age` climbs by the whole post-relaxation
+    # integral.  With k_F ~ 2 that is a factor of ~500 between two neighbouring
+    # samples, and interpolating across it is meaninglessly wrong -- measured at
+    # 12,000% before this.  Refine log-spaced in time-since-the-breakpoint, the
+    # same way the lambda grid does, so the climb is resolved for any k_F.
+    settle = _relaxation_span(model)
+    for date in model.breakpoints():
+        age = chronology.date_to_age(date)
+        if not 0.0 < age <= present:
+            continue
+        # Only as far as the rate is still moving.  Spreading the refinement
+        # over the whole timeline wastes most of it on the flat tail, where the
+        # base log grid is already exact; confining it to the relaxation gets
+        # the same resolution for a third of the points.
+        span = min(age, settle)
+        lo_d = max(1e-4, span * 1e-9)
+        steps = 500
+        r = (span / lo_d) ** (1.0 / (steps - 1))
+        candidates.extend(age - lo_d * r ** i for i in range(steps))
 
     rounded = {_round(a) for a in candidates if 0.0 <= a <= present}
     return sorted(rounded)
@@ -216,37 +260,11 @@ def _geologic_column(model: GeneralModel, chronology: Chronology,
     return rows
 
 
-def _flood_end(model: GeneralModel, chronology: Chronology,
-               spec: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Where a Flood-boundary model puts the end of Flood deposition.
-
-    An output of the calibration, never an input.  The author's framework
-    calibrates on the Precambrian-Cambrian boundary and the Ice Age endpoint;
-    K/Pg and N/Q are competing claims about where in the column the Flood
-    stops, and testing one means asking where the calibrated curve places it.
-    """
-    present = chronology.present_date
-    secular = float(spec["secular_age"])
-    if secular > model.max_secular_age(present):
-        return {"label": spec["label"], "secular_age": secular,
-                "in_range": False}
-    true_age = model.inverse_age(secular, present)
-    after = chronology.flood_start_age - true_age
-    return {
-        "label": spec["label"],
-        "secular_age": secular,
-        "in_range": True,
-        "true_age": _round(true_age),
-        "years_after_flood": _round(after),
-        "flood_days": _round(after * 365.25),
-    }
-
-
 def build(presets: Dict[str, Any]) -> Dict[str, Any]:
     chronologies = presets["chronologies"]
-    boundaries = presets["flood_end_models"]
+    boundaries = presets["post_flood_boundaries"]
     calib = presets["calibration"]
+    flood_years = float(presets["flood_duration_years"])
     points = int(presets["series"]["points"])
     lambda_points = int(presets["series"].get("lambda_points", 400))
     ics = json.loads(ICS_PATH.read_text())
@@ -270,24 +288,27 @@ def build(presets: Dict[str, Any]) -> Dict[str, Any]:
             "provisional": bool(chron_spec.get("provisional", False)),
             **chronology.to_dict(),
             "flood_start_age": chronology.flood_start_age,
+            "post_flood_boundary_age": chronology.flood_start_age - flood_years,
             "ice_age_end_age": chronology.ice_age_end_age,
         }
 
         for bound_key, bound_spec in boundaries.items():
-            # The two matched pairs are the Precambrian-Cambrian boundary at
-            # the Flood's beginning, and the conventional Ice Age endpoint at
-            # the chronology's Ice Age date.  The selected Flood-end model does
-            # NOT enter the calibration -- it is read off the result below.
+            # The two matched pairs are the Flood year's two ends: its onset
+            # at the pre-Flood contact, and one year later at the selected
+            # post-Flood contact.  Decay begins declining at the onset, so
+            # t_F == t_F2 and this is a single exponential throughout.
             flood_age = chronology.flood_start_age
-            second_age = chronology.ice_age_end_age
+            second_age = flood_age - flood_years
 
             result = solve_flood_only(
                 flood_age=flood_age,
                 flood_secular_age=float(calib["flood_start"]["secular_age"]),
                 second_age=second_age,
-                second_secular_age=float(calib["ice_age_end"]["secular_age"]),
+                second_secular_age=float(bound_spec["secular_age"]),
                 chronology=chronology,
-                k_F_bracket=(1e-9, 100.0),
+                # k_F * 1 yr = ln(541 Ma / boundary), so k_F lands near 2 --
+                # well past the package default bracket's upper end.
+                k_F_bracket=(1e-9, 400.0),
             )
             model = result.model
             present = chronology.present_date
@@ -319,25 +340,29 @@ def build(presets: Dict[str, Any]) -> Dict[str, Any]:
                      "true_age": flood_age,
                      "secular_age": float(calib["flood_start"]["secular_age"]),
                      "uncertainty": float(calib["flood_start"]["uncertainty"])},
-                    {"label": calib["ice_age_end"]["label"],
+                    {"label": f"Flood ends — {bound_spec['label']}",
                      "true_age": second_age,
-                     "secular_age": float(calib["ice_age_end"]["secular_age"]),
-                     "uncertainty": float(calib["ice_age_end"]["uncertainty"])},
+                     "secular_age": float(bound_spec["secular_age"]),
+                     "uncertainty": float(bound_spec["uncertainty"])},
                 ],
-                # An OUTPUT, not an input: where this Flood-end model puts the
-                # end of Flood deposition on the calibrated timeline.  Testing
-                # a Flood model means reading this off, which is why the two
-                # models share a calibration and differ only here.
-                "flood_end": _flood_end(model, chronology, bound_spec),
+                # Not a constraint here: what the calibration predicts for the
+                # Ice Age, which the author's framework instead uses as an
+                # anchor.  Reported so the divergence is visible.
+                "ice_age_prediction": {
+                    "true_age": chronology.ice_age_end_age,
+                    "secular_age": _round(
+                        model.forward_age(chronology.ice_age_end_age, present)),
+                },
                 "series": {
                     "true_age": grid,  # already rounded, already deduplicated
-                    "secular_age": [_round(s) for s in secular],
+                    "secular_age": [_round(s, SERIES_SIGFIGS) for s in secular],
                 },
                 # lambda(t) against DATE — the one curve whose x axis is a DATE
                 # rather than an AGE, and the one that genuinely steps.
                 "lambda_history": {
                     "date": lambda_grid,
-                    "lambda": [_round(model.lambda_func(d)) for d in lambda_grid],
+                    "lambda": [_round(model.lambda_func(d), SERIES_SIGFIGS)
+                               for d in lambda_grid],
                 },
                 "geologic_column": _geologic_column(model, chronology, units),
             }
@@ -360,14 +385,14 @@ def build(presets: Dict[str, Any]) -> Dict[str, Any]:
         },
         "defaults": presets["defaults"],
         "boundaries": {k: {"label": v["label"],
-                           "secular_age": float(v["secular_age"])}
+                           "secular_age": float(v["secular_age"]),
+                           "uncertainty": float(v["uncertainty"])}
                        for k, v in boundaries.items()},
         "calibration": {
             "flood_start": {"label": calib["flood_start"]["label"],
                             "secular_age": float(calib["flood_start"]["secular_age"])},
-            "ice_age_end": {"label": calib["ice_age_end"]["label"],
-                            "secular_age": float(calib["ice_age_end"]["secular_age"])},
         },
+        "flood_duration_years": flood_years,
         "ics": {"version": ics["source"]["version"],
                 "url": ics["source"]["url"],
                 "reviewed": bool(ics["source"].get("reviewed", False))},

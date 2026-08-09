@@ -14,17 +14,15 @@ interface Props {
   calibration: Calibration;
   sourceKind: SourceKind;
   /**
-   * Where the selected Flood-boundary model lands on this curve. An output of
-   * the calibration, never an input — which is how a Flood model gets tested.
+   * What this calibration says the Ice Age dates to. Not a constraint in this
+   * structure — the author's framework anchors on it instead, so showing the
+   * divergence keeps that disagreement visible rather than silent.
    */
-  floodEnd?: {
-    label: string; secular_age: number; in_range: boolean;
-    true_age?: number; years_after_flood?: number; flood_days?: number;
-  };
+  iceAgePrediction?: { true_age: number; secular_age: number };
 }
 
 export function CalibrationReadout({
-  calibration, sourceKind, floodEnd,
+  calibration, sourceKind, iceAgePrediction,
 }: Props) {
   const { params, constraints, residuals, maxAbsResidual, exact } = calibration;
 
@@ -66,30 +64,19 @@ export function CalibrationReadout({
         </dd>
       </dl>
 
-      {floodEnd ? (
+      {iceAgePrediction ? (
         <>
-          <h2 style={{ marginTop: "1.1rem" }}>Flood boundary — result</h2>
+          <h2 style={{ marginTop: "1.1rem" }}>Prediction</h2>
           <dl className="readout stacked">
-            <dt>{floodEnd.label}</dt>
+            <dt>End of the Ice Age</dt>
             <dd>
-              {floodEnd.in_range ? (
-                <>
-                  {formatAge(floodEnd.secular_age)} lands at{" "}
-                  {formatAge(floodEnd.true_age!, 5)} BP —{" "}
-                  <strong>
-                    {floodEnd.flood_days! < 400
-                      ? `Flood day ${Math.round(floodEnd.flood_days!)}`
-                      : `${Math.round(floodEnd.years_after_flood!)} yr after the Flood`}
-                  </strong>
-                  <br />
-                  <span style={{ color: "var(--text-muted)" }}>
-                    an output, not an input — this is what testing a Flood model
-                    means
-                  </span>
-                </>
-              ) : (
-                <>beyond this calibration&rsquo;s range</>
-              )}
+              {formatAge(iceAgePrediction.true_age)} →{" "}
+              {formatAge(iceAgePrediction.secular_age)}
+              <br />
+              <span style={{ color: "var(--text-muted)" }}>
+                not an anchor here — the relaxation is over within a decade, so
+                post-Flood rock is essentially uninflated
+              </span>
             </dd>
           </dl>
         </>
@@ -98,7 +85,8 @@ export function CalibrationReadout({
       {sourceKind === "precomputed" ? (
         <p className="notice" style={{ marginTop: "1rem", marginBottom: 0 }}>
           Values marked <strong>≈</strong> are interpolated between precomputed
-          points and are good to about 0.3%. The parameters, residuals and the
+          points: good to about 0.3% converting a true age forwards, and about
+          1% converting an apparent age back. The parameters, residuals and the
           plotted curves themselves are exact — the solver produced them
           directly. Load the full model to make every value exact.
         </p>

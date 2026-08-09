@@ -52,6 +52,7 @@ beforeAll(async () => {
     chronologies: data.chronologies,
     boundaries: data.boundaries,
     calibration: data.calibration,
+    floodDurationYears: data.flood_duration_years,
     geologicUnits: Object.values(data.presets)[0].geologic_column.map((u) => ({
       name: u.name, rank: u.rank, baseSecularAge: u.base_secular_age,
     })),
@@ -78,8 +79,8 @@ describe("environment", () => {
 describe("agreement with the Python package", () => {
   it("reproduces the pinned solve", async () => {
     const cal = await live.calibrate(preset("masoretic", "kpg"));
-    expect(cal.params.lambda_F / 3.21423e6 - 1).toBeCloseTo(0, 4);
-    expect(cal.params.k_F).toBeCloseTo(0.00594132, 7);
+    expect(cal.params.lambda_F / 1.13816e9 - 1).toBeCloseTo(0, 4);
+    expect(cal.params.k_F).toBeCloseTo(2.10382, 4);
     expect(cal.maxAbsResidual).toBeLessThan(1e-12);
     expect(cal.exact).toBe(true);
   });
@@ -133,8 +134,12 @@ describe("the precomputed layer is a faithful stand-in", () => {
       }
     }
 
+    // These are the numbers the UI's "≈" is promising, so they are asserted
+    // rather than assumed. The inverse is the looser of the two because the
+    // curve's knee just after the Flood is sharp, and inverting a sharp knee
+    // is ill-conditioned.
     expect(worstForward).toBeLessThan(5e-3);
-    expect(worstInverse).toBeLessThan(1e-3);
+    expect(worstInverse).toBeLessThan(1.5e-2);
   });
 
   it("agrees exactly on the solved parameters, which are not interpolated", async () => {
@@ -239,7 +244,7 @@ describe("geologic column agrees between the two sources", () => {
     // The precomputed layer cannot answer this at all, which is the whole
     // reason the live source implements it too.
     const request: CalibrationRequest = {
-      ...preset("masoretic", "kpg"), overrides: { lambda_F: 1.0e7 },
+      ...preset("masoretic", "kpg"), overrides: { lambda_F: 3.0e9 },
     };
     expect(precomputed.supports(request)).toBe(false);
 
@@ -264,7 +269,7 @@ describe("custom parameters — the thing only the live source can do", () => {
     const cal = await live.calibrate(request);
     expect(cal.params.lambda_F / 5.0e6 - 1).toBeCloseTo(0, 6);
     // k_F still comes from the solve; only what was overridden changed.
-    expect(cal.params.k_F).toBeCloseTo(0.00594132, 7);
+    expect(cal.params.k_F).toBeCloseTo(2.10382, 4);
   });
 
   it("leaves the constraints undisturbed by Creation-week overrides", async () => {

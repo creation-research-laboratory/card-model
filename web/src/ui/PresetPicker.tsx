@@ -53,7 +53,7 @@ export function PresetPicker({
       ) : null}
 
       <label className="field">
-        <span>Flood-boundary model</span>
+        <span>Post-Flood boundary (1 yr after onset)</span>
         <select
           value={boundary}
           disabled={disabled}
@@ -66,22 +66,23 @@ export function PresetPicker({
       </label>
 
       <p style={{ fontSize: ".8rem", color: "var(--text-secondary)", margin: "0 0 .8rem" }}>
-        This does <em>not</em> change the calibration. Both models share one
-        curve per chronology; choosing one asks where that curve puts the end
-        of Flood deposition.
+        The Flood <em>begins</em> at the {data.calibration.flood_start.label}{" "}
+        contact in every scenario. The decay rate spikes there and starts
+        falling immediately; this choice fits the curve so that one year in, the
+        apparent age is the boundary you pick.
       </p>
 
       <h2 style={{ marginTop: "1.1rem" }}>Calibrated on</h2>
       <dl className="readout stacked">
-        <dt>{data.calibration.flood_start.label} — the Flood begins</dt>
+        <dt>Flood onset — {data.calibration.flood_start.label}</dt>
         <dd>
           {formatAge(chron.flood_start_age)} BP → appears{" "}
           {formatAge(data.calibration.flood_start.secular_age)}
         </dd>
-        <dt>{data.calibration.ice_age_end.label}</dt>
+        <dt>One year later — {data.boundaries[boundary].label}</dt>
         <dd>
-          {formatAge(chron.ice_age_end_age)} BP → appears{" "}
-          {formatAge(data.calibration.ice_age_end.secular_age)}
+          {formatAge(chron.post_flood_boundary_age)} BP → appears{" "}
+          {formatAge(data.boundaries[boundary].secular_age)}
         </dd>
         <dt>Age of the Earth</dt>
         <dd>{formatAge(chron.age_of_earth)}</dd>

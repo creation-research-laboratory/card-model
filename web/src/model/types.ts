@@ -70,8 +70,8 @@ export interface Calibration {
   /**
    * False when these numbers were interpolated from the precomputed table
    * rather than computed by the model. Interpolated values are good to ~0.3%
-   * on a forward age and ~0.03% on an inverse one — fine for a chart, too
-   * coarse to present as an exact figure. The UI should mark them.
+   * on a forward age and ~1% on an inverse one — fine for a chart, too coarse
+   * to present as an exact figure. The UI should mark them.
    */
   readonly exact: boolean;
   /** Set when the calibration came from a named preset. */
