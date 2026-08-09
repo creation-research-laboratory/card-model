@@ -40,6 +40,16 @@ apparent equals true. The gap between them is the claim. The curve has a *kink*
 at the Flood, not a step — `forward_age` is the integral of a bounded rate and
 so is continuous.
 
+It **toggles between two orientations**, because there are two questions and
+they are not the same one. `True → apparent` is the model's forward map, both
+axes logarithmic, and is the figure the package draws. `Apparent → true` puts
+the published radiometric age on x and the young-earth age on a **descending**
+linear y — most recent at the top, the way a stratigraphic column is drawn.
+That is the direction a reader usually arrives from: they have a secular age
+and want the young-earth date. In that orientation the constant-rate reference
+is a curve rather than a straight line (log x against linear y), so it is
+sampled rather than drawn end-to-end.
+
 **Decay rate through time** mirrors `plot_lambda_history`. Its x axis is a
 **DATE** — years after Day 1 of Creation — the only chart in the app running
 that direction, and the convention whose confusion once caused a real fitting

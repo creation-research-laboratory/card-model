@@ -195,3 +195,20 @@ details.table-view summary {
   position: absolute; width: 1px; height: 1px; overflow: hidden;
   clip: rect(0 0 0 0); white-space: nowrap;
 }
+
+/* Segmented control — swaps which quantity the age chart puts on which axis. */
+.segmented {
+  display: inline-flex; margin-bottom: .75rem;
+  border: 1px solid var(--border); border-radius: 6px; overflow: hidden;
+}
+.segmented button {
+  font: inherit; font-size: .82rem; cursor: pointer;
+  padding: .3rem .7rem; border: 0; background: transparent;
+  color: var(--text-secondary);
+}
+.segmented button + button { border-left: 1px solid var(--border); }
+.segmented button:hover { background: var(--surface-2); }
+.segmented button.on {
+  background: var(--surface-2); color: var(--text-primary); font-weight: 600;
+}
+.segmented button:focus-visible { outline: 2px solid var(--series-1); outline-offset: -2px; }

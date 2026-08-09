@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { AgeComparisonChart } from "../charts/AgeComparisonChart.js";
+import { AgeComparisonChart, type AgeOrientation } from "../charts/AgeComparisonChart.js";
 import { LambdaHistoryChart } from "../charts/LambdaHistoryChart.js";
 import { CalibrationReadout } from "./CalibrationReadout.js";
 import { PresetPicker } from "./PresetPicker.js";
@@ -61,6 +61,9 @@ export function App({ data }: Props) {
   const [series, setSeries] = useState<Series | null>(null);
   const [history, setHistory] = useState<LambdaSeries | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Which way round the age chart is read. Both directions are the same
+  // model; a reader arriving with a published radiometric age wants "true".
+  const [orientation, setOrientation] = useState<AgeOrientation>("apparent");
 
   useEffect(() => manager.subscribe(setState), [manager]);
 
@@ -171,7 +174,35 @@ export function App({ data }: Props) {
           ) : null}
 
           {series && calibration ? (
-            <AgeComparisonChart series={series} calibration={calibration} />
+            <>
+              <div
+                className="segmented"
+                role="group"
+                aria-label="Age chart orientation"
+              >
+                <button
+                  type="button"
+                  className={orientation === "apparent" ? "on" : ""}
+                  aria-pressed={orientation === "apparent"}
+                  onClick={() => setOrientation("apparent")}
+                >
+                  True → apparent
+                </button>
+                <button
+                  type="button"
+                  className={orientation === "true" ? "on" : ""}
+                  aria-pressed={orientation === "true"}
+                  onClick={() => setOrientation("true")}
+                >
+                  Apparent → true
+                </button>
+              </div>
+              <AgeComparisonChart
+                series={series}
+                calibration={calibration}
+                orientation={orientation}
+              />
+            </>
           ) : null}
 
           {history ? <LambdaHistoryChart history={history} /> : null}

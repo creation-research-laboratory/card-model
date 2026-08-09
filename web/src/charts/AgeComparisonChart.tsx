@@ -1,87 +1,122 @@
 /**
- * Apparent (secular) age against true age — the headline figure.
+ * The relationship between true age and apparent age, in either direction.
  *
  * Mirrors `card.plotting.plot_age_comparison`. Two series, so a legend is
  * always present: the CARD model, and the constant-rate reference where
  * apparent equals true. The gap between them is the whole claim.
  *
- * Both axes are logarithmic. True age spans 1 → ~6,000 years and apparent age
- * 1 → 5.4e8; on linear axes the entire pre-Flood story collapses into the top
- * pixel row.
+ * TWO ORIENTATIONS, because there are two questions and they are not the same
+ * question:
  *
- * Note the curve has a *kink* at the Flood, not a step: `forward_age` is the
+ *   "apparent"  — true age on x, apparent age on y. Both logarithmic. This is
+ *                 the model's forward map and the package's own figure.
+ *   "true"      — apparent age on x, true age on y, **y descending**. This is
+ *                 the question a reader usually arrives with: they have a
+ *                 published radiometric age and want the young-earth date. The
+ *                 descending y axis puts recent at the top, the way a
+ *                 stratigraphic column is drawn.
+ *
+ * The curve has a *kink* at the Flood, not a step: `forward_age` is the
  * integral of a bounded rate and so is continuous. The step belongs to λ(t).
  */
 
 import { useMemo, useRef, useState } from "react";
-import { scaleLog } from "d3-scale";
+import { scaleLinear, scaleLog } from "d3-scale";
 
-import { DEFAULT_MARGIN, logDecadeTicks, nearestIndex, polyline } from "./axes.js";
+import { DEFAULT_MARGIN, linearTicks, logDecadeTicks, nearestIndex, polyline } from "./axes.js";
 import { formatAge, formatAgeTick, significantFor } from "./format.js";
 import type { Calibration, Series } from "../model/types.js";
+
+/** Which quantity the vertical axis carries. */
+export type AgeOrientation = "apparent" | "true";
 
 interface Props {
   series: Series;
   calibration: Calibration;
+  orientation: AgeOrientation;
   width?: number;
   height?: number;
-}
-
-interface HoverState {
-  index: number;
-  left: number;
-  top: number;
 }
 
 export function AgeComparisonChart({
   series,
   calibration,
+  orientation,
   width = 720,
   height = 380,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
-  const [hover, setHover] = useState<HoverState | null>(null);
+  const [hover, setHover] = useState<{ index: number; left: number; top: number } | null>(null);
+  const swapped = orientation === "true";
+  // The descending linear axis needs room for its title; the log one does not.
   const m = DEFAULT_MARGIN;
   const innerW = width - m.left - m.right;
   const innerH = height - m.top - m.bottom;
 
   const view = useMemo(() => {
     // Log scales reject zero, and the grid deliberately includes a 0 row.
-    const xs: number[] = [];
-    const ys: number[] = [];
+    const trueAges: number[] = [];
+    const secularAges: number[] = [];
     for (let i = 0; i < series.trueAge.length; i++) {
       if (series.trueAge[i] > 0 && series.secularAge[i] > 0) {
-        xs.push(series.trueAge[i]);
-        ys.push(series.secularAge[i]);
+        trueAges.push(series.trueAge[i]);
+        secularAges.push(series.secularAge[i]);
       }
     }
-    const xMax = calibration.chronology.ageOfEarth;
-    const yMax = Math.max(...ys, calibration.maxSecularAge);
-    const x = scaleLog().domain([1, xMax]).range([0, innerW]).clamp(true);
-    const y = scaleLog().domain([1, yMax]).range([innerH, 0]).clamp(true);
-    return { xs, ys, x, y, xMax, yMax };
-  }, [series, calibration, innerW, innerH]);
+    const trueMax = calibration.chronology.ageOfEarth;
+    const secularMax = Math.max(...secularAges, calibration.maxSecularAge);
+
+    if (swapped) {
+      // Apparent age spans eight decades, so x must be log. True age spans a
+      // few thousand years, so y is linear — and runs downward, oldest at the
+      // bottom.
+      return {
+        xs: secularAges,
+        ys: trueAges,
+        x: scaleLog().domain([1, secularMax]).range([0, innerW]).clamp(true),
+        y: scaleLinear().domain([0, trueMax]).range([0, innerH]),
+        xTicks: withEndpoint(logDecadeTicks(1, secularMax, 7), secularMax),
+        yTicks: linearTicks(0, trueMax, 6),
+        xTitle: "Apparent age (yr)",
+        yTitle: "True age (years before present)",
+        xFormat: formatAgeTick,
+        yFormat: formatAgeTick,
+      };
+    }
+    return {
+      xs: trueAges,
+      ys: secularAges,
+      x: scaleLog().domain([1, trueMax]).range([0, innerW]).clamp(true),
+      y: scaleLog().domain([1, secularMax]).range([innerH, 0]).clamp(true),
+      xTicks: withEndpoint(logDecadeTicks(1, trueMax, 6), trueMax),
+      yTicks: logDecadeTicks(1, secularMax, 7),
+      xTitle: "True age (years before present)",
+      yTitle: "Apparent age (yr)",
+      xFormat: formatAgeTick,
+      yFormat: formatAgeTick,
+    };
+  }, [series, calibration, innerW, innerH, swapped]);
 
   const { xs, ys, x, y } = view;
-  const plottable = (a: number, b: number) => a > 0 && b > 0;
+  const plottable = (a: number, b: number) => a > 0 && b >= 0;
 
   const modelPath = polyline(xs, ys, x, y, plottable);
-  // The constant-rate baseline: apparent age equals true age, by definition.
-  const referencePath = polyline(
-    [1, view.xMax], [1, view.xMax], x, y, plottable,
-  );
 
-  // Decades alone leave the axis looking unfinished: 1..6056 labels 1, 10,
-  // 100, 1k and then just stops, so a reader cannot see where it ends. The
-  // domain endpoint is added unless a decade already sits close to it.
-  const decades = logDecadeTicks(1, view.xMax, 6);
-  const last = decades[decades.length - 1] ?? 1;
-  const xTicks = view.xMax / last > 2 ? [...decades, view.xMax] : decades;
-  const yTicks = logDecadeTicks(1, view.yMax, 7);
+  // The constant-rate baseline: apparent age equals true age, by definition.
+  // Sampled rather than drawn as two endpoints, because in the swapped
+  // orientation (log x, linear y) the identity is a curve, not a straight line.
+  const referencePath = useMemo(() => {
+    const limit = calibration.chronology.ageOfEarth;
+    const points: number[] = [];
+    const steps = 160;
+    for (let i = 0; i <= steps; i++) {
+      points.push(10 ** ((i / steps) * Math.log10(limit)));
+    }
+    return polyline(points, points, x, y, plottable);
+  }, [calibration, x, y]);
 
   function onMove(event: React.PointerEvent<SVGSVGElement>) {
-    const svg = event.currentTarget;
-    const rect = svg.getBoundingClientRect();
+    const rect = event.currentTarget.getBoundingClientRect();
     // The SVG scales to its container, so client pixels must be converted back
     // into view-box units before they mean anything to the scales.
     const scale = rect.width / width;
@@ -97,15 +132,33 @@ export function AgeComparisonChart({
   }
 
   const digits = significantFor(series.exact);
-  const hovered = hover ? { trueAge: xs[hover.index], secularAge: ys[hover.index] } : null;
+  const point = hover
+    ? {
+        trueAge: swapped ? ys[hover.index] : xs[hover.index],
+        secularAge: swapped ? xs[hover.index] : ys[hover.index],
+      }
+    : null;
+
+  const constraintAt = (trueAge: number, secularAge: number) =>
+    swapped ? { cx: x(secularAge), cy: y(trueAge) } : { cx: x(trueAge), cy: y(secularAge) };
 
   return (
     <figure className="chart">
       <figcaption>
-        <h3>Apparent age vs. true age</h3>
+        <h3>{swapped ? "True age vs. apparent age" : "Apparent age vs. true age"}</h3>
         <p>
-          How old rock of a given true age appears under this calibration. Both
-          axes logarithmic; ages are years before present.
+          {swapped ? (
+            <>
+              What young-earth age a published radiometric age corresponds to
+              under this calibration. Apparent age is logarithmic; true age runs
+              downward, most recent at the top.
+            </>
+          ) : (
+            <>
+              How old rock of a given true age appears under this calibration.
+              Both axes logarithmic; ages are years before present.
+            </>
+          )}
         </p>
       </figcaption>
 
@@ -115,71 +168,70 @@ export function AgeComparisonChart({
           viewBox={`0 0 ${width} ${height}`}
           role="img"
           aria-label={
-            `Apparent age against true age. The model reaches ` +
-            `${formatAge(view.yMax)} apparent at ${formatAge(view.xMax)} true.`
+            swapped
+              ? `True age against apparent age. An apparent age of ` +
+                `${formatAge(calibration.maxSecularAge)} corresponds to the oldest ` +
+                `true age the model allows, ${formatAge(calibration.chronology.ageOfEarth)}.`
+              : `Apparent age against true age. The model reaches ` +
+                `${formatAge(calibration.maxSecularAge)} apparent at ` +
+                `${formatAge(calibration.chronology.ageOfEarth)} true.`
           }
           onPointerMove={onMove}
           onPointerLeave={() => setHover(null)}
         >
           <g transform={`translate(${m.left},${m.top})`}>
-            {yTicks.map((t) => (
+            {view.yTicks.map((t) => (
               <g key={`y${t}`} transform={`translate(0,${y(t)})`}>
                 <line className="grid-line" x1={0} x2={innerW} />
                 <text className="axis-label" x={-8} dy="0.32em" textAnchor="end">
-                  {formatAgeTick(t)}
+                  {view.yFormat(t)}
                 </text>
               </g>
             ))}
-            {xTicks.map((t) => (
+            {view.xTicks.map((t) => (
               <g key={`x${t}`} transform={`translate(${x(t)},0)`}>
                 <line className="grid-line" y1={0} y2={innerH} />
-                <text
-                  className="axis-label" y={innerH + 16} textAnchor="middle"
-                >
-                  {formatAgeTick(t)}
+                <text className="axis-label" y={innerH + 16} textAnchor="middle">
+                  {view.xFormat(t)}
                 </text>
               </g>
             ))}
             <line className="axis-line" x1={0} y1={innerH} x2={innerW} y2={innerH} />
 
             <path
-              d={referencePath}
-              fill="none"
-              stroke="var(--series-2)"
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
+              d={referencePath} fill="none" stroke="var(--series-2)"
+              strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
             />
             <path
-              d={modelPath}
-              fill="none"
-              stroke="var(--series-1)"
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
+              d={modelPath} fill="none" stroke="var(--series-1)"
+              strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
             />
 
-            {/* Calibration anchors. A 2px surface ring keeps them legible
-                where they sit on the line. */}
-            {calibration.constraints.map((c) => (
-              c.trueAge > 0 && c.secularAge > 0 ? (
-                <g key={c.label} transform={`translate(${x(c.trueAge)},${y(c.secularAge)})`}>
+            {/* Calibration anchors, with a 2px surface ring so they stay
+                legible where they sit on the line. */}
+            {calibration.constraints.map((c) => {
+              if (!(c.trueAge > 0 && c.secularAge > 0)) return null;
+              const { cx, cy } = constraintAt(c.trueAge, c.secularAge);
+              return (
+                <g key={c.label} transform={`translate(${cx},${cy})`}>
                   <circle r={5} fill="var(--series-1)"
                           stroke="var(--surface-2)" strokeWidth={2} />
-                  <title>{`${c.label}: ${formatAge(c.trueAge)} true → ${formatAge(c.secularAge)} apparent`}</title>
+                  <title>
+                    {`${c.label}: ${formatAge(c.trueAge)} true → ${formatAge(c.secularAge)} apparent`}
+                  </title>
                 </g>
-              ) : null
-            ))}
+              );
+            })}
 
-            {hover && hovered ? (
+            {hover ? (
               <g>
                 <line
                   className="axis-line"
-                  x1={x(hovered.trueAge)} y1={0}
-                  x2={x(hovered.trueAge)} y2={innerH}
+                  x1={x(xs[hover.index])} y1={0}
+                  x2={x(xs[hover.index])} y2={innerH}
                 />
                 <circle
-                  cx={x(hovered.trueAge)} cy={y(hovered.secularAge)} r={4.5}
+                  cx={x(xs[hover.index])} cy={y(ys[hover.index])} r={4.5}
                   fill="var(--series-1)" stroke="var(--surface-2)" strokeWidth={2}
                 />
               </g>
@@ -190,34 +242,34 @@ export function AgeComparisonChart({
               transform={`translate(${-m.left + 12},${innerH / 2}) rotate(-90)`}
               textAnchor="middle"
             >
-              Apparent age (yr)
+              {view.yTitle}
             </text>
             <text
-              className="axis-title"
-              x={innerW / 2} y={innerH + 32}
+              className="axis-title" x={innerW / 2} y={innerH + 32}
               textAnchor="middle"
             >
-              True age (years before present)
+              {view.xTitle}
             </text>
           </g>
         </svg>
 
-        {hover && hovered ? (
+        {hover && point ? (
           <div
             className="tooltip"
             style={{
               left: `${hover.left + 12}px`,
               top: `${hover.top - 8}px`,
-              transform: hover.left > width * 0.6 ? "translateX(-100%) translateX(-24px)" : undefined,
+              transform: hover.left > width * 0.6
+                ? "translateX(-100%) translateX(-24px)" : undefined,
             }}
           >
             <div className="tt-row">
               <span className="tt-key" style={{ background: "var(--series-1)" }} />
-              true {formatAge(hovered.trueAge, digits)}
+              apparent {series.exact ? "" : "≈ "}{formatAge(point.secularAge, digits)}
             </div>
             <div className="tt-row">
               <span className="tt-key" style={{ background: "var(--series-1)" }} />
-              apparent {series.exact ? "" : "≈ "}{formatAge(hovered.secularAge, digits)}
+              true {formatAge(point.trueAge, digits)}
             </div>
           </div>
         ) : null}
@@ -235,4 +287,15 @@ export function AgeComparisonChart({
       </div>
     </figure>
   );
+}
+
+/**
+ * Append the domain endpoint unless a decade already sits close to it.
+ *
+ * Decades alone leave a log axis looking unfinished: 1…6056 labels 1, 10, 100,
+ * 1k and then stops, so a reader cannot see where it ends.
+ */
+function withEndpoint(decades: number[], limit: number): number[] {
+  const last = decades[decades.length - 1] ?? 1;
+  return limit / last > 2 ? [...decades, limit] : decades;
 }
