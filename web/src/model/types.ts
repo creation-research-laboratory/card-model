@@ -115,6 +115,37 @@ export interface LambdaSeries {
   readonly exact: boolean;
 }
 
+/**
+ * One chronostratigraphic unit, with its secular span mapped through the model.
+ *
+ * `inRange` is false when the unit's base is older than the calibration can
+ * produce — pinning the Flood to the K/Pg boundary caps the model at 66 Myr, so
+ * the Cretaceous and everything older simply has no young-earth date. Reported
+ * rather than dropped, so a chart can say the column runs out.
+ */
+export interface GeologicUnit {
+  readonly name: string;
+  readonly rank: string;
+  /** Older boundary, secular years. */
+  readonly baseSecularAge: number;
+  /** Younger boundary, secular years. */
+  readonly topSecularAge: number;
+  readonly inRange: boolean;
+  /** AGE of the older boundary. Absent when out of range. */
+  readonly baseTrueAge?: number;
+  readonly topTrueAge?: number;
+  /** Young-earth years the unit occupies. Absent when out of range. */
+  readonly durationTrue?: number;
+  /** Secular years elapsed per young-earth year across this unit. */
+  readonly acceleration?: number | null;
+}
+
+export interface GeologicColumn {
+  readonly units: readonly GeologicUnit[];
+  readonly maxSecularAge: number;
+  readonly exact: boolean;
+}
+
 /** Thrown when a source is asked for something it structurally cannot answer. */
 export class UnsupportedRequestError extends Error {
   constructor(message: string) {

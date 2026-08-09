@@ -16,6 +16,8 @@ import {
   type Chronology,
   type Constraint,
   type GeneralParams,
+  type GeologicColumn,
+  type GeologicUnit,
   type LambdaSeries,
   type Series,
   ModelError,
@@ -28,6 +30,12 @@ export interface PresetCatalog {
   chronologies: PrecomputedData["chronologies"];
   boundaries: PrecomputedData["boundaries"];
   secondConstraint: PrecomputedData["second_constraint"];
+  /**
+   * The ICS unit list, name and base age only. Passed through to `bridge.py`
+   * rather than read there: the browser already has it, and `card` has no
+   * business knowing about the chronostratigraphic chart.
+   */
+  geologicUnits: Array<{ name: string; rank: string; baseSecularAge: number }>;
 }
 
 interface BridgeError {
@@ -158,6 +166,17 @@ export class PyodideSource implements ModelSource {
       params: calibration.params,
       points,
     })));
+    return { ...payload, exact: true };
+  }
+
+  async geologicColumn(calibration: Calibration): Promise<GeologicColumn> {
+    const payload = this.unwrap<{ units: GeologicUnit[]; maxSecularAge: number }>(
+      await this.transport.call("geologic_column", JSON.stringify({
+        chronology: calibration.chronology,
+        params: calibration.params,
+        units: this.catalog.geologicUnits,
+      })),
+    );
     return { ...payload, exact: true };
   }
 

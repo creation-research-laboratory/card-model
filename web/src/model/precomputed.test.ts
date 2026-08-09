@@ -186,6 +186,82 @@ describe("lambda history", () => {
   });
 });
 
+describe("geologic column", () => {
+  it("carries every ICS unit, in range or not", async () => {
+    for (const key of source.presetKeys) {
+      const col = data.presets[key].geologic_column;
+      expect(col.length).toBe(14);
+      expect(col[0].name).toBe("Holocene");
+      expect(col[col.length - 1].name).toBe("Cambrian");
+    }
+  });
+
+  it("marks units the calibration cannot reach rather than dropping them", async () => {
+    // Pinning the Flood to K/Pg caps the model at 66 Myr, so the Cretaceous
+    // and everything older has no young-earth date. Silently omitting those
+    // rows would make the column look complete when it is not.
+    const kpg = data.presets["masoretic:kpg"].geologic_column;
+    expect(kpg.filter((u) => u.in_range).map((u) => u.name)).toEqual([
+      "Holocene", "Pleistocene", "Pliocene", "Miocene", "Paleogene",
+    ]);
+    for (const unit of kpg.filter((u) => !u.in_range)) {
+      expect(unit.duration_true).toBeUndefined();
+      expect(unit.base_true_age).toBeUndefined();
+    }
+
+    // The widest boundary reaches all of them.
+    expect(data.presets["masoretic:pc_c"].geologic_column
+      .every((u) => u.in_range)).toBe(true);
+  });
+
+  it("tiles the timeline without gaps or overlaps", async () => {
+    // Each unit's younger boundary is the previous unit's base, in both age
+    // systems. A gap would mean lost time; an overlap, double-counted time.
+    for (const key of source.presetKeys) {
+      const col = data.presets[key].geologic_column.filter((u) => u.in_range);
+      expect(col[0].top_true_age).toBe(0);
+      for (let i = 1; i < col.length; i++) {
+        expect(col[i].top_true_age).toBe(col[i - 1].base_true_age);
+        expect(col[i].top_secular_age).toBe(col[i - 1].base_secular_age);
+      }
+    }
+  });
+
+  it("gives every in-range unit a positive duration and acceleration", async () => {
+    for (const key of source.presetKeys) {
+      for (const u of data.presets[key].geologic_column.filter((x) => x.in_range)) {
+        expect(u.duration_true!).toBeGreaterThan(0);
+        expect(u.acceleration!).toBeGreaterThan(0);
+        // Acceleration is secular years per young-earth year, so it must
+        // reproduce the unit's secular span from its true duration.
+        const secular = u.base_secular_age - u.top_secular_age;
+        expect(Math.abs(u.acceleration! * u.duration_true! / secular - 1))
+          .toBeLessThan(1e-6);
+      }
+    }
+  });
+
+  it("compresses monotonically into the deep past", async () => {
+    // Older units sit further into the acceleration, so each should run at
+    // least as fast as the one above it. If this ever fails the model has
+    // changed shape, not the chart.
+    const col = data.presets["masoretic:pc_c"].geologic_column;
+    for (let i = 1; i < col.length; i++) {
+      expect(col[i].acceleration!).toBeGreaterThan(col[i - 1].acceleration!);
+    }
+  });
+
+  it("is reported as exact, because it is", async () => {
+    // Durations are differences of inverse ages agreeing to four or five
+    // significant figures; interpolating them would put 13.7% error on the
+    // Silurian. The generator ships numbers the solver produced instead.
+    const cal = await source.calibrate(preset("masoretic", "pc_c"));
+    const column = await source.geologicColumn(cal);
+    expect(column.exact).toBe(true);
+    expect(column.units).toHaveLength(14);
+  });
+});
+
 describe("interpolation accuracy", () => {
   it("is within the tolerance the UI is told to expect", async () => {
     // Measured against the live model at grid midpoints: 0.275% worst case

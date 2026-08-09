@@ -18,6 +18,7 @@
 import type {
   Calibration,
   CalibrationRequest,
+  GeologicColumn,
   LambdaSeries,
   Series,
 } from "./types.js";
@@ -64,6 +65,17 @@ export interface ModelSource {
    * curve only has a kink.
    */
   lambdaHistory(calibration: Calibration, points?: number): Promise<LambdaSeries>;
+
+  /**
+   * The geological column, as young-earth durations.
+   *
+   * Always exact from both sources. A duration is the difference of two
+   * inverse ages that agree to four or five significant figures, so
+   * interpolating them would put double-digit percentage error on the older
+   * units — the precomputed layer therefore ships numbers the solver produced
+   * rather than deriving them from its curve.
+   */
+  geologicColumn(calibration: Calibration): Promise<GeologicColumn>;
 
   /** Apparent secular age for a true age. Both AGEs. */
   forwardAge(calibration: Calibration, trueAge: number): Promise<number>;

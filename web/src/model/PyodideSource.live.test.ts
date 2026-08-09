@@ -52,6 +52,9 @@ beforeAll(async () => {
     chronologies: data.chronologies,
     boundaries: data.boundaries,
     secondConstraint: data.second_constraint,
+    geologicUnits: Object.values(data.presets)[0].geologic_column.map((u) => ({
+      name: u.name, rank: u.rank, baseSecularAge: u.base_secular_age,
+    })),
   });
   precomputed = new PrecomputedSource(data);
   await live.boot();
@@ -194,6 +197,48 @@ describe("lambda history agrees between the two sources", () => {
     });
     const history = await live.lambdaHistory(cal);
     expect(history.lambda[0]).toBeCloseTo(1e6, -1);
+  });
+});
+
+describe("geologic column agrees between the two sources", () => {
+  it("matches the precomputed column unit for unit", async () => {
+    for (const key of precomputed.presetKeys) {
+      const p = data.presets[key];
+      const request = preset(p.chronology, p.boundary);
+      const liveCol = await live.geologicColumn(await live.calibrate(request));
+      const preCol = await precomputed.geologicColumn(
+        await precomputed.calibrate(request));
+
+      expect(liveCol.units.length).toBe(preCol.units.length);
+      for (let i = 0; i < preCol.units.length; i++) {
+        const a = liveCol.units[i];
+        const b = preCol.units[i];
+        expect(a.name).toBe(b.name);
+        expect(a.inRange).toBe(b.inRange);
+        if (!a.inRange) continue;
+        // 1e-8 relative: the file rounds to 9 significant figures.
+        expect(closeEnough(a.durationTrue!, b.durationTrue!, 1e-7)).toBe(true);
+        expect(closeEnough(a.acceleration!, b.acceleration!, 1e-7)).toBe(true);
+      }
+    }
+  });
+
+  it("recomputes the column for custom parameters", async () => {
+    // The precomputed layer cannot answer this at all, which is the whole
+    // reason the live source implements it too.
+    const request: CalibrationRequest = {
+      ...preset("masoretic", "pc_c"), overrides: { lambda_F: 1.0e7 },
+    };
+    expect(precomputed.supports(request)).toBe(false);
+
+    const column = await live.geologicColumn(await live.calibrate(request));
+    expect(column.units.every((u) => u.inRange)).toBe(true);
+    // A faster Flood rate packs the column into less young-earth time.
+    const base = await live.geologicColumn(
+      await live.calibrate(preset("masoretic", "pc_c")));
+    const cambrian = (c: typeof column) =>
+      c.units.find((u) => u.name === "Cambrian")!.durationTrue!;
+    expect(cambrian(column)).toBeLessThan(cambrian(base));
   });
 });
 

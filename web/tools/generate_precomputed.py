@@ -40,6 +40,7 @@ from card.chronology import Chronology  # noqa: E402
 from card.models import GeneralModel  # noqa: E402
 
 PRESETS_PATH = WEB / "presets" / "presets.json"
+ICS_PATH = WEB / "data" / "ics-units.json"
 OUTPUT_PATH = WEB / "public" / "precomputed.json"
 
 # Enough significant digits that rounding is far below the interpolation error
@@ -145,12 +146,65 @@ def _lambda_grid(chronology: Chronology, model: GeneralModel,
     return grid
 
 
+def _geologic_column(model: GeneralModel, chronology: Chronology,
+                     units: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Each chronostratigraphic unit's secular span, as a young-earth duration.
+
+    Computed here rather than in the browser because the precomputed layer
+    cannot do it.  A duration is the *difference* of two inverse ages, and the
+    older units differ in the fourth or fifth significant figure: interpolating
+    at ~0.03% would put 13.7% error on the Silurian.  Exact in Python, shipped
+    as numbers, is both correct and smaller than the data it replaces.
+
+    A unit whose base is older than this calibration can produce is reported
+    with `in_range: false` rather than dropped, so the chart can say that the
+    column runs out rather than silently ending early.
+    """
+    present = chronology.present_date
+    max_secular = model.max_secular_age(present)
+
+    rows: List[Dict[str, Any]] = []
+    younger_secular = 0.0
+    younger_true = 0.0
+    for unit in units:
+        base_secular = float(unit["base_secular_age"])
+        row: Dict[str, Any] = {
+            "name": unit["name"],
+            "rank": unit["rank"],
+            "base_secular_age": base_secular,
+            "top_secular_age": younger_secular,
+        }
+        if base_secular <= max_secular:
+            base_true = model.inverse_age(base_secular, present)
+            duration = base_true - younger_true
+            secular_duration = base_secular - younger_secular
+            row.update({
+                "in_range": True,
+                "base_true_age": _round(base_true),
+                "top_true_age": _round(younger_true),
+                "duration_true": _round(duration),
+                # How much faster the clock ran: secular years elapsed per
+                # young-earth year across this unit.
+                "acceleration": _round(secular_duration / duration)
+                if duration > 0 else None,
+            })
+            younger_true = base_true
+        else:
+            row["in_range"] = False
+        younger_secular = base_secular
+        rows.append(row)
+    return rows
+
+
 def build(presets: Dict[str, Any]) -> Dict[str, Any]:
     chronologies = presets["chronologies"]
     boundaries = presets["boundaries"]
     second = presets["second_constraint"]
     points = int(presets["series"]["points"])
     lambda_points = int(presets["series"].get("lambda_points", 400))
+    ics = json.loads(ICS_PATH.read_text())
+    units = ics["units"]
 
     out_chronologies: Dict[str, Any] = {}
     out_presets: Dict[str, Any] = {}
@@ -224,6 +278,7 @@ def build(presets: Dict[str, Any]) -> Dict[str, Any]:
                     "date": lambda_grid,
                     "lambda": [_round(model.lambda_func(d)) for d in lambda_grid],
                 },
+                "geologic_column": _geologic_column(model, chronology, units),
             }
 
     return {
@@ -250,6 +305,9 @@ def build(presets: Dict[str, Any]) -> Dict[str, Any]:
         "second_constraint": {"label": second["label"],
                               "secular_age": float(second["secular_age"]),
                               "uncertainty": float(second["uncertainty"])},
+        "ics": {"version": ics["source"]["version"],
+                "url": ics["source"]["url"],
+                "reviewed": bool(ics["source"].get("reviewed", False))},
         "chronologies": out_chronologies,
         "presets": out_presets,
     }

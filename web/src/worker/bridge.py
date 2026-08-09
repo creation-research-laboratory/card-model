@@ -28,8 +28,8 @@ from card.parameters import (
     to_json_schema,
 )
 
-__all__ = ["calibrate", "series", "forward_age", "inverse_age", "schema",
-           "environment"]
+__all__ = ["calibrate", "series", "lambda_history", "geologic_column",
+           "forward_age", "inverse_age", "schema", "environment"]
 
 
 #: Relative offset used to place a sample just past a discontinuity.  Large
@@ -209,6 +209,60 @@ def lambda_history(request_json: str) -> str:
                 "floodEndDate": params.t_F2,
                 "presentDate": present,
             }, caught)
+    except Exception as exc:  # noqa: BLE001
+        return _error(exc)
+
+
+def geologic_column(request_json: str) -> str:
+    """
+    Each chronostratigraphic unit's secular span, as a young-earth duration.
+
+    The unit catalogue is passed in rather than read from a file: the browser
+    already has it, and `card` has no business knowing about the ICS chart.
+
+    Durations are *differences* of inverse ages, and the older units differ
+    only in the fourth or fifth significant figure — which is why the
+    precomputed layer cannot approximate this view and ships exact numbers
+    instead.  The same reasoning is why this returns durations rather than
+    endpoints for the caller to subtract.
+    """
+    try:
+        request = json.loads(request_json)
+        chronology = _chronology(request["chronology"])
+        model = GeneralModel(GeneralModelParams.from_dict(request["params"]))
+        present = chronology.present_date
+        max_secular = model.max_secular_age(present)
+
+        rows: List[Dict[str, Any]] = []
+        younger_secular = 0.0
+        younger_true = 0.0
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            for unit in request["units"]:
+                base_secular = float(unit["baseSecularAge"])
+                row: Dict[str, Any] = {
+                    "name": unit["name"],
+                    "rank": unit.get("rank", "period"),
+                    "baseSecularAge": base_secular,
+                    "topSecularAge": younger_secular,
+                }
+                if base_secular <= max_secular:
+                    base_true = model.inverse_age(base_secular, present)
+                    duration = base_true - younger_true
+                    row.update({
+                        "inRange": True,
+                        "baseTrueAge": base_true,
+                        "topTrueAge": younger_true,
+                        "durationTrue": duration,
+                        "acceleration": ((base_secular - younger_secular) / duration
+                                         if duration > 0 else None),
+                    })
+                    younger_true = base_true
+                else:
+                    row["inRange"] = False
+                younger_secular = base_secular
+                rows.append(row)
+            return _ok({"units": rows, "maxSecularAge": max_secular}, caught)
     except Exception as exc:  # noqa: BLE001
         return _error(exc)
 

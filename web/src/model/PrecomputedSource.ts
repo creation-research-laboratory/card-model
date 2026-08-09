@@ -20,6 +20,7 @@ import {
   type Chronology,
   type Constraint,
   type GeneralParams,
+  type GeologicColumn,
   type LambdaSeries,
   type Series,
   UnsupportedRequestError,
@@ -57,7 +58,15 @@ export interface PrecomputedData {
     }>;
     series: { true_age: number[]; secular_age: number[] };
     lambda_history: { date: number[]; lambda: number[] };
+    geologic_column: Array<{
+      name: string; rank: string;
+      base_secular_age: number; top_secular_age: number;
+      in_range: boolean;
+      base_true_age?: number; top_true_age?: number;
+      duration_true?: number; acceleration?: number | null;
+    }>;
   }>;
+  ics: { version: string; url: string; reviewed: boolean };
 }
 
 export class PrecomputedSource implements ModelSource {
@@ -175,6 +184,34 @@ export class PrecomputedSource implements ModelSource {
       presentDate: calibration.chronology.ageOfEarth,
       exact: true,
     };
+  }
+
+  async geologicColumn(calibration: Calibration): Promise<GeologicColumn> {
+    const preset = this.presetFor(calibration);
+    // Exact, unlike everything else this source derives from its curve: the
+    // generator ran the real solver for these. Durations are differences of
+    // inverse ages agreeing to four or five significant figures, and
+    // interpolating them would put 13.7% error on the Silurian.
+    return {
+      units: preset.geologic_column.map((u) => ({
+        name: u.name,
+        rank: u.rank,
+        baseSecularAge: u.base_secular_age,
+        topSecularAge: u.top_secular_age,
+        inRange: u.in_range,
+        baseTrueAge: u.base_true_age,
+        topTrueAge: u.top_true_age,
+        durationTrue: u.duration_true,
+        acceleration: u.acceleration,
+      })),
+      maxSecularAge: preset.max_secular_age,
+      exact: true,
+    };
+  }
+
+  /** ICS chart the column was built from, so the UI can cite and caveat it. */
+  get icsSource(): PrecomputedData["ics"] {
+    return this.data.ics;
   }
 
   async forwardAge(calibration: Calibration, trueAge: number): Promise<number> {

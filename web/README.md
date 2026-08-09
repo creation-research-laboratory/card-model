@@ -57,6 +57,20 @@ error in this package. This curve *does* step at the Flood, so its grid carries
 two samples a fraction of a year apart and the generator refuses to emit a
 version where rounding has collapsed them.
 
+**The geological column in young-earth time** has no counterpart in the
+package. One horizontal bar per ICS unit, spanning the true ages its secular
+boundaries map to, with time running right to left and a secondary calendar-date
+axis. Units the calibration cannot reach get a marked empty row rather than
+being dropped — pinning the Flood to K/Pg caps the model at 66 Myr, so nine of
+the fourteen have no young-earth date at all, and an empty row says that where
+an omission would not.
+
+Its durations are **precomputed exactly in Python**, not derived in the browser.
+A duration is the difference of two inverse ages that agree to four or five
+significant figures; interpolating at the precomputed layer's ~0.03% would put
+13.7% error on the Silurian. Unit boundaries live in `data/ics-units.json` and
+are **provisional** until checked against the published ICS chart.
+
 Colors are the first two categorical slots of the reference palette, validated
 in both modes: worst CVD separation ΔE 24.7 light / 26.8 dark against a ≥ 8
 target, contrast ≥ 3:1. Both charts carry a crosshair tooltip and a collapsed

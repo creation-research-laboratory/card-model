@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AgeComparisonChart, type AgeOrientation } from "../charts/AgeComparisonChart.js";
+import { GeologicColumnChart } from "../charts/GeologicColumnChart.js";
 import { LambdaHistoryChart } from "../charts/LambdaHistoryChart.js";
 import { CalibrationReadout } from "./CalibrationReadout.js";
 import { PresetPicker } from "./PresetPicker.js";
@@ -20,7 +21,7 @@ import { PrecomputedSource, type PrecomputedData } from "../model/PrecomputedSou
 import { PyodideSource } from "../model/PyodideSource.js";
 import { WorkerTransport } from "../worker/transport.js";
 import type {
-  Calibration, CalibrationRequest, LambdaSeries, Series,
+  Calibration, CalibrationRequest, GeologicColumn, LambdaSeries, Series,
 } from "../model/types.js";
 
 interface Props {
@@ -44,6 +45,11 @@ export function App({ data }: Props) {
             chronologies: data.chronologies,
             boundaries: data.boundaries,
             secondConstraint: data.second_constraint,
+            // Every preset carries the same unit list, including the units it
+            // cannot reach, so any one of them is a complete catalogue.
+            geologicUnits: Object.values(data.presets)[0].geologic_column.map((u) => ({
+              name: u.name, rank: u.rank, baseSecularAge: u.base_secular_age,
+            })),
           },
         );
       },
@@ -60,6 +66,7 @@ export function App({ data }: Props) {
   const [calibration, setCalibration] = useState<Calibration | null>(null);
   const [series, setSeries] = useState<Series | null>(null);
   const [history, setHistory] = useState<LambdaSeries | null>(null);
+  const [column, setColumn] = useState<GeologicColumn | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Which way round the age chart is read. Both directions are the same
   // model; a reader arriving with a published radiometric age wants "true".
@@ -84,14 +91,16 @@ export function App({ data }: Props) {
     try {
       const source = await manager.resolve(next);
       const cal = await source.calibrate(next);
-      const [curve, lambda] = await Promise.all([
+      const [curve, lambda, geology] = await Promise.all([
         source.series(cal, 400),
         source.lambdaHistory(cal, 400),
+        source.geologicColumn(cal),
       ]);
       if (mine !== generation.current) return;
       setCalibration(cal);
       setSeries(curve);
       setHistory(lambda);
+      setColumn(geology);
       setError(null);
     } catch (caught) {
       if (mine !== generation.current) return;
@@ -206,6 +215,10 @@ export function App({ data }: Props) {
           ) : null}
 
           {history ? <LambdaHistoryChart history={history} /> : null}
+
+          {column && calibration ? (
+            <GeologicColumnChart column={column} calibration={calibration} />
+          ) : null}
 
           {series && calibration ? (
             <SeriesTable series={series} calibration={calibration} />

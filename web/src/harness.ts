@@ -56,6 +56,11 @@ const manager = new ModelSourceManager({
         chronologies: data.chronologies,
         boundaries: data.boundaries,
         secondConstraint: data.second_constraint,
+        // Every preset carries the same unit list, including the ones it
+        // cannot reach, so any one of them is a complete catalogue.
+        geologicUnits: Object.values(data.presets)[0].geologic_column.map((u) => ({
+          name: u.name, rank: u.rank, baseSecularAge: u.base_secular_age,
+        })),
       },
     );
   },

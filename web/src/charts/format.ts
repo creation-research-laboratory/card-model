@@ -38,6 +38,25 @@ export function formatMultiplier(value: number): string {
     : `${trim(mantissa, 3)}×10^${exponent}`;
 }
 
+/**
+ * A span of young-earth time, in whatever unit makes it legible.
+ *
+ * The geological column collapses across nine orders of magnitude under this
+ * model — the Holocene lasts millennia while the Silurian lasts days — so a
+ * single unit would render most rows as "0.03" or "0.0000008".
+ */
+export function formatDuration(years: number): string {
+  if (!Number.isFinite(years) || years < 0) return "—";
+  if (years >= 1) return `${trim(years, 4)} yr`;
+  const days = years * 365.25;
+  if (days >= 1) return `${trim(days, 3)} days`;
+  const hours = days * 24;
+  if (hours >= 1) return `${trim(hours, 3)} hours`;
+  const minutes = hours * 60;
+  if (minutes >= 1) return `${trim(minutes, 3)} min`;
+  return `${trim(minutes * 60, 3)} s`;
+}
+
 /** A DATE — years after Day 1 of Creation. Always small, always plain. */
 export function formatDate(date: number): string {
   return `${trim(date, 6)}`;
