@@ -23,6 +23,11 @@
   --series-1: #2a78d6; /* the CARD model */
   --series-2: #eb6834; /* the constant-rate reference */
 
+  /* Breakpoint markers. Deliberately not a series slot: those are categorical
+     data, these are annotations about the model, and a marker sharing the
+     constant-rate reference's colour would read as that series. */
+  --marker: #7b5ea7;
+
   --grid: #e6e6e2;
   --warn: #9a6700;
   --ok: #1a7f37;
@@ -44,6 +49,7 @@
 
     --series-1: #3987e5;
     --series-2: #d95926;
+    --marker: #a98fd0;
 
     --grid: #2c2c2a;
     --warn: #d29922;
@@ -60,6 +66,7 @@
   --text-muted: #8f8e85;
   --series-1: #3987e5;
   --series-2: #d95926;
+  --marker: #a98fd0;
   --grid: #2c2c2a;
   --warn: #d29922;
   --ok: #3fb950;
@@ -242,6 +249,37 @@ dl.readout.stacked dd { padding-left: .1rem; }
   margin: .15rem 0 0; font-size: .72rem; color: var(--text-muted);
   line-height: 1.4;
 }
+
+/* Breakpoint markers on the geological column.
+
+   The strip keeps a fixed minimum height whether or not a marker is hovered:
+   swapping the legend for a two-line detail would otherwise shift every row
+   below it, and the thing being hovered is a three-pixel band. */
+.marker-detail {
+  min-height: 3.2rem;
+  margin: .5rem 0 0;
+  font-size: .78rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+.marker-detail p { margin: 0; }
+.marker-detail dl { margin: 0; display: grid; gap: .3rem; }
+.marker-detail dt {
+  font-weight: 600; color: var(--text-primary); font-size: .78rem;
+}
+.marker-detail dt.rate { color: var(--marker); }
+.marker-detail dt.anchor { color: var(--text-secondary); }
+.marker-detail dd { margin: 0; }
+.marker-age { font-weight: 400; color: var(--text-muted); font-family: var(--mono); }
+
+/* Legend keys: a solid rule for a rate change, a dashed one for a fitted date,
+   matching how each is drawn in the figure. */
+.marker-key {
+  display: inline-block; width: 1.4rem; height: 0;
+  vertical-align: middle; margin-right: .15rem;
+}
+.marker-key.rate { border-top: 2px solid var(--marker); }
+.marker-key.anchor { border-top: 2px dashed var(--text-muted); }
 
 /* Age converter. The arrow shows which way the conversion is running, so the
    reader can see which box is authoritative rather than guessing. */

@@ -21,6 +21,7 @@ import { useMemo, useState } from "react";
 import { scaleLinear } from "d3-scale";
 
 import { linearTicks } from "./axes.js";
+import { groupMarkers, markersFor } from "./breakpoints.js";
 import { formatDuration, formatMultiplier, formatAge } from "./format.js";
 import type { Calibration, GeologicColumn } from "../model/types.js";
 
@@ -40,13 +41,35 @@ interface Props {
 }
 
 const ROW_HEIGHT = 22;
-const MARGIN = { top: 46, right: 20, bottom: 34, left: 104 };
+// The top band carries three tiers: marker labels, the calendar axis title,
+// and the calendar tick labels.
+const MARGIN = { top: 66, right: 20, bottom: 34, left: 104 };
+/** Sub-pixel intervals still need to be visible; see `groupMarkers`. */
+const MIN_BAND_PX = 3;
+
+/**
+ * A name for a cluster of markers.
+ *
+ * `t_F` and `t_F2` always cluster, and "Flood begins / Flood ends" is a poor
+ * label for a mark three pixels wide. When every label in the group opens with
+ * the same word, that word plus the span it covers says it better.
+ */
+function labelForGroup(markers: readonly { label: string; trueAge: number }[]): string {
+  if (markers.length === 1) return markers[0].label;
+  const first = markers.map((m) => m.label.split(" ")[0]);
+  if (first.every((w) => w === first[0])) {
+    const span = Math.abs(markers[0].trueAge - markers[markers.length - 1].trueAge);
+    return span > 0 ? `${first[0]} (${formatDuration(span)})` : first[0];
+  }
+  return markers.map((m) => m.label).join(" / ");
+}
 
 export function GeologicColumnChart({
   column, calibration, presentYear = new Date().getUTCFullYear(), width = 720,
   fullColumnBoundary = null, onSelectBoundary,
 }: Props) {
   const [hover, setHover] = useState<number | null>(null);
+  const [openMarker, setOpenMarker] = useState<string | null>(null);
 
   const rows = column.units;
   const innerW = width - MARGIN.left - MARGIN.right;
@@ -72,6 +95,20 @@ export function GeologicColumnChart({
       ticks: linearTicks(0, limit, 6),
     };
   }, [rows, calibration, innerW]);
+
+  // Only the markers this axis actually reaches — the same test the bars get.
+  const groups = useMemo(() => {
+    const visible = markersFor(calibration)
+      .filter((m) => m.trueAge >= 0 && m.trueAge <= oldest);
+    return groupMarkers(visible, x);
+  }, [calibration, oldest, x]);
+
+  const openDetail = useMemo(() => {
+    const group = groups.find(
+      (g) => g.markers.map((m) => m.key).join("+") === openMarker,
+    );
+    return group?.markers ?? null;
+  }, [groups, openMarker]);
 
   /**
    * Calendar year for a true age. Uses astronomical year numbering internally
@@ -135,24 +172,54 @@ export function GeologicColumnChart({
               );
             })}
 
-            {/* The Flood, which is where almost every bar piles up. */}
-            {(() => {
-              const floodAge = calibration.chronology.ageOfEarth
-                - calibration.params.t_F;
-              if (!(floodAge > 0 && floodAge <= oldest)) return null;
+            {/* Where the model changes behaviour, and where it was pinned. */}
+            {groups.map((group) => {
+              const isRate = group.markers.some((m) => m.kind === "rate");
+              const key = group.markers.map((m) => m.key).join("+");
+              const isOpen = openMarker === key;
+              const bandW = Math.max(MIN_BAND_PX, group.to - group.from);
+              const mid = group.from + bandW / 2;
+
               return (
-                <g>
-                  <line
-                    x1={x(floodAge)} y1={-8} x2={x(floodAge)} y2={innerH}
-                    stroke="var(--text-muted)" strokeWidth={1} opacity={0.65}
+                <g
+                  key={key}
+                  onPointerEnter={() => setOpenMarker(key)}
+                  onPointerLeave={() => setOpenMarker(null)}
+                  style={{ cursor: "help" }}
+                >
+                  {/* Generous hit target: the mark itself is a few pixels. */}
+                  <rect
+                    x={group.from - 8} y={-52} width={bandW + 16}
+                    height={innerH + 52} fill="transparent"
                   />
-                  <text className="axis-label" x={x(floodAge)} y={-30}
-                        textAnchor="middle" fill="var(--text-secondary)">
-                    Flood
+                  {group.markers.length > 1 ? (
+                    // An interval, not an instant. Widened to stay visible, so
+                    // the label carries the real duration.
+                    <rect
+                      x={group.from} y={-8} width={bandW} height={innerH + 8}
+                      fill="var(--marker)" opacity={isOpen ? 0.3 : 0.18}
+                    />
+                  ) : null}
+                  <line
+                    x1={mid} y1={-8} x2={mid} y2={innerH}
+                    stroke={isRate ? "var(--marker)" : "var(--text-muted)"}
+                    strokeWidth={1}
+                    // Dashed says "fitted here", solid says "changes here".
+                    strokeDasharray={isRate ? undefined : "4 3"}
+                    opacity={isOpen ? 1 : 0.75}
+                  />
+                  <text
+                    className="axis-label" x={mid} y={-48}
+                    textAnchor={
+                      mid > innerW - 40 ? "end" : mid < 40 ? "start" : "middle"
+                    }
+                    fill={isRate ? "var(--marker)" : "var(--text-muted)"}
+                  >
+                    {labelForGroup(group.markers)}
                   </text>
                 </g>
               );
-            })()}
+            })}
 
             {rows.map((unit, i) => {
               const yTop = i * ROW_HEIGHT;
@@ -223,6 +290,30 @@ export function GeologicColumnChart({
             </text>
           </g>
         </svg>
+      </div>
+
+      {/* Reserved height, so hovering a marker does not reflow the page. */}
+      <div className="marker-detail" aria-live="polite">
+        {openDetail ? (
+          <dl>
+            {openDetail.map((m) => (
+              <div key={m.key}>
+                <dt className={m.kind === "rate" ? "rate" : "anchor"}>
+                  {m.label}
+                  <span className="marker-age"> · {formatAge(m.trueAge, 4)} BP</span>
+                </dt>
+                <dd>{m.detail}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : (
+          <p>
+            <span className="marker-key rate" aria-hidden="true" /> where λ or
+            its relaxation constant changes ·{" "}
+            <span className="marker-key anchor" aria-hidden="true" /> a date the
+            model was fitted to. Hover either for detail.
+          </p>
+        )}
       </div>
 
       {inRangeCount < rows.length ? (
