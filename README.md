@@ -101,6 +101,37 @@ card calibrate myrun.yaml    # solve its constraints exactly, in milliseconds
 card fit myrun.yaml          # the full MCMC: chain, figures, summary
 ```
 
+## The web app
+
+[`web/`](https://github.com/creation-research-laboratory/card-model/tree/main/web)
+is a browser front end for the model: pick a young-earth chronology and the
+stratigraphic boundary the Flood is identified with, and it draws the resulting
+age curve, the decay-rate history λ(t), and the geologic column in young-earth
+time.
+
+It **runs this package**, rather than reimplementing it. The `card` wheel is
+built from the checkout and loaded into a Pyodide interpreter in a Web Worker,
+so the model in the browser is the model in `src/` — there is no ported copy to
+drift. A small precomputed table answers the built-in presets instantly, and the
+5.8 MB interpreter is fetched only if a reader asks for something the table
+cannot answer.
+
+```bash
+cd web
+nvm use          # Node 20.12+
+npm install
+npm run setup    # build the card wheel, vendor Pyodide, regenerate presets
+npm run dev      # http://localhost:8423
+```
+
+Not yet deployed — it runs locally. Presets only for now; free parameter entry
+is the next phase.
+[`web/README.md`](https://github.com/creation-research-laboratory/card-model/blob/main/web/README.md)
+covers the architecture, and
+[`web/OPEN_ITEMS.md`](https://github.com/creation-research-laboratory/card-model/blob/main/web/OPEN_ITEMS.md)
+records what is still unresolved — including two items that need a human rather
+than a fix.
+
 ## Ages and dates
 
 One convention runs through the package: a name ending in `_DATE` counts years
