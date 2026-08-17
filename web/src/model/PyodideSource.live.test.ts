@@ -189,7 +189,7 @@ describe("lambda history agrees between the two sources", () => {
       compared++;
       // 1e-4, and the floor is arithmetic rather than arbitrary: the file
       // stores dates to 9 significant figures, so a date near 1656 carries
-      // ~1e-6 yr of rounding, and k_F ~ 2/yr turns that into ~2e-6 of relative
+      // ~1e-6 yr of rounding, and k_F ~ 10/yr turns that into ~1e-5 of relative
       // error in lambda. It was 1e-8 when k_F was 0.005; the tolerance has to
       // track the calibration, so this leaves an order of magnitude of room.
       expect(closeEnough(match, pre.lambda[i], 1e-4)).toBe(true);

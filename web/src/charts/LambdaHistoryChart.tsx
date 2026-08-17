@@ -7,9 +7,12 @@
  * exactly the confusion that once caused a real fitting error — hence the
  * explicit label rather than a bare "Time".
  *
- * Unlike the age curve, this one genuinely steps at the Flood. The data carries
- * two samples a fraction of a year apart to render that edge, so the polyline
- * must be drawn straight through them with no smoothing.
+ * Unlike the age curve, this one genuinely steps — but at exactly one place.
+ * λ jumps *up* at `t_F`, the Flood's onset. It is continuous at `t_F2`, because
+ * `lambda_F2` is pinned to whatever the in-Flood exponential has fallen to by
+ * then; the rate changes pace there, not value. The data carries two samples a
+ * fraction of a year apart across the onset to render that edge, so the
+ * polyline must be drawn straight through them with no smoothing.
  *
  * One series, so no legend box: the title already says what is plotted.
  */
@@ -47,22 +50,29 @@ export function LambdaHistoryChart({
   const view = useMemo(() => {
     const maxLambda = Math.max(...history.lambda);
 
-    // How long the relaxation actually takes, read from the data rather than
-    // assumed: the last date at which lambda is still meaningfully above
-    // background. Calibrating an instantaneous onset drives k_F to ~2/yr, so
-    // this is a handful of years out of six millennia — 0.08% of the full
-    // axis, which is why the full view renders it as a bare vertical line. It
-    // is not an artifact; it is what the model looks like at that scale.
+    // Two timescales now, and they want different treatment.
+    //
+    // `tailSpan` is how long the *post-Flood* relaxation runs: the last date at
+    // which lambda is still meaningfully above background. At k_PF ~ 0.005/yr
+    // that is millennia — most of the axis — so it is what the full view is
+    // already showing, and it is NOT what makes the curve look like a spike.
+    //
+    // The spike is the in-Flood drop: lambda falls four orders of magnitude
+    // inside `[t_F, t_F2]`, one year out of six thousand. That is what the
+    // zoom needs to target. Zooming to `tailSpan` (as this did when a single k
+    // served both phases) now frames two thirds of the timeline and magnifies
+    // nothing.
     let settled = history.floodEndDate;
     for (let i = 0; i < history.date.length; i++) {
       if (history.lambda[i] > 1.001) settled = history.date[i];
     }
-    const decaySpan = Math.max(settled - history.floodStartDate, 1e-3);
+    const tailSpan = Math.max(settled - history.floodEndDate, 1e-3);
+    const floodSpan = Math.max(history.floodEndDate - history.floodStartDate, 1e-3);
 
     const domain: [number, number] = zoom === "flood"
       ? [
-          Math.max(0, history.floodStartDate - decaySpan * 0.08),
-          Math.min(history.presentDate, history.floodEndDate + decaySpan * 1.15),
+          Math.max(0, history.floodStartDate - floodSpan * 0.25),
+          Math.min(history.presentDate, history.floodEndDate + floodSpan * 3),
         ]
       : [0, history.presentDate];
 
@@ -70,7 +80,7 @@ export function LambdaHistoryChart({
     // Domain starts at 1 because λ is normalized to background and cannot go
     // below it — the model describes accelerated decay, never slower.
     const y = scaleLog().domain([1, maxLambda * 1.2]).range([innerH, 0]).clamp(true);
-    return { x, y, maxLambda, domain, decaySpan };
+    return { x, y, maxLambda, domain, tailSpan, floodSpan };
   }, [history, innerW, innerH, zoom]);
 
   const { x, y, maxLambda } = view;
@@ -78,8 +88,8 @@ export function LambdaHistoryChart({
   // reaches the edges instead of stopping short.
   const path = polyline(
     history.date, history.lambda, x, y,
-    (d, l) => l > 0 && d >= view.domain[0] - view.decaySpan
-      && d <= view.domain[1] + view.decaySpan,
+    (d, l) => l > 0 && d >= view.domain[0] - view.floodSpan
+      && d <= view.domain[1] + view.floodSpan,
   );
 
   const xTicks = linearTicks(view.domain[0], view.domain[1], 6);
@@ -111,13 +121,15 @@ export function LambdaHistoryChart({
           <strong>date</strong> — years <em>after</em> Day 1 of Creation — which
           runs opposite to the ages on the chart above.{" "}
           {zoom === "full" ? (
-            <>The relaxation takes about{" "}
-            {view.decaySpan < 1
-              ? `${(view.decaySpan * 365.25).toFixed(0)} days`
-              : `${view.decaySpan.toFixed(1)} years`}
-            , which is why it reads as a vertical line across six millennia.</>
+            <>The rate falls by most of its range inside the Flood
+            year, which is why that part reads as a vertical line here; the
+            remainder then relaxes for roughly{" "}
+            {view.tailSpan < 1
+              ? `${(view.tailSpan * 365.25).toFixed(0)} days`
+              : `${Math.round(view.tailSpan).toLocaleString()} years`}
+            {" "}after it.</>
           ) : (
-            <>Zoomed to the decay itself.</>
+            <>Zoomed to the Flood year, where the steep drop happens.</>
           )}
         </p>
         {onZoom ? (
@@ -131,7 +143,7 @@ export function LambdaHistoryChart({
             <button type="button" aria-pressed={zoom === "flood"}
                     className={zoom === "flood" ? "on" : ""}
                     onClick={() => onZoom("flood")}>
-              The decay
+              The Flood year
             </button>
           </div>
         ) : null}
@@ -145,7 +157,8 @@ export function LambdaHistoryChart({
           aria-label={
             `Decay rate against date. Background until the Flood at date ` +
             `${formatDate(history.floodStartDate)}, where it jumps to ` +
-            `${formatMultiplier(maxLambda)} times background, then relaxes back.`
+            `${formatMultiplier(maxLambda)} times background, falls steeply across ` +
+            `the Flood year, then relaxes slowly toward background.`
           }
           onPointerMove={onMove}
           onPointerLeave={() => setHover(null)}

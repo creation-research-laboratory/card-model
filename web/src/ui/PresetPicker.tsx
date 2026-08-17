@@ -67,9 +67,9 @@ export function PresetPicker({
 
       <p style={{ fontSize: ".8rem", color: "var(--text-secondary)", margin: "0 0 .8rem" }}>
         The Flood <em>begins</em> at the {data.calibration.flood_start.label}{" "}
-        contact in every scenario. The decay rate spikes there and starts
-        falling immediately; this choice fits the curve so that one year in, the
-        apparent age is the boundary you pick.
+        contact in every scenario, and the rate spikes there. This choice sets
+        where it has fallen to a year later. A third date &mdash; the end of the
+        Ice Age &mdash; fixes how slowly it relaxes over the millennia after.
       </p>
 
       <h2 style={{ marginTop: "1.1rem" }}>Calibrated on</h2>
@@ -83,6 +83,11 @@ export function PresetPicker({
         <dd>
           {formatAge(chron.post_flood_boundary_age)} BP → appears{" "}
           {formatAge(data.boundaries[boundary].secular_age)}
+        </dd>
+        <dt>{data.calibration.ice_age_end.label}</dt>
+        <dd>
+          {formatAge(chron.ice_age_end_age)} BP → appears{" "}
+          {formatAge(data.calibration.ice_age_end.secular_age)}
         </dd>
         <dt>Age of the Earth</dt>
         <dd>{formatAge(chron.age_of_earth)}</dd>

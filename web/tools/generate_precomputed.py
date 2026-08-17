@@ -66,10 +66,17 @@ def _relaxation_span(model: GeneralModel) -> float:
     """
     Years over which the post-Flood rate is still meaningfully above background.
 
-    Derived from the model rather than assumed, because k_F swings by three
-    orders of magnitude between calibrations: ~2/yr when the two matched pairs
-    sit a year apart, ~0.006/yr when they sit millennia apart.  A hardcoded
-    window would be far too wide for one and far too narrow for the other.
+    Derived from the model rather than assumed, because the two relaxation
+    constants differ by three orders of magnitude: k_F reaches ~10/yr inside the
+    Flood year, k_PF ~0.005/yr for millennia after.  A hardcoded window would be
+    far too wide for one and far too narrow for the other.
+
+    KNOWN LIMITATION: this reads `k_F` only, so it sizes the window to the fast
+    in-Flood drop (a few years) and not to the post-Flood tail (millennia).
+    That is why the age grid's worst interpolation error sits at 0.77% rather
+    than the 0.27% a single-rate curve managed.  Sizing it from both rates would
+    tighten that; it is deliberately left alone here rather than changed as a
+    side effect of a wording pass.
     """
     k = getattr(model, "k_F", 0.0)
     excess = getattr(model, "lambda_F", 1.0) - 1.0
@@ -113,9 +120,9 @@ def _true_age_grid(chronology: Chronology, model: GeneralModel,
 
     # The log grid is uniform in true age, but the curve is not: just younger
     # than a breakpoint, `forward_age` climbs by the whole post-relaxation
-    # integral.  With k_F ~ 2 that is a factor of ~500 between two neighbouring
-    # samples, and interpolating across it is meaninglessly wrong -- measured at
-    # 12,000% before this.  Refine log-spaced in time-since-the-breakpoint, the
+    # integral.  With k_F ~ 10 that is orders of magnitude between two
+    # neighbouring samples, and interpolating across it is meaninglessly wrong
+    # -- measured at 12,000% before this.  Refine log-spaced in time-since-the-breakpoint, the
     # same way the lambda grid does, so the climb is resolved for any k_F.
     settle = _relaxation_span(model)
     for date in model.breakpoints():
@@ -140,8 +147,8 @@ def _true_age_grid(chronology: Chronology, model: GeneralModel,
 #: pressures: it must exceed the resolution of SIGFIGS rounding or the pair
 #: collapses into a duplicate row (which happened, silently, to an earlier
 #: attempt), and it must be small against 1/k_F or the sample records a lambda
-#: that has already relaxed.  k_F reaches ~2/yr in this configuration, so 1e-6
-#: cost 0.35% of the peak; 1e-7 costs 0.035% and still survives rounding.
+#: that has already relaxed.  k_F reaches ~10/yr in this configuration, so 1e-6
+#: cost ~1.7% of the peak; 1e-7 costs ~0.17% and still survives rounding.
 _STEP_EPSILON = 1e-7
 
 
@@ -159,13 +166,13 @@ def _lambda_grid(chronology: Chronology, model: GeneralModel,
     `lambda_func` uses `<=`, so the sample at a breakpoint belongs to the
     earlier region and its partner must sit just after.
 
-    The linear part alone is not enough.  Calibrating the Flood as an
-    instantaneous onset drives k_F to ~2/yr, so lambda relaxes within about
-    five years — while a 400-point linear grid over six millennia samples every
-    fifteen.  The whole decay fell between two samples and the curve rendered
-    as a bare spike.  So the relaxation regions are additionally sampled
-    log-spaced in time-since-the-breakpoint, which resolves the shape for any
-    k_F rather than for the one that happened to be in front of us.
+    The linear part alone is not enough.  k_F reaches ~10/yr, so the in-Flood
+    drop is spent inside the Flood year — while a 400-point linear grid over six
+    millennia samples every fifteen years.  The whole drop fell between two
+    samples and the curve rendered as a bare spike.  So the relaxation regions
+    are additionally sampled log-spaced in time-since-the-breakpoint, which
+    resolves the shape for any decay constant rather than for the one that
+    happened to be in front of us.
     """
     present = chronology.present_date
     step = present / (points - 1)

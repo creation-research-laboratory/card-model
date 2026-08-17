@@ -135,8 +135,9 @@ export function App({ data }: Props) {
           Converting between young-earth ages and the apparent ages rock would
           yield under a time-varying decay rate. The Flood begins at the
           Precambrian–Cambrian contact and ends a year later at the boundary you
-          choose; the rate relaxes at one pace across that year and a far slower
-          one for millennia after, so three matched dates fix the curve exactly.
+          choose. The rate falls steeply across that year and far more slowly
+          for millennia after, so it takes three matched dates — those two
+          contacts and the end of the Ice Age — to fix the curve exactly.
         </p>
       </header>
 

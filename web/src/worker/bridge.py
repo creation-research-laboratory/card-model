@@ -209,11 +209,12 @@ def lambda_history(request_json: str) -> str:
                 after = _just_after(date)
                 if after <= present:
                     grid.add(after)
-                # A linear grid cannot resolve the relaxation: k_F reaches
-                # ~2/yr here, so lambda is back at background within about five
-                # years while a 400-point grid over six millennia samples every
-                # fifteen.  Log-spaced points from the breakpoint capture the
-                # shape for any decay constant.
+                # A linear grid cannot resolve either relaxation.  k_F reaches
+                # ~10/yr, so the in-Flood drop is over inside the Flood year,
+                # while a 400-point grid over six millennia samples every
+                # fifteen years.  Log-spaced points from each breakpoint
+                # capture the shape for any decay constant, which matters more
+                # now that k_F and k_PF differ by three orders of magnitude.
                 span = present - date
                 if span > 0:
                     lo = max(1e-4, span * 1e-9)

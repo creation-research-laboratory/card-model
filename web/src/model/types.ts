@@ -106,8 +106,10 @@ export interface Series {
  * The one curve in the app whose x axis is a DATE (years after Day 1 of
  * Creation) rather than an AGE. It is also the one that genuinely steps —
  * `forward_age` is the integral of a bounded rate and therefore continuous,
- * but lambda itself jumps at t_c, t_F and t_F2. Each breakpoint carries two
- * samples so a chart draws the jump rather than a ramp.
+ * but lambda itself jumps at t_F, the Flood's onset. It does *not* jump at
+ * t_F2: `lambda_F2` is pinned to whatever the in-Flood exponential has reached
+ * by then, so the rate changes pace there rather than value. The onset carries
+ * two samples so a chart draws its jump rather than a ramp.
  */
 export interface LambdaSeries {
   /** DATEs, ascending, from 0 to the present. */

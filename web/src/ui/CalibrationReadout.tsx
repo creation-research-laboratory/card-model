@@ -31,7 +31,7 @@ export function CalibrationReadout({
       <h2 id="calibration-heading">Calibration</h2>
 
       <dl className="readout">
-        <dt>λ<sub>F</sub></dt>
+        <dt>λ<sub>F</sub> (peak, at onset)</dt>
         <dd>{formatMultiplier(params.lambda_F)}× background</dd>
         <dt>k<sub>F</sub> (in Flood)</dt>
         <dd>{trim(params.k_F, 6)} yr⁻¹</dd>
