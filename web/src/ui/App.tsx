@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgeComparisonChart, type AgeOrientation } from "../charts/AgeComparisonChart.js";
 import { GeologicColumnChart } from "../charts/GeologicColumnChart.js";
 import { LambdaHistoryChart, type LambdaZoom } from "../charts/LambdaHistoryChart.js";
+import { AgeConverter } from "./AgeConverter.js";
 import { CalibrationReadout } from "./CalibrationReadout.js";
 import { ParameterPanel } from "./ParameterPanel.js";
 import { PresetPicker } from "./PresetPicker.js";
@@ -83,7 +84,13 @@ export function App({ data }: Props) {
   const [series, setSeries] = useState<Series | null>(null);
   const [history, setHistory] = useState<LambdaSeries | null>(null);
   const [column, setColumn] = useState<GeologicColumn | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // `fromParameters` decides where the message belongs. A rejected slider
+  // combination is reported beside the sliders; anything else stays with the
+  // charts. The two travel together because showing one without the other is
+  // how a message ends up in the wrong column.
+  const [failure, setFailure] = useState<
+    { message: string; fromParameters: boolean } | null
+  >(null);
   // Which way round the age chart is read. Both directions are the same
   // model; a reader arriving with a published radiometric age wants "true".
   const [orientation, setOrientation] = useState<AgeOrientation>("apparent");
@@ -133,10 +140,16 @@ export function App({ data }: Props) {
       setSeries(curve);
       setHistory(lambda);
       setColumn(geology);
-      setError(null);
+      setFailure(null);
     } catch (caught) {
       if (mine !== generation.current) return;
-      setError(caught instanceof Error ? caught.message : String(caught));
+      // The last good calibration stays on screen — recomputing it would cost
+      // another solve and the reader is mid-drag — so the failure has to say
+      // that the figures are no longer the parameters shown.
+      setFailure({
+        message: caught instanceof Error ? caught.message : String(caught),
+        fromParameters: Boolean(next.overrides),
+      });
     }
   }, [manager]);
 
@@ -159,6 +172,21 @@ export function App({ data }: Props) {
   const onParameter = useCallback((name: string, value: number) => {
     setOverrides((o) => ({ ...o, [name]: value }));
   }, []);
+
+  // The converter asks the source in force, against the calibration on screen.
+  // Rebuilt when either changes, so a slider move updates the answer without
+  // the reader retyping it. Unlike a parameter change, converting is a *read* —
+  // it must not start the 5.8 MB download on its own, so it stays on whatever
+  // source is already up.
+  const convertForward = useCallback(async (age: number) => {
+    if (!calibration) throw new Error("no calibration yet");
+    return manager.current.forwardAge(calibration, age);
+  }, [manager, calibration, state.kind]);
+
+  const convertInverse = useCallback(async (age: number) => {
+    if (!calibration) throw new Error("no calibration yet");
+    return manager.current.inverseAge(calibration, age);
+  }, [manager, calibration, state.kind]);
 
   const sourceKind = state.kind;
 
@@ -205,9 +233,19 @@ export function App({ data }: Props) {
               overridden={overridden}
               onChange={onParameter}
               onReset={() => setOverrides({})}
+              error={failure?.fromParameters ? failure.message : null}
               // Honest about the cost before it is incurred, rather than
               // freezing on a 5.8 MB fetch the reader did not ask for.
               willStartDownload={sourceKind !== "live"}
+            />
+          ) : null}
+
+          {calibration ? (
+            <AgeConverter
+              forward={convertForward}
+              inverse={convertInverse}
+              exact={calibration.exact}
+              initialApparent={data.boundaries[request.boundary].secular_age}
             />
           ) : null}
 
@@ -251,8 +289,20 @@ export function App({ data }: Props) {
         </div>
 
         <main>
-          {error ? (
-            <p className="notice"><strong>Error.</strong> {error}</p>
+          {failure && !failure.fromParameters ? (
+            <p className="notice"><strong>Error.</strong> {failure.message}</p>
+          ) : null}
+
+          {failure?.fromParameters ? (
+            // The prose itself is beside the controls; repeating it here would
+            // just be loud. What this column has to say is that the figures
+            // below are stale — they are the last combination that solved, not
+            // the one the sliders are showing.
+            <p className="notice">
+              <strong>These figures are out of date.</strong> They show the last
+              parameters the model accepted; see <em>Parameters</em> for why the
+              current ones were rejected.
+            </p>
           ) : null}
 
           {series && calibration ? (

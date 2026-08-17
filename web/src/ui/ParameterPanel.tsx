@@ -53,6 +53,18 @@ interface Props {
   onReset(): void;
   /** True when acting on a change would start the 5.8 MB download. */
   willStartDownload: boolean;
+  /**
+   * The package's own words when it rejected this combination, shown verbatim
+   * beside the controls that caused it.
+   *
+   * Each slider is bounded by its own spec, so a single parameter cannot leave
+   * its range. What no bound can prevent is a rule *between* parameters — the
+   * DATEs must satisfy `t_c <= t_F <= t_F2`, and two independently draggable
+   * date sliders can violate that at any time. `GeneralModelParams` explains
+   * such a failure better than a generic "invalid input" ever could, so its
+   * message is passed through untouched.
+   */
+  error?: string | null;
   disabled?: boolean;
   debounceMs?: number;
 }
@@ -91,7 +103,7 @@ function display(name: string, value: number, prop: ParamProperty): string {
 
 export function ParameterPanel({
   mode, fittable, values, overridden, onChange, onReset,
-  willStartDownload, disabled, debounceMs = 100,
+  willStartDownload, error, disabled, debounceMs = 100,
 }: Props) {
   // Only the names the package returned, and only those it considers free to
   // vary. Never a literal list.
@@ -126,6 +138,13 @@ export function ParameterPanel({
   return (
     <section className="panel" aria-labelledby="parameters-heading">
       <h2 id="parameters-heading">Parameters</h2>
+
+      {error ? (
+        <p className="notice" role="alert" style={{ marginTop: 0 }}>
+          <strong>The model rejected these values.</strong>{" "}
+          <span className="converter-error">{error}</span>
+        </p>
+      ) : null}
 
       {willStartDownload ? (
         <p className="notice" style={{ marginTop: 0 }}>

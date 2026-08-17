@@ -176,6 +176,34 @@ describe("interaction", () => {
     expect(container.textContent).not.toMatch(/MB download/);
   });
 
+  it("shows the package's rejection verbatim, next to the controls", () => {
+    // Real prose from `GeneralModelParams.__post_init__`. It explains *why* the
+    // rule exists, which is the whole reason for showing it rather than a
+    // generic "invalid input" — so the test pins the explanation, not just the
+    // first clause.
+    const message =
+      "t_F (1656.0) precedes t_c (3000.0).  The DATEs must be ordered " +
+      "t_c <= t_F <= t_F2.";
+    render(modeSchema("general"), { error: message });
+    expect(container.textContent).toContain(message);
+    expect(container.querySelector('[role="alert"]')).not.toBeNull();
+  });
+
+  it("says nothing when the model accepted the values", () => {
+    render(modeSchema("general"), { error: null });
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(container.textContent).not.toMatch(/rejected/i);
+  });
+
+  it("keeps the controls usable while rejected, so the reader can back out", () => {
+    // Disabling them on error would strand the reader at the invalid value
+    // with no way to return.
+    render(modeSchema("general"), { error: "t_F (1656.0) precedes t_c (3000.0)." });
+    const sliders = [...container.querySelectorAll<HTMLInputElement>('input[type="range"]')];
+    expect(sliders.length).toBeGreaterThan(0);
+    expect(sliders.every((s) => !s.disabled)).toBe(true);
+  });
+
   it("offers a reset only once something has been overridden", () => {
     render(modeSchema("flood_only"), { overridden: new Set() });
     expect(container.textContent).not.toMatch(/Reset/);

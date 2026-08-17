@@ -242,3 +242,11 @@ dl.readout.stacked dd { padding-left: .1rem; }
   margin: .15rem 0 0; font-size: .72rem; color: var(--text-muted);
   line-height: 1.4;
 }
+
+/* Age converter. The arrow shows which way the conversion is running, so the
+   reader can see which box is authoritative rather than guessing. */
+.converter-arrow {
+  text-align: center; color: var(--text-muted);
+  font-size: 1.1rem; line-height: 1; margin: -.35rem 0 .35rem;
+}
+.converter-error { color: var(--warn); }

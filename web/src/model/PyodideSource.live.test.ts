@@ -370,6 +370,21 @@ describe("errors and warnings come from the package", () => {
     })).rejects.toThrow(/must be >= 1/);
   });
 
+  it("rejects a combination no single slider bound could prevent", async () => {
+    // The one the UI actually has to handle. Every control is clamped to its
+    // own spec, so a lone parameter cannot leave its range — but `t_c` and
+    // `t_F` are independently draggable across the same interval, and the
+    // model requires t_c <= t_F <= t_F2. Nothing about a per-parameter bound
+    // catches that, which is why the panel shows the package's prose.
+    const rejected = live.calibrate({
+      ...preset("masoretic", "kpg"),
+      overrides: { t_c: 3000, t_F: 1656 },
+    });
+    await expect(rejected).rejects.toThrow(ModelError);
+    // The explanation, not just the complaint.
+    await expect(rejected).rejects.toThrow(/must be ordered/);
+  });
+
   it("passes non-blocking warnings through instead of swallowing them", async () => {
     // A Flood longer than 2 years warns rather than raises. The browser should
     // not be quieter than the CLI about the same input.
