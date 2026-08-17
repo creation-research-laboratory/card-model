@@ -6,9 +6,9 @@
 #     card init myrun.yaml
 #     card fit myrun.yaml
 #
-# It is the config-file form of examples/run_card_mcmc.py: the flood-only limit
-# of the general model, fitted to two matched date pairs.  For a quick look
-# without sampling, `card calibrate myrun.yaml` solves the same two constraints
+# It is the flood-only limit of the general model — no Creation-week
+# acceleration — fitted to three matched date pairs.  For a quick look without
+# sampling, `card calibrate myrun.yaml` solves the same three constraints
 # exactly, in milliseconds.
 #
 # Naming rule: a value ending in `_age` is an AGE (years before present), one
@@ -19,22 +19,34 @@
 chronology:
   age_of_earth: 6056
   flood_start_date: 1656
-  flood_end_date: 1656
+  flood_end_date: 1657
   ice_age_end_date: 3500
 
+# Three pairs, three unknown rates.  The Flood is a year long, and its two ends
+# are two separate anchors: that is what determines the in-Flood relaxation k_F,
+# which two pairs cannot reach.  `card calibrate` reads them by AGE, oldest
+# first, and checks each one sits where the chronology puts it.
 constraints:
-  # Rocks formed at the Flood appear ~540 Myr old (Precambrian-Cambrian).
+  # Rocks formed at the Flood's onset appear ~540 Myr old (Precambrian-Cambrian).
   - young_age: flood_start_age        # 4400 YBP under the chronology above
     secular_age: 540.0e6
     uncertainty: 1.0e7
     label: Precambrian-Cambrian boundary
+  # Rocks formed as the Flood ended, one year later, appear ~66 Myr old (K/Pg).
+  - young_age: flood_end_age          # 4399 YBP
+    secular_age: 66.0e6
+    uncertainty: 1.0e5
+    label: Cretaceous-Paleogene boundary
   # Rocks from the end of the Ice Age appear ~11.5 kyr old.
   - young_age: ice_age_end_age        # 2556 YBP
     secular_age: 11500.0
     uncertainty: 30.0
     label: end of the Ice Age
 
-# Flood-only limit: no Creation-week acceleration, instantaneous Flood.
+# Flood-only limit: no Creation-week acceleration.  k_F is absent here on
+# purpose — it is a fitted parameter now.  Pin it back to 0.0 and you have the
+# old constant-rate Flood, which only two pairs can determine, so drop a
+# constraint if you do.
 # Linear units, whatever space the parameter is sampled in.
 fixed:
   lambda_c: 1.0
@@ -43,21 +55,25 @@ fixed:
   t_F: flood_start_date
   t_F2: flood_end_date
 
-# lambda_F and k_F are log-scale parameters, so these priors are in log10.
+# lambda_F and k_PF are log-scale parameters, so those priors are in log10.
+# k_F is sampled LINEARLY: over a one-year Flood it lives within a few
+# multiples of 1/year, and its default of 0 has no log10.
 priors:
-  lambda_F: {mean: 6.0, sigma: 1.0}
-  k_F: {mean: -3.0, sigma: 1.0}
+  lambda_F: {mean: 9.7, sigma: 1.0}
+  k_F: {mean: 9.6, sigma: 5.0}
+  k_PF: {mean: -2.3, sigma: 1.0}
 
 sampler:
   n_walkers: 32
   n_steps: 20000
   burn_in: 5000
   seed: 20260731
-  # Start the walkers at the exact solution to these two constraints rather
-  # than at the prior means.  This is not a convenience: started from the prior
-  # means, about a quarter of the walkers fall into a far local maximum (tiny
-  # lambda_F with a k_F so small the rate never relaxes) that fits the Ice Age
-  # and misses the Flood by ~50 sigma, and they can never climb back out.
+  # Start the walkers at the exact solution to these three constraints rather
+  # than at the prior means.  This is not a convenience: on the two-pair form of
+  # this fit, started from the prior means, about a quarter of the walkers fall
+  # into a far local maximum (tiny lambda_F with a k_PF so small the rate never
+  # relaxes) that fits the Ice Age and misses the Flood by ~50 sigma, and they
+  # can never climb back out.
   initial_guess: calibrate
 
 output:

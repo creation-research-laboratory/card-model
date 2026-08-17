@@ -22,13 +22,18 @@ export interface Chronology {
   readonly iceAgeEndDate: number;
 }
 
-/** The eight parameters of `card.models.GeneralModelParams`, in linear units. */
+/** The nine parameters of `card.models.GeneralModelParams`, in linear units. */
 export interface GeneralParams {
   readonly lambda_c: number;
   readonly lambda_F: number;
   readonly lambda_bg: number;
   readonly k_c: number;
+  /** Relaxation *during* the Flood, `t_F < t <= t_F2`. Zero is a flat Flood. */
   readonly k_F: number;
+  /** Relaxation *after* the Flood, `t > t_F2`. This is what pre-2026-08-09
+   * builds called `k_F`, so a value read from an old payload means the wrong
+   * phase here. */
+  readonly k_PF: number;
   readonly t_c: number;
   readonly t_F: number;
   readonly t_F2: number;

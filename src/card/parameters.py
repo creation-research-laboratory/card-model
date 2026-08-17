@@ -27,6 +27,7 @@ __all__ = [
     "parameter_defaults",
     "parameter_names",
     "parameter_specs",
+    "structural_names",
     "to_json_schema",
 ]
 
@@ -189,23 +190,41 @@ def to_json_schema(params_class: Any, title: str = None,
     }
 
 
+def structural_names(params_class: Any) -> Tuple[str, ...]:
+    """
+    Fields that exist on the model but carry no ParamSpec.
+
+    These are settable but never *fitted* — `t_F2`, whose value is the Flood's
+    length and therefore a chronology assumption rather than something to infer
+    from age constraints.  A config may pin them; nothing offers them as free.
+    """
+    specified = set(parameter_specs(params_class))
+    return tuple(f.name for f in fields(params_class)
+                 if f.name not in specified)
+
+
 def split_fixed_and_free(
     params_class: Any, fixed_params: Mapping[str, float] = None
 ) -> Tuple[Tuple[str, ...], Tuple[str, ...]]:
     """
     Split a parameter set into (free, fixed) names, validating the fixed keys.
 
+    Structural fields (see `structural_names`) may appear in `fixed_params` and
+    are returned among the fixed names, but never among the free ones — pinning
+    `t_F2` is legal, fitting it is not.
+
     Raises:
         ValueError: If `fixed_params` names something the model does not have.
     """
     names = parameter_names(params_class)
+    settable = names + structural_names(params_class)
     fixed_params = fixed_params or {}
-    unknown = set(fixed_params) - set(names)
+    unknown = set(fixed_params) - set(settable)
     if unknown:
         raise ValueError(
             f"Unrecognized parameter name(s) {sorted(unknown)}; "
-            f"expected any of {sorted(names)}."
+            f"expected any of {sorted(settable)}."
         )
     free = tuple(n for n in names if n not in fixed_params)
-    fixed = tuple(n for n in names if n in fixed_params)
+    fixed = tuple(n for n in settable if n in fixed_params)
     return free, fixed

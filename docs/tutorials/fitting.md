@@ -2,10 +2,21 @@
 
 A **matched date pair** is one event dated two ways: a young AGE (years before
 present) and the secular age rock formed then would appear to have. Each pair
-is one equation, so two pairs determine the two free parameters of the
-flood-only model.
+is one equation, so the number of pairs you need is the number of unknown
+rates.
 
-There are two ways to use them, and they answer different questions:
+The Flood carries three of them:
+
+| | Symbol | Meaning |
+| --- | --- | --- |
+| Peak | \(\lambda_F\) | The rate at the Flood's onset |
+| In-Flood | \(k_F\) | How fast it relaxes *during* the Flood year |
+| Post-Flood | \(k_{PF}\) | How fast it relaxes *after* it |
+
+Three unknowns, so **three pairs**. Two are not enough, which is why
+`solve_flood_only` asks you to supply \(k_F\) rather than solving for it.
+
+There are two ways to use the pairs, and they answer different questions:
 
 | | [`card.calibrate`](../api/calibrate.md) | [`card.inference`](../api/inference.md) |
 | --- | --- | --- |
@@ -17,56 +28,136 @@ There are two ways to use them, and they answer different questions:
 Start with the exact solve. It is fast, needs no tuning, and — as the last
 section shows — the MCMC needs it anyway.
 
-## Two dates, solved exactly
+## The three anchors
 
-The standard pair of constraints: rocks formed at the Flood appear
-Precambrian-Cambrian (~541 Myr), and rocks from the end of the Ice Age appear
-~11.7 kyr old.
+This tutorial uses the Masoretic chronology with the K/Pg boundary as the
+post-Flood contact. Under that chronology the Flood is one year long, and its
+two ends are two different anchors:
+
+| Event | AGE | Appears to be |
+| --- | --- | --- |
+| Flood onset | 4400 YBP | Precambrian-Cambrian, 541 Ma |
+| Flood end | 4399 YBP | K/Pg, 66 Ma |
+| End of the Ice Age | 2556 YBP | 11.5 kyr |
+
+The middle row is what the older two-pair fit could not use. A Flood whose rate
+is *constant* across the year has no way to separate its two ends far enough
+apart. Anchor such a Flood on the onset and ask what its last day looks like:
 
 ```python
-from card import solve_flood_only, FLOOD_AGE, ICE_AGE_END_AGE
+from card import solve_flood_only, FLOOD_AGE, FLOOD_END_AGE, ICE_AGE_END_AGE
 
-result = solve_flood_only(
-    flood_age=FLOOD_AGE,           flood_secular_age=541e6,
-    second_age=ICE_AGE_END_AGE,    second_secular_age=11.7e3,
+# k_F=0 is the old constant-rate Flood, and is still the default.
+flat = solve_flood_only(FLOOD_AGE, 541e6, ICE_AGE_END_AGE, 11.5e3, k_F=0.0)
+onset = flat.model.forward_age(FLOOD_AGE)
+end = flat.model.forward_age(FLOOD_END_AGE)
+
+print(f"Flood onset appears         {onset:13,.0f}")
+print(f"Flood end appears           {end:13,.0f}")
+print(f"separation across the year  {onset - end:13,.0f}")
+print(f"K/Pg would need             {541e6 - 66e6:13,.0f}")
+```
+
+```text
+Flood onset appears           541,000,000
+Flood end appears             537,788,981
+separation across the year      3,211,019
+K/Pg would need               475,000,000
+```
+
+A constant rate does move the apparent age across the Flood year — by about
+3.2 Myr — but the K/Pg anchor asks for 475 Myr, roughly 150 times more. No
+choice of \(\lambda_F\) fixes that, because raising it pushes *both* ends up
+together. Letting \(\lambda\) relax at \(k_F\) as the Flood runs is exactly the
+freedom that pulls the two ends apart.
+
+## Three dates, solved exactly
+
+```python
+from card import solve_flood_rate
+
+result = solve_flood_rate(
+    pre_flood_secular_age=541e6,   # Flood onset, 4400 YBP -> Precambrian-Cambrian
+    post_flood_secular_age=66e6,   # Flood end,   4399 YBP -> K/Pg
+    ice_age_secular_age=11.5e3,    # Ice Age end, 2556 YBP
 )
 
-print(f"lambda_F = {result.lambda_F:,.0f} x background")
-print(f"k_F      = {result.k_F:.6g} / year")
+print(f"lambda_F  = {result.lambda_F:.6g} x background   (peak, at the onset)")
+print(f"k_F       = {result.k_F:.6g} / year        (relaxation during the Flood)")
+print(f"k_PF      = {result.k_PF:.6g} / year     (relaxation after it)")
+print(f"lambda_F2 = {result.model.lambda_F2:.6g} x background   (what is left at the end)")
 print(f"largest relative residual: {result.max_abs_residual:.1e}")
 ```
 
 ```text
-lambda_F = 3,223,698 x background
-k_F      = 0.00595882 / year
-largest relative residual: 2.0e-15
+lambda_F  = 4.54332e+09 x background   (peak, at the onset)
+k_F       = 9.56421 / year        (relaxation during the Flood)
+k_PF      = 0.00483253 / year     (relaxation after it)
+lambda_F2 = 318927 x background   (what is left at the end)
+largest relative residual: 6.7e-16
 ```
 
-Both constraints are honored to machine precision, which is what "solved"
-rather than "fitted" means: two equations, two unknowns. The result carries the
-built model, ready to use:
+Read those numbers as a story about one year. The rate starts about
+4.5 billion times background, falls by \(e^{-9.56}\) over the Flood — a factor
+of about 14,000 — and hands the post-Flood exponential the 319,000 it has left.
+From there it relaxes far more slowly, at \(k_{PF} \approx 0.0048\)/year, which
+is a half-life of roughly 140 years.
+
+\(\lambda_{F2}\) is not a fitted parameter. It is a read-only property pinned
+by continuity at \(t_{F2}\), which is what makes
+\(\lambda_{F2} \ge \lambda_{bg}\) automatic rather than something to validate.
+
+All three constraints are honored, not traded off:
 
 ```python
+from card import FLOOD_AGE, FLOOD_END_AGE, ICE_AGE_END_AGE
+
 model = result.model
-print(f"{model.forward_age(FLOOD_AGE):,.0f}")
-print(f"{model.inverse_age(65e6):,.0f} YBP")
+anchors = [
+    ("Flood onset", FLOOD_AGE,       541e6),
+    ("Flood end",   FLOOD_END_AGE,    66e6),
+    ("Ice Age end", ICE_AGE_END_AGE, 11.5e3),
+]
+for label, age, target in anchors:
+    print(f"{label:12} {age:6.0f} YBP -> {model.forward_age(age):13,.0f} "
+          f"(asked for {target:13,.0f})")
 ```
 
 ```text
-541,000,000
-4,044 YBP
+Flood onset    4400 YBP ->   541,000,000 (asked for   541,000,000)
+Flood end      4399 YBP ->    66,000,000 (asked for    66,000,000)
+Ice Age end    2556 YBP ->        11,500 (asked for        11,500)
 ```
 
-!!! tip "One pair, one unknown"
+Every residual is at machine precision, which is what "solved" rather than
+"fitted" means: three equations, three unknowns.
 
-    With \(k_F\) known from elsewhere, a single pair determines \(\lambda_F\):
-    `solve_lambda_F(flood_age=..., flood_secular_age=..., k_F=...)`. The
-    secular age is strictly increasing in \(\lambda_F\), so the root is unique
-    and bisection finds it with no initial guess.
+### Why this needs no initial guess
 
-Both solves are bracketed root-finds, deliberately. An earlier 2-D `fsolve`
-version needed a hand-tuned starting guess and silently wandered to
-\(\lambda_F \approx 10^{-8}\) on chronologies the guess did not suit.
+Three unknowns would normally mean a 3-D root-find and a starting guess to go
+with it. This one decouples instead:
+
+1. The **post-Flood** and **Ice Age** pairs both sit at or after \(t_{F2}\),
+   where only \(\lambda_{F2}\) and \(k_{PF}\) enter. Those two pairs pin those
+   two unknowns on their own — a two-pair solve with the Flood's length set to
+   zero, because from the Flood's end onward there is no Flood left to
+   integrate.
+2. The **pre-Flood** pair then differs from the post-Flood one by the in-Flood
+   integral alone, which reduces to a single increasing function of \(k_F\).
+   One bracketed root gives \(k_F\), and continuity gives \(\lambda_F\).
+
+So it is a sequence of 1-D bracketed solves, each with a guaranteed sign
+change. An earlier `fsolve` version of the two-pair solve needed a hand-tuned
+starting guess and silently wandered to \(\lambda_F \approx 10^{-8}\) on
+chronologies the guess did not suit; nothing here can do that.
+
+!!! tip "Fewer pairs, fewer unknowns"
+
+    Two pairs still work if you supply \(k_F\) yourself —
+    `solve_flood_only(flood_age=..., flood_secular_age=..., second_age=...,
+    second_secular_age=..., k_F=...)`, which defaults to `k_F=0` and so
+    reproduces the old constant-rate Flood exactly. With \(k_{PF}\) known as
+    well, one pair determines \(\lambda_F\): `solve_lambda_F`.
 
 ## The same dates, with uncertainties
 
@@ -78,40 +169,53 @@ When the dates carry uncertainties, the question changes from *what fits* to
 from card import MCMCFitter, FLOOD_START_DATE, FLOOD_END_DATE
 
 data = [
-    (FLOOD_AGE,        541e6,   1e7),    # +/- 10 Myr
-    (ICE_AGE_END_AGE,  11.7e3,  100.0),  # +/- 100 yr
+    (FLOOD_AGE,       541e6,   1e7),   # +/- 10 Myr
+    (FLOOD_END_AGE,    66e6,   1e5),   # +/- 100 kyr
+    (ICE_AGE_END_AGE, 11.5e3, 30.0),   # +/- 30 yr
 ]
 
 fitter = MCMCFitter(
     data,
-    # Pin everything but lambda_F and k_F: the flood-only limit.  Fixed values
-    # are always linear, whatever space the parameter is sampled in.
+    # Pin the Creation-week parameters and the Flood's two DATEs; leave all
+    # three rates free.  Fixed values are always linear, whatever space the
+    # parameter is sampled in.
     fixed_params={'lambda_c': 1.0, 'k_c': 0.0, 't_c': 1.0,
                   't_F': FLOOD_START_DATE, 't_F2': FLOOD_END_DATE},
-    # lambda_F and k_F are log-scale parameters, so their priors are log10.
-    prior_means={'lambda_F': 6.5, 'k_F': -2.2},
-    prior_sigmas={'lambda_F': 1.0, 'k_F': 1.0},
+    prior_means={'lambda_F': 9.7, 'k_F': 9.6, 'k_PF': -2.3},
+    prior_sigmas={'lambda_F': 1.0, 'k_F': 5.0, 'k_PF': 1.0},
 )
 print(fitter.free_param_names, fitter.ndim)
 ```
 
 ```text
-('lambda_F', 'k_F') 2
+('lambda_F', 'k_F', 'k_PF') 3
 ```
 
 Which parameters are free, whether each is sampled in log10, and the default
 priors all come from the [parameter spec](../api/parameters.md) — there is no
 list of parameter names inside the fitter to fall out of date.
 
+!!! warning "The three rates are not sampled in the same space"
+
+    \(\lambda_F\) and \(k_{PF}\) are sampled in **log10**, so their priors
+    above are log10 values: 9.7 means \(5 \times 10^{9}\), and −2.3 means
+    0.005. \(k_F\) is sampled **linearly**, so its prior mean of 9.6 means 9.6.
+
+    The reason is the range each one covers. \(\lambda_F\) spans orders of
+    magnitude and \(k_{PF}\) is a slow relaxation over millennia, but \(k_F\)
+    acts over a single year, so it lives within a few multiples of 1/year — and
+    its default of 0 has no log10 at all.
+
 ### Start the walkers at the answer
 
-Now the part that matters. **Do not start this fit at the prior means.**
+The exact solve is the natural starting point, and it is free. Note that
+`initial_guess` is given in **sampling space**, so the log-scale parameters are
+passed as log10 and \(k_F\) is passed as-is:
 
 ```python
 import numpy as np
 
-exact = solve_flood_only(FLOOD_AGE, 541e6, ICE_AGE_END_AGE, 11.7e3)
-initial_guess = [np.log10(exact.lambda_F), np.log10(exact.k_F)]
+initial_guess = [np.log10(result.lambda_F), result.k_F, np.log10(result.k_PF)]
 
 # `seed` makes the run reproducible.  It seeds the fitter's own generator, not
 # numpy's global one, so two fits in the same process — or in two threads of a
@@ -119,38 +223,45 @@ initial_guess = [np.log10(exact.lambda_F), np.log10(exact.k_F)]
 results = fitter.run_mcmc(n_walkers=16, n_steps=400, burn_in=100,
                           initial_guess=initial_guess, seed=0, progress=False)
 
+print(f"sampled in log10:     {results['log_scale']}")
 print(f"stuck walkers:        {len(results['stuck_walkers'])}")
 print(f"acceptance fraction:  {results['acceptance_fraction']:.2f}")
 ```
 
 ```text
+sampled in log10:     [True, False, True]
 stuck walkers:        0
-acceptance fraction:  0.72
+acceptance fraction:  0.65
 ```
 
-This posterior is bimodal. Besides the real solution there is a local maximum
-at tiny \(\lambda_F\) with a \(k_F\) small enough that the rate never relaxes:
-it fits the tight Ice Age constraint while missing the Flood by ~50\(\sigma\).
-Started from the prior means, roughly a quarter of the walkers fall into it
-during burn-in and **can never leave** — the barrier between the modes is
-around \(10^{10}\) in log-posterior, so no proposal landing between them is
-ever accepted. The run still looks plausible: the median comes out right while
-the 68% interval runs from 5.4 to 3.3 million.
+`results['log_scale']` is the fitter's own record of which space each parameter
+was sampled in, in the same order as `param_names` — pass it to anything that
+has to interpret the chain.
 
-`MCMCFitter` reports this rather than letting it pass. Any walker whose median
-log-posterior sits 50 or more below the best is listed in
-`results['stuck_walkers']` and warned about; nothing is ever discarded for you.
+`MCMCFitter` watches for walkers that have fallen into a far local maximum and
+cannot climb out: any walker whose median log-posterior sits 50 or more below
+the best is listed in `results['stuck_walkers']` and warned about. Nothing is
+ever discarded for you.
 
 !!! danger "Rule of thumb"
 
     If `stuck_walkers` is non-empty, the percentiles are contaminated —
     re-run from a better starting point rather than reasoning about the
-    numbers. `solve_flood_only` gives that starting point exactly, for free.
+    numbers. The exact solve gives that starting point for free.
+
+    This is not hypothetical. The two-pair flood-only fit against the Flood and
+    Ice Age has a second mode at tiny \(\lambda_F\), with a \(k_{PF}\) small
+    enough that the rate never relaxes: it fits the tight Ice Age constraint
+    while missing the Flood by ~50\(\sigma\). Started from the prior means,
+    about a quarter of its walkers fall in during burn-in and can never leave,
+    because the barrier between the modes is around \(10^{10}\) in
+    log-posterior. The run still looks plausible — the median comes out right
+    while the 68% interval runs from 5.4 to 3.3 million.
 
 ### Read the posterior
 
-`summarize_mcmc` reports every parameter in **both** spaces, because
-`lambda_F` is sampled in log10 and the model wants the linear value:
+`summarize_mcmc` reports every parameter in **both** spaces, because two of
+these three are sampled in log10 and the model wants linear values:
 
 ```python
 from card import summarize_mcmc
@@ -163,17 +274,21 @@ for row in summary:
 ```
 
 ```text
- lambda_F: 3.22204e+06 [3.16281e+06, 3.28574e+06]
-      k_F: 0.00595986 [0.00594769, 0.00597026]
+ lambda_F: 4.54861e+09 [4.44775e+09, 4.65096e+09]
+      k_F: 9.56529 [9.54326, 9.58773]
+     k_PF: 0.00483262 [0.0048307, 0.00483448]
 ```
 
 Use the `linear_*` keys whenever you feed a posterior back into a model. The
 `median`/`mean` keys are the *sampled* values, so for a log-scale parameter
-they are around 6.5, not 3.2 million — a mistake the main driver script once
+they are around 9.66, not 4.5 billion — a mistake the main driver script once
 made, plotting a `lambda_F` of 6.5.
 
 The posterior is centered on the exact solve, as it should be: the extra
-information in the MCMC is the width, not the location.
+information in the MCMC is the width, not the location. Note how much tighter
+\(k_{PF}\) is than \(\lambda_F\) — the Ice Age pair carries a ±30-year
+uncertainty and sits deep in the post-Flood relaxation, so it constrains
+\(k_{PF}\) hard, while \(\lambda_F\) answers to the ±10-Myr Precambrian pair.
 
 ### Save and reload
 
@@ -189,7 +304,7 @@ print(reloaded['chain'].shape, reloaded['param_names'])
 ```
 
 ```text
-(400, 16, 2) ['lambda_F', 'k_F']
+(400, 16, 3) ['lambda_F', 'k_F', 'k_PF']
 ```
 
 For a long run, pass `backend_path="chain.h5"` to `run_mcmc` instead: emcee
@@ -208,9 +323,10 @@ plot_mcmc_traces(results['chain'], results['log_prob_chain'],
                  out_file="traces.png")
 ```
 
-The corner plot of a converged run shows one tight, strongly correlated ridge:
-\(\lambda_F\) and \(k_F\) trade off against each other, since a faster
-relaxation can be compensated by a higher peak rate.
+The corner plot shows where the three rates trade off. \(\lambda_F\) and
+\(k_F\) are strongly correlated — both describe the same Flood year, and a
+higher peak can be absorbed by relaxing faster — while \(k_{PF}\), pinned by
+the Ice Age pair, is nearly independent of the other two.
 
 ## Doing this without Python
 
@@ -218,7 +334,12 @@ Everything above is one YAML file and one command — see
 [run configs and CLI](../cli.md):
 
 ```bash
-card init myrun.yaml         # the same fit as a config file
-card calibrate myrun.yaml    # the exact solve
+card init myrun.yaml         # the three-pair fit above, as a config file
+card calibrate myrun.yaml    # the exact solve, in milliseconds
 card fit myrun.yaml          # the full MCMC, figures included
 ```
+
+The config `card init` writes is this tutorial's fit: three constraints, with
+`k_F` free and the walkers started at the exact solve. `card calibrate` picks
+the solve from the number of pairs — two for `solve_flood_only`, three for
+`solve_flood_rate` — so the same file drives both commands.

@@ -42,13 +42,14 @@ override it.
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass, field, fields
 from numbers import Real
-from typing import Any, Dict, Sequence, Tuple
+from typing import Any, Dict, Optional, Sequence, Tuple
 import math
 import warnings
 
 from ._solvers import brentq
 from .constants import (
     AGE_OF_EARTH,
+    FLOOD_DURATION,
     FLOOD_START_DATE,
     LAMBDA_BG,
     MAX_UNREMARKED_FLOOD_DURATION,
@@ -60,6 +61,7 @@ from .parameters import (
     parameter_defaults,
     parameter_names,
     parameter_specs,
+    structural_names,
 )
 
 __all__ = [
@@ -125,11 +127,24 @@ class GeneralModelParams:
     exp(-k_X * (t - t_X)) + lambda_bg.  The minus sign is already in the
     exponent, so k >= 0 is what makes lambda decay back toward background;
     k == 0 is the limiting case where it never relaxes.  A negative k would
-    make lambda grow without bound and is rejected.
+    make lambda grow without bound and is rejected.  There are three of them,
+    one per relaxing region: `k_c` after the Creation week, `k_F` *during* the
+    Flood, and `k_PF` after it.
 
     The t's are DATEs (years after Day 1 of Creation) and must be ordered
-    t_c <= t_F <= t_F2.  t_F == t_F2 is the instantaneous-Flood limit that
-    GeneralModel.flood_only() uses.
+    t_c <= t_F <= t_F2.
+
+    `t_F2` and `lambda_F2` are **derived rather than free**, which is what
+    keeps the in-Flood relaxation a one-parameter extension:
+
+      * `t_F2` defaults to one year after `t_F` — the year-long Flood — and
+        carries no ParamSpec, so no fitter or slider treats it as free.  It
+        stays settable for a caller who wants a different Flood length (or
+        `t_F2 == t_F`, the instantaneous limit), but the length is properly a
+        chronology assumption; see `Chronology.flood_duration`.
+      * `lambda_F2` is a read-only property, pinned by the requirement that
+        lambda be continuous at the Flood's end: the in-Flood exponential's
+        value there *is* the amplitude the post-Flood exponential starts from.
 
     All of this is checked once, in __post_init__, so a constructed instance is
     always valid.
@@ -150,8 +165,16 @@ class GeneralModelParams:
         symbol="k_c", unit="1/year", log_scale=True,
         description="Post-Creation relaxation constant; larger means faster return to background.",
         default=1e-1, minimum=0.0, maximum=1.0)})
+    #: Sampled *linearly*, unlike the other two k's.  Over a one-year Flood the
+    #: interesting range is a few multiples of 1/year rather than several
+    #: decades of it, and k_F == 0 -- the constant-rate Flood, and this
+    #: parameter's default -- has no log10.
     k_F: float = field(metadata={SPEC_KEY: ParamSpec(
-        symbol="k_F", unit="1/year", log_scale=True,
+        symbol="k_F", unit="1/year", log_scale=False,
+        description="In-Flood relaxation constant, over [t_F, t_F2]; 0 holds the rate constant across the Flood.",
+        default=0.0, minimum=0.0, maximum=10.0)})
+    k_PF: float = field(metadata={SPEC_KEY: ParamSpec(
+        symbol="k_{PF}", unit="1/year", log_scale=True,
         description="Post-Flood relaxation constant; larger means faster return to background.",
         default=8.04e-3, minimum=0.0, maximum=1.0)})
     t_c: float = field(metadata={SPEC_KEY: ParamSpec(
@@ -162,17 +185,30 @@ class GeneralModelParams:
         symbol="t_F", unit="years after Creation", log_scale=False, is_date=True,
         description="DATE at which the Flood starts.",
         default=FLOOD_START_DATE, minimum=0.0, maximum=AGE_OF_EARTH)})
-    t_F2: float = field(metadata={SPEC_KEY: ParamSpec(
-        symbol="t_{F2}", unit="years after Creation", log_scale=False, is_date=True,
-        description="DATE at which the Flood ends; equal to t_F for an instantaneous Flood.",
-        default=FLOOD_START_DATE, minimum=0.0, maximum=AGE_OF_EARTH)})
+    #: DATE at which the Flood ends.  Declared last because it is the only
+    #: field with a default: ``None`` means ``t_F + FLOOD_DURATION``, the
+    #: year-long Flood.
+    #:
+    #: Deliberately carries **no ParamSpec**, which `parameter_specs` documents
+    #: as the way to hold a field that is not a user-facing fitted parameter.
+    #: The Flood's length is a chronology assumption, not something to be
+    #: inferred from age constraints, so nothing that reads the specs — the
+    #: fitter, a slider, the JSON schema — offers it as free.  It stays
+    #: settable so a caller can explore a different length, including
+    #: ``t_F2 == t_F``, the instantaneous limit.
+    t_F2: Optional[float] = None
 
     def __post_init__(self):
         if self.lambda_bg is None:
             self.lambda_bg = LAMBDA_BG
+        if self.t_F2 is None and isinstance(self.t_F, Real) and not isinstance(
+                self.t_F, bool):
+            # Guarded so that a nonsense t_F raises the clear message below
+            # rather than a TypeError from this addition.
+            self.t_F2 = self.t_F + FLOOD_DURATION
 
-        for name in ("lambda_c", "lambda_F", "lambda_bg", "k_c", "k_F",
-                     "t_c", "t_F", "t_F2"):
+        for name in ("lambda_c", "lambda_F", "lambda_bg", "k_c",
+                     "k_F", "k_PF", "t_c", "t_F", "t_F2"):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, Real):
                 raise ValueError(
@@ -200,6 +236,12 @@ class GeneralModelParams:
             self.lambda_F = self.lambda_F / self.lambda_bg
             self.lambda_bg = 1.0
 
+        # lambda_F2 needs no check of its own: it is
+        # (lambda_F - lambda_bg) * exp(-k_F * duration) + lambda_bg, which for
+        # lambda_F >= lambda_bg and k_F, duration >= 0 is bounded below by
+        # lambda_bg.  Deriving it in the *floored* form rather than as a bare
+        # lambda_F * exp(...) is what makes that true, and is why the Flood can
+        # never relax past background no matter how long or how fast it decays.
         for name in ("lambda_c", "lambda_F"):
             value = getattr(self, name)
             if value < 1.0:
@@ -210,7 +252,7 @@ class GeneralModelParams:
                     "model does not describe."
                 )
 
-        for name in ("k_c", "k_F"):
+        for name in ("k_c", "k_F", "k_PF"):
             value = getattr(self, name)
             if value < 0.0:
                 raise ValueError(
@@ -232,19 +274,42 @@ class GeneralModelParams:
         if self.t_F2 < self.t_F:
             raise ValueError(
                 f"t_F2 ({self.t_F2!r}) precedes t_F ({self.t_F!r}); the Flood "
-                "cannot end before it starts.  Use t_F2 == t_F for an "
-                "instantaneous Flood."
+                "cannot end before it starts.  Leave t_F2 unset for the "
+                "year-long default, or use t_F2 == t_F for an instantaneous "
+                "Flood."
             )
+
         if self.t_F2 - self.t_F > MAX_UNREMARKED_FLOOD_DURATION:
             warnings.warn(
                 f"Flood duration t_F2 - t_F is "
                 f"{self.t_F2 - self.t_F:g} years, longer than the "
                 f"{MAX_UNREMARKED_FLOOD_DURATION:g}-year threshold.  Check "
                 "that this is intended: t_F and t_F2 are DATEs in years after "
-                "Creation, not ages before present, and the Flood is usually "
-                "modeled as brief compared with the post-Flood relaxation.",
+                "Creation, not ages before present, and the Flood is modeled "
+                "as a single year unless deliberately configured otherwise.",
                 stacklevel=2,
             )
+
+    # ------------------------------------------------------------- derived
+    @property
+    def flood_duration(self) -> float:
+        """Length of the Flood in true years, ``t_F2 - t_F``."""
+        return self.t_F2 - self.t_F
+
+    @property
+    def lambda_F2(self) -> float:
+        """
+        Decay rate at the Flood's *end*, as a multiple of background.
+
+        Not a free parameter: it is what the in-Flood exponential has fallen to
+        by ``t_F2``, and therefore also the amplitude the post-Flood
+        exponential starts from.  Requiring lambda to be continuous there is
+        what makes `k_F` a single new degree of freedom rather than two —
+        lambda still steps *up* at t_F, which is the Flood's onset and the one
+        genuine discontinuity in the model.
+        """
+        return ((self.lambda_F - self.lambda_bg)
+                * math.exp(-self.k_F * self.flood_duration) + self.lambda_bg)
 
     # ------------------------------------------------------------ metadata
     @classmethod
@@ -264,20 +329,32 @@ class GeneralModelParams:
 
         Handy for a GUI's initial state and for tests that only care about one
         or two parameters.
+
+        Structural fields have no declared default and so are not in the base
+        set, but may still be overridden — `t_F2` otherwise could not be set
+        this way at all.
         """
         values = parameter_defaults(cls)
-        unknown = set(overrides) - set(values)
+        settable = set(values) | set(structural_names(cls))
+        unknown = set(overrides) - settable
         if unknown:
             raise ValueError(
                 f"Unrecognized parameter name(s) {sorted(unknown)}; "
-                f"expected any of {sorted(values)}."
+                f"expected any of {sorted(settable)}."
             )
         values.update(overrides)
         return cls(**values)
 
     # --------------------------------------------------------- serialization
     def to_dict(self) -> Dict[str, float]:
-        """Plain-dict form, suitable for JSON, a config file, or a GUI form."""
+        """
+        Plain-dict form, suitable for JSON, a config file, or a GUI form.
+
+        Carries the stored fields only, so it round-trips exactly through
+        `from_dict`.  `lambda_F2` is deliberately absent: it is derived, and
+        emitting it would produce a dict that `from_dict` then rejects.  Read
+        it from the property (or from the model) when displaying results.
+        """
         return asdict(self)
 
     @classmethod
@@ -287,19 +364,29 @@ class GeneralModelParams:
 
         Unlike Chronology.from_dict this rejects unknown keys, because a
         misspelled parameter name would otherwise silently fall back to a
-        default and change the model.
+        default and change the model.  Every fitted parameter must be present;
+        `t_F2` is optional, and defaults to a year-long Flood.
         """
         known = {f.name for f in fields(cls)}
         unknown = set(data) - known
         if unknown:
+            hint = ""
+            if "lambda_F2" in unknown:
+                hint = (
+                    "  lambda_F2 is derived from lambda_F, k_F and the Flood's "
+                    "length by requiring lambda to be continuous at t_F2, so "
+                    "it cannot be set directly; set those instead."
+                )
             raise ValueError(
                 f"Unrecognized parameter names: {sorted(unknown)}. "
-                f"Expected any of {sorted(known)}."
+                f"Expected any of {sorted(known)}.{hint}"
             )
-        missing = known - set(data)
+        required = known - {"t_F2"}
+        missing = required - set(data)
         if missing:
             raise ValueError(f"Missing parameters: {sorted(missing)}")
-        return cls(**{name: float(data[name]) for name in known})
+        return cls(**{name: float(data[name])
+                      for name in known if name in data})
 
 
 # ============================================================================
@@ -575,9 +662,20 @@ class GeneralModel(DecayModel):
     1. Creation week (t <= t_c): lambda = lambda_c (constant)
     2. Post-Creation (t_c < t <= t_F):
        lambda = (lambda_c - lambda_bg)*exp(-k_c*(t - t_c)) + lambda_bg
-    3. Flood (t_F < t <= t_F2): lambda = lambda_F (constant)
+    3. Flood (t_F < t <= t_F2):
+       lambda = (lambda_F - lambda_bg)*exp(-k_F*(t - t_F)) + lambda_bg
     4. Post-Flood (t > t_F2):
-       lambda = (lambda_F - lambda_bg)*exp(-k_F*(t - t_F2)) + lambda_bg
+       lambda = (lambda_F2 - lambda_bg)*exp(-k_PF*(t - t_F2)) + lambda_bg
+
+    Each accelerated phase therefore relaxes with its own constant, and lambda
+    is continuous at t_F2 by construction: `lambda_F2` is defined as region 3's
+    own value there, so region 4 starts from exactly where region 3 finished.
+    lambda still steps *up* at t_F, which is the Flood's onset and the one
+    genuine discontinuity in the model.
+
+    Setting k_F = 0 recovers the constant-rate Flood exactly (region 3
+    collapses to lambda_F and lambda_F2 == lambda_F), so this is a strict
+    generalization of the previous model rather than a replacement for it.
 
     This is the full @eq-general-model from docs/paper/CARD_model.qmd.
     """
@@ -602,26 +700,34 @@ class GeneralModel(DecayModel):
         self.lambda_F = params.lambda_F
         self.k_c = params.k_c
         self.k_F = params.k_F
+        self.k_PF = params.k_PF
+        self.lambda_F2 = params.lambda_F2
         self.t_c = params.t_c
         self.t_F = params.t_F
         self.t_F2 = params.t_F2
 
     @classmethod
-    def flood_only(cls, lambda_F: float, k_F: float,
+    def flood_only(cls, lambda_F: float, k_PF: float,
                    t_F: float = FLOOD_START_DATE,
+                   t_F2: Optional[float] = None,
+                   k_F: float = 0.0,
                    lambda_bg: float = LAMBDA_BG) -> "GeneralModel":
         """
         Flood-only limit of the general model.
 
-        No Creation-week acceleration (lambda_c == lambda_bg, so k_c and t_c
-        are irrelevant) and an instantaneous Flood (t_F == t_F2).  The decay
-        rate is lambda_bg before the Flood, then decays exponentially from
-        lambda_F back toward lambda_bg after it.
+        No Creation-week acceleration — lambda_c == lambda_bg, so k_c and t_c
+        are irrelevant — leaving the Flood as the only accelerated phase.  The
+        decay rate is lambda_bg up to t_F, jumps to lambda_F, relaxes across
+        the Flood year at k_F, and then relaxes back toward lambda_bg at k_PF.
 
         Args:
-            lambda_F: Peak decay rate at the Flood (normalized to background)
-            k_F: Post-Flood decay constant (years^-1)
-            t_F: DATE of the (instantaneous) Flood (default: FLOOD_START_DATE)
+            lambda_F: Peak decay rate at the Flood's onset (normalized to
+                background)
+            k_PF: Post-Flood relaxation constant (years^-1)
+            t_F: DATE at which the Flood begins (default: FLOOD_START_DATE)
+            t_F2: DATE at which it ends (default: one year later)
+            k_F: In-Flood relaxation constant (years^-1).  The default of 0
+                holds lambda at lambda_F across the whole Flood.
             lambda_bg: Background decay rate (default: 1.0)
 
         Returns:
@@ -633,9 +739,10 @@ class GeneralModel(DecayModel):
             lambda_bg=lambda_bg,
             k_c=1.0,  # irrelevant: lambda_c == lambda_bg
             k_F=k_F,
+            k_PF=k_PF,
             t_c=1.0,
             t_F=t_F,
-            t_F2=t_F,
+            t_F2=t_F2,
         )
         return cls(params)
 
@@ -649,12 +756,14 @@ class GeneralModel(DecayModel):
             return ((self.lambda_c - self.lambda_bg)
                     * math.exp(-self.k_c * (t - self.t_c)) + self.lambda_bg)
         elif t <= self.t_F2:
-            # Region 3: Flood constant rate
-            return self.lambda_F
-        else:
-            # Region 4: Post-Flood exponential relaxation
+            # Region 3: in-Flood exponential relaxation, anchored at the onset
             return ((self.lambda_F - self.lambda_bg)
-                    * math.exp(-self.k_F * (t - self.t_F2)) + self.lambda_bg)
+                    * math.exp(-self.k_F * (t - self.t_F)) + self.lambda_bg)
+        else:
+            # Region 4: Post-Flood exponential relaxation, starting from the
+            # rate region 3 left off at.
+            return ((self.lambda_F2 - self.lambda_bg)
+                    * math.exp(-self.k_PF * (t - self.t_F2)) + self.lambda_bg)
 
     def breakpoints(self) -> Tuple[float, ...]:
         """DATEs where lambda jumps: the ends of the Creation week and Flood."""
@@ -703,16 +812,22 @@ class GeneralModel(DecayModel):
                       * _decaying_exponential_integral(self.k_c, self.t_c, lo, hi)
                       + self.lambda_bg * (hi - lo))
 
-        # Region 3 (t_F < t <= t_F2): constant lambda_F (empty if t_F == t_F2)
+        # Region 3 (t_F < t <= t_F2): in-Flood relaxation, anchored at t_F.
+        # Empty when t_F == t_F2, and exactly lambda_F * (hi - lo) when
+        # k_F == 0, which is how the constant-rate Flood survives as a special
+        # case rather than as a separate branch.
         lo, hi = max(t_f, self.t_F), min(t_p, self.t_F2)
         if hi > lo:
-            total += self.lambda_F * (hi - lo)
+            total += ((self.lambda_F - self.lambda_bg)
+                      * _decaying_exponential_integral(self.k_F, self.t_F, lo, hi)
+                      + self.lambda_bg * (hi - lo))
 
-        # Region 4 (t > t_F2): exponential relaxation toward lambda_bg
+        # Region 4 (t > t_F2): exponential relaxation toward lambda_bg, from
+        # the rate region 3 left off at.
         lo = max(t_f, self.t_F2)
         if t_p > lo:
-            total += ((self.lambda_F - self.lambda_bg)
-                      * _decaying_exponential_integral(self.k_F, self.t_F2, lo, t_p)
+            total += ((self.lambda_F2 - self.lambda_bg)
+                      * _decaying_exponential_integral(self.k_PF, self.t_F2, lo, t_p)
                       + self.lambda_bg * (t_p - lo))
 
         return total / self.lambda_bg

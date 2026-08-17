@@ -11,8 +11,9 @@ Four commands, all of which are thin wrappers over the package API:
 ``card fit`` is the config-driven form of `examples/run_card_mcmc.py`: it
 writes ``chain.h5``, the corner/trace/age-comparison figures and
 ``summary_statistics.txt`` into the config's output directory.  ``card
-calibrate`` needs no sampler at all — with exactly two matched date pairs and
-the flood-only limit pinned, the answer is an exact root solve (see
+calibrate`` needs no sampler at all — with the flood-only limit pinned and as
+many matched date pairs as there are unknown rates (two for ``lambda_F`` and
+``k_PF``, three to add ``k_F``), the answer is an exact root solve (see
 `card.calibrate`), so it is the right command when the constraints are exact
 and the uncertainties are only there to satisfy the config schema.
 
@@ -194,16 +195,16 @@ def _run_fit(args) -> int:
             out_file=os.path.join(out_dir, "trace_plot.png")))
 
         stats = {row["parameter"]: row for row in summary}
-        if {"lambda_F", "k_F"} <= set(stats):
+        if {"lambda_F", "k_PF"} <= set(stats):
             # The age-comparison figure is a flood-only picture, so it is only
             # drawn when those are the parameters that were actually sampled.
             # Note the linear_ keys: both are sampled in log10.
             written.append(plot_age_comparison(
                 age_of_earth=config.chronology.age_of_earth,
                 lambda_F=stats["lambda_F"]["linear_mean"],
-                k_F=stats["k_F"]["linear_mean"],
+                k_PF=stats["k_PF"]["linear_mean"],
                 lambda_F_median=stats["lambda_F"]["linear_median"],
-                k_F_median=stats["k_F"]["linear_median"],
+                k_PF_median=stats["k_PF"]["linear_median"],
                 flood_date=config.chronology.flood_start_date,
                 out_file=os.path.join(out_dir, "age_comparison_posterior.png")))
 
@@ -228,32 +229,28 @@ def _run_fit(args) -> int:
 
 # --------------------------------------------------------------- calibrate
 def _run_calibrate(args) -> int:
-    from .calibrate import solve_flood_only
-
     config = RunConfig.from_file(args.config)
-    if len(config.constraints) != 2:
-        raise ValueError(
-            f"`card calibrate` needs exactly two matched date pairs — two "
-            f"equations for lambda_F and k_F — but {args.config!r} has "
-            f"{len(config.constraints)}.  Use `card fit` for an over- or "
-            "under-determined problem."
-        )
-
-    flood, second = sorted(config.constraints,
-                           key=lambda c: c.young_age, reverse=True)
-    result = solve_flood_only(
-        flood_age=flood.young_age,
-        flood_secular_age=flood.secular_age,
-        second_age=second.young_age,
-        second_secular_age=second.secular_age,
-        chronology=config.chronology,
-    )
+    ordered = sorted(config.constraints,
+                     key=lambda c: c.young_age, reverse=True)
+    # Two pairs solve for lambda_F and k_PF; three solve for k_F as well.  The
+    # dispatch and its checks live on RunConfig, so `card calibrate` and
+    # `sampler.initial_guess: calibrate` cannot solve different problems from
+    # the same file.
+    result = config.solve_exactly()
+    solved_k_F = len(ordered) == 3
 
     print(f"lambda_F = {result.lambda_F:.6g}  (x background)")
-    print(f"k_F      = {result.k_F:.6g}  /year")
+    print(f"k_PF     = {result.k_PF:.6g}  /year")
+    if solved_k_F:
+        print(f"k_F      = {result.k_F:.6g}  /year  (solved; three pairs "
+              "determine all three rates)")
+    else:
+        print(f"k_F      = {result.k_F:.6g}  /year  (held fixed; two pairs "
+              "cannot determine three rates)")
+    print(f"lambda_F2 = {result.lambda_F2:.6g}  (x background, at the Flood's end)")
     print(f"Flood placed at DATE {result.flood_date:g} "
-          f"(AGE {flood.young_age:g} YBP)")
-    for constraint, residual in zip((flood, second), result.residuals):
+          f"(AGE {ordered[0].young_age:g} YBP)")
+    for constraint, residual in zip(ordered, result.residuals):
         label = constraint.label or f"{constraint.young_age:g} YBP"
         print(f"  {label}: target {constraint.secular_age:.6g} yr, "
               f"relative residual {residual:+.1e}")

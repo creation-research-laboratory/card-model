@@ -8,16 +8,18 @@ means declaring its parameters, not editing this file.
 
 SAMPLING SPACE — taken from each parameter's `log_scale` flag:
 
-  * ``log_scale=True``  (lambda_c, lambda_F, k_c, k_F): sampled as
+  * ``log_scale=True``  (lambda_c, lambda_F, k_c, k_PF): sampled as
     ``10**theta``.  Priors, initial guesses and returned samples for these are
     in **log10 units**.
-  * ``log_scale=False`` (t_c, t_F, t_F2): sampled directly.  Priors and samples
+  * ``log_scale=False`` (k_F, t_c, t_F): sampled directly.  Priors and samples
     are in **linear units**.
 
 The times used to be sampled in log10 as well.  Linear is the right choice for
 a quantity that is naturally order-1-to-1e4 and may legitimately be zero, and
-it costs nothing here: the main driver pins all three times, so its posterior
-is unchanged.
+it costs nothing here: the main driver pins both times, so its posterior is
+unchanged.  `k_F` is linear for the same reason — over a one-year Flood its
+interesting range is a few multiples of 1/year, and its default of 0 (the
+constant-rate Flood) has no log10.
 
 TIME CONVENTIONS — this module straddles both (see chronology.py):
 
@@ -27,14 +29,18 @@ TIME CONVENTIONS — this module straddles both (see chronology.py):
 UNITS — `fixed_params` values are always **linear**, regardless of the
 parameter's sampling space.  They are model values, not sampler coordinates.
 
+`t_F2` is **structural**: it carries no spec, so it is never fitted.  Pin it in
+`fixed_params` to set the Flood's length explicitly, or leave it out and get
+the year-long default.
+
 Example::
 
     from card import MCMCFitter, FLOOD_AGE, ICE_AGE_END_AGE, FLOOD_START_DATE
 
     data = [(FLOOD_AGE, 540e6, 1e7), (ICE_AGE_END_AGE, 11_500.0, 30.0)]
     fitter = MCMCFitter(data, fixed_params={
-        'lambda_c': 1.0, 'k_c': 0.0, 't_c': 1.0,
-        't_F': FLOOD_START_DATE, 't_F2': FLOOD_START_DATE,
+        'lambda_c': 1.0, 'k_c': 0.0, 't_c': 1.0, 'k_F': 0.0,
+        't_F': FLOOD_START_DATE,
     })
     results = fitter.run_mcmc(n_walkers=32, n_steps=5000, burn_in=1000)
     fitter.save_results(results, 'mcmc_output/chain.h5')
@@ -211,6 +217,11 @@ class MCMCFitter:
 
         Free parameters are read from `theta`, undoing the log10 transform for
         those the spec marks `log_scale`; fixed parameters are inserted as-is.
+
+        Structural fields carry no spec, so they never appear in `param_names`;
+        they are passed through only when explicitly pinned, and otherwise left
+        to the parameter class's own default (`t_F2` becomes a year-long
+        Flood).
         """
         values = {}
         theta_index = 0
@@ -222,6 +233,9 @@ class MCMCFitter:
                 values[name] = (10.0 ** raw if self.specs[name].log_scale
                                 else raw)
                 theta_index += 1
+        for name, value in self.fixed_params.items():
+            if name not in values:
+                values[name] = value
         return self.params_class(**values)
 
     def params_to_theta(self, params) -> np.ndarray:

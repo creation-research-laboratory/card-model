@@ -26,9 +26,9 @@ from card import (
 FLOOD_ONLY_FIXED = {
     'lambda_c': 1.0,
     'k_c': 0.0,
+    'k_F': 0.0,          # rate held constant across the Flood year
     't_c': 1.0,
     't_F': FLOOD_START_DATE,
-    't_F2': FLOOD_START_DATE,
 }
 
 DATA = [
@@ -39,8 +39,8 @@ DATA = [
 
 def make_fitter(**kwargs):
     kwargs.setdefault('fixed_params', FLOOD_ONLY_FIXED)
-    kwargs.setdefault('prior_means', {'lambda_F': 6.5, 'k_F': -2.2})
-    kwargs.setdefault('prior_sigmas', {'lambda_F': 1.0, 'k_F': 1.0})
+    kwargs.setdefault('prior_means', {'lambda_F': 6.5, 'k_PF': -2.2})
+    kwargs.setdefault('prior_sigmas', {'lambda_F': 1.0, 'k_PF': 1.0})
     return MCMCFitter(DATA, **kwargs)
 
 
@@ -50,7 +50,7 @@ def make_fitter(**kwargs):
 
 def test_free_parameters_come_from_the_spec():
     fitter = make_fitter()
-    assert fitter.free_param_names == ('lambda_F', 'k_F')
+    assert fitter.free_param_names == ('lambda_F', 'k_PF')
     assert fitter.ndim == 2
 
 
@@ -66,7 +66,7 @@ def test_sampling_space_follows_the_spec():
     fitter = make_fitter()
     params = fitter.theta_to_params(np.array([6.0, -2.0]))
     assert params.lambda_F == pytest.approx(1e6)
-    assert params.k_F == pytest.approx(1e-2)
+    assert params.k_PF == pytest.approx(1e-2)
     assert params.t_F == FLOOD_START_DATE  # linear, straight through
 
 
@@ -80,10 +80,11 @@ def test_theta_round_trip():
 def test_linear_time_sampling():
     """Times are sampled linearly, so a theta of 1656 means the year 1656."""
     fitter = MCMCFitter(DATA, fixed_params={'lambda_c': 1.0, 'k_c': 0.0,
-                                            't_c': 1.0, 't_F2': 1656.0},
-                        prior_means={'lambda_F': 6.5, 'k_F': -2.2,
+                                            'k_F': 0.0, 't_c': 1.0,
+                                            't_F2': 1656.0},
+                        prior_means={'lambda_F': 6.5, 'k_PF': -2.2,
                                      't_F': 1656.0},
-                        prior_sigmas={'lambda_F': 1.0, 'k_F': 1.0,
+                        prior_sigmas={'lambda_F': 1.0, 'k_PF': 1.0,
                                       't_F': 100.0})
     index = fitter.free_param_names.index('t_F')
     theta = np.array([6.5, -2.2, 1656.0])
@@ -119,7 +120,7 @@ def test_malformed_data_is_rejected(bad_data, match):
 
 
 def test_everything_fixed_is_rejected():
-    everything = dict(FLOOD_ONLY_FIXED, lambda_F=1e5, k_F=1e-2)
+    everything = dict(FLOOD_ONLY_FIXED, lambda_F=1e5, k_PF=1e-2)
     with pytest.raises(ValueError, match="nothing to sample"):
         MCMCFitter(DATA, fixed_params=everything)
 
@@ -138,7 +139,7 @@ def test_invalid_parameters_get_zero_probability():
 def test_better_fit_has_higher_likelihood():
     fitter = make_fitter()
     truth = solve_flood_only(FLOOD_AGE, 541e6, ICE_AGE_END_AGE, 11.7e3)
-    good = np.array([np.log10(truth.lambda_F), np.log10(truth.k_F)])
+    good = np.array([np.log10(truth.lambda_F), np.log10(truth.k_PF)])
     worse = good + np.array([0.5, 0.5])
     assert fitter.log_likelihood(good) > fitter.log_likelihood(worse)
 
@@ -181,8 +182,8 @@ def test_short_run_recovers_the_calibrated_parameters():
     truth = solve_flood_only(FLOOD_AGE, 541e6, ICE_AGE_END_AGE, 11.7e3)
     fitter = make_fitter(
         prior_means={'lambda_F': np.log10(truth.lambda_F),
-                     'k_F': np.log10(truth.k_F)},
-        prior_sigmas={'lambda_F': 1.0, 'k_F': 1.0},
+                     'k_PF': np.log10(truth.k_PF)},
+        prior_sigmas={'lambda_F': 1.0, 'k_PF': 1.0},
     )
     results = fitter.run_mcmc(n_walkers=16, n_steps=600, burn_in=200,
                               progress=False)
@@ -194,7 +195,7 @@ def test_short_run_recovers_the_calibrated_parameters():
 
     median = np.median(results['samples'], axis=0)
     assert 10 ** median[0] == pytest.approx(truth.lambda_F, rel=0.5)
-    assert 10 ** median[1] == pytest.approx(truth.k_F, rel=0.5)
+    assert 10 ** median[1] == pytest.approx(truth.k_PF, rel=0.5)
 
 
 # The tests below run 20-50 steps from the prior means purely to get an object
@@ -219,7 +220,7 @@ def test_results_record_the_sampling_space():
     np.random.seed(2)
     results = make_fitter().run_mcmc(n_walkers=8, n_steps=20, burn_in=0,
                                      progress=False)
-    assert results['param_names'] == ['lambda_F', 'k_F']
+    assert results['param_names'] == ['lambda_F', 'k_PF']
     assert results['log_scale'] == [True, True]
 
 
@@ -368,7 +369,7 @@ def test_starting_at_the_exact_solution_converges():
     keeps them out of the far mode."""
     np.random.seed(7)
     truth = solve_flood_only(FLOOD_AGE, 541e6, ICE_AGE_END_AGE, 11.7e3)
-    guess = [np.log10(truth.lambda_F), np.log10(truth.k_F)]
+    guess = [np.log10(truth.lambda_F), np.log10(truth.k_PF)]
     results = make_fitter().run_mcmc(n_walkers=16, n_steps=300, burn_in=100,
                                      initial_guess=guess, progress=False)
     assert len(results['stuck_walkers']) == 0
