@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from pathlib import Path
 from typing import Any, Dict, List
@@ -35,24 +36,54 @@ if str(REPO / "src") not in sys.path:
     sys.path.insert(0, str(REPO / "src"))
 
 from card import __version__ as CARD_VERSION  # noqa: E402
-from card.calibrate import solve_flood_only  # noqa: E402
+from card.calibrate import solve_flood_rate  # noqa: E402
 from card.chronology import Chronology  # noqa: E402
 from card.models import GeneralModel  # noqa: E402
 
 PRESETS_PATH = WEB / "presets" / "presets.json"
+ICS_PATH = WEB / "data" / "ics-units.json"
 OUTPUT_PATH = WEB / "public" / "precomputed.json"
 
 # Enough significant digits that rounding is far below the interpolation error
 # the grid itself carries, while keeping the file small.
 SIGFIGS = 9
 
+# The series arrays dominate the file, and interpolating them is only good to
+# ~0.3%, so storing nine significant figures spends bytes on digits nobody can
+# use.  Seven is still three orders of magnitude finer than the interpolation.
+SERIES_SIGFIGS = 7
 
-def _round(value: float) -> float:
-    """Round to SIGFIGS, and to a plain int when that is exact — JSON is smaller."""
+
+def _round(value: float, sigfigs: int = SIGFIGS) -> float:
+    """Round to `sigfigs`, and to a plain int when exact — JSON is smaller."""
     if value == 0.0:
         return 0.0
-    rounded = float(f"%.{SIGFIGS}g" % value)
+    rounded = float(f"%.{sigfigs}g" % value)
     return int(rounded) if rounded.is_integer() and abs(rounded) < 1e15 else rounded
+
+
+def _relaxation_span(model: GeneralModel) -> float:
+    """
+    Years over which the post-Flood rate is still meaningfully above background.
+
+    Derived from the model rather than assumed, because the two relaxation
+    constants differ by three orders of magnitude: k_F reaches ~10/yr inside the
+    Flood year, k_PF ~0.005/yr for millennia after.  A hardcoded window would be
+    far too wide for one and far too narrow for the other.
+
+    KNOWN LIMITATION: this reads `k_F` only, so it sizes the window to the fast
+    in-Flood drop (a few years) and not to the post-Flood tail (millennia).
+    That is why the age grid's worst interpolation error sits at 0.77% rather
+    than the 0.27% a single-rate curve managed.  Sizing it from both rates would
+    tighten that; it is deliberately left alone here rather than changed as a
+    side effect of a wording pass.
+    """
+    k = getattr(model, "k_F", 0.0)
+    excess = getattr(model, "lambda_F", 1.0) - 1.0
+    if k <= 0.0 or excess <= 0.0:
+        return float("inf")
+    # Where the excess has fallen to a millionth of background, with margin.
+    return 1.5 * math.log(excess * 1e6) / k
 
 
 def _true_age_grid(chronology: Chronology, model: GeneralModel,
@@ -87,23 +118,178 @@ def _true_age_grid(chronology: Chronology, model: GeneralModel,
     candidates.extend(chronology.date_to_age(d) for d in model.breakpoints())
     candidates.extend(anchors)
 
+    # The log grid is uniform in true age, but the curve is not: just younger
+    # than a breakpoint, `forward_age` climbs by the whole post-relaxation
+    # integral.  With k_F ~ 10 that is orders of magnitude between two
+    # neighbouring samples, and interpolating across it is meaninglessly wrong
+    # -- measured at 12,000% before this.  Refine log-spaced in time-since-the-breakpoint, the
+    # same way the lambda grid does, so the climb is resolved for any k_F.
+    settle = _relaxation_span(model)
+    for date in model.breakpoints():
+        age = chronology.date_to_age(date)
+        if not 0.0 < age <= present:
+            continue
+        # Only as far as the rate is still moving.  Spreading the refinement
+        # over the whole timeline wastes most of it on the flat tail, where the
+        # base log grid is already exact; confining it to the relaxation gets
+        # the same resolution for a third of the points.
+        span = min(age, settle)
+        lo_d = max(1e-4, span * 1e-9)
+        steps = 500
+        r = (span / lo_d) ** (1.0 / (steps - 1))
+        candidates.extend(age - lo_d * r ** i for i in range(steps))
+
     rounded = {_round(a) for a in candidates if 0.0 <= a <= present}
     return sorted(rounded)
 
 
+#: Relative offset placing a sample just past a discontinuity.  Two competing
+#: pressures: it must exceed the resolution of SIGFIGS rounding or the pair
+#: collapses into a duplicate row (which happened, silently, to an earlier
+#: attempt), and it must be small against 1/k_F or the sample records a lambda
+#: that has already relaxed.  k_F reaches ~10/yr in this configuration, so 1e-6
+#: cost ~1.7% of the peak; 1e-7 costs ~0.17% and still survives rounding.
+_STEP_EPSILON = 1e-7
+
+
+def _lambda_grid(chronology: Chronology, model: GeneralModel,
+                 points: int) -> List[float]:
+    """
+    DATEs at which to sample lambda(t), linear plus the discontinuities.
+
+    lambda genuinely steps at t_c, t_F and t_F2 — unlike `forward_age`, which
+    is the integral of a bounded rate and therefore continuous.  So this grid
+    *does* need a point either side of each breakpoint, and the age grid
+    deliberately does not.  Without the pair, a chart renders the Flood as a
+    diagonal ramp rather than a jump.
+
+    `lambda_func` uses `<=`, so the sample at a breakpoint belongs to the
+    earlier region and its partner must sit just after.
+
+    The linear part alone is not enough.  k_F reaches ~10/yr, so the in-Flood
+    drop is spent inside the Flood year — while a 400-point linear grid over six
+    millennia samples every fifteen years.  The whole drop fell between two
+    samples and the curve rendered as a bare spike.  So the relaxation regions
+    are additionally sampled log-spaced in time-since-the-breakpoint, which
+    resolves the shape for any decay constant rather than for the one that
+    happened to be in front of us.
+    """
+    present = chronology.present_date
+    step = present / (points - 1)
+    candidates = [i * step for i in range(points)]
+    candidates.extend((0.0, present))
+    for date in model.breakpoints():
+        if 0.0 <= date <= present:
+            candidates.append(date)
+            after = date * (1.0 + _STEP_EPSILON) if date > 0.0 else _STEP_EPSILON
+            if after <= present:
+                candidates.append(after)
+            # Resolve the relaxation that starts here, log-spaced so the shape
+            # is captured whatever the decay constant turns out to be.
+            span = present - date
+            if span > 0:
+                lo = max(1e-4, span * 1e-9)
+                steps = 120
+                ratio = (span / lo) ** (1.0 / (steps - 1))
+                candidates.extend(date + lo * ratio ** i for i in range(steps))
+
+    grid = sorted({_round(d) for d in candidates if 0.0 <= d <= present})
+
+    # Fail loudly rather than shipping a chart that draws a ramp: if rounding
+    # merged a breakpoint with its partner, the step is gone and nothing
+    # downstream would notice.
+    for date in model.breakpoints():
+        if not 0.0 < date < present:
+            continue
+        rounded = _round(date)
+        after = _round(date * (1.0 + _STEP_EPSILON))
+        if rounded == after:
+            raise ValueError(
+                f"the straddle around breakpoint {date!r} collapsed under "
+                f"{SIGFIGS}-significant-figure rounding; increase SIGFIGS or "
+                "_STEP_EPSILON."
+            )
+        if rounded not in grid or after not in grid:
+            raise ValueError(
+                f"breakpoint {date!r} lost its straddling pair in the grid."
+            )
+    return grid
+
+
+def _geologic_column(model: GeneralModel, chronology: Chronology,
+                     units: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Each chronostratigraphic unit's secular span, as a young-earth duration.
+
+    Computed here rather than in the browser because the precomputed layer
+    cannot do it.  A duration is the *difference* of two inverse ages, and the
+    older units differ in the fourth or fifth significant figure: interpolating
+    at ~0.03% would put 13.7% error on the Silurian.  Exact in Python, shipped
+    as numbers, is both correct and smaller than the data it replaces.
+
+    A unit whose base is older than this calibration can produce is reported
+    with `in_range: false` rather than dropped, so the chart can say that the
+    column runs out rather than silently ending early.
+    """
+    present = chronology.present_date
+    max_secular = model.max_secular_age(present)
+
+    rows: List[Dict[str, Any]] = []
+    younger_secular = 0.0
+    younger_true = 0.0
+    for unit in units:
+        base_secular = float(unit["base_secular_age"])
+        row: Dict[str, Any] = {
+            "name": unit["name"],
+            "rank": unit["rank"],
+            "base_secular_age": base_secular,
+            "top_secular_age": younger_secular,
+        }
+        if base_secular <= max_secular:
+            base_true = model.inverse_age(base_secular, present)
+            duration = base_true - younger_true
+            secular_duration = base_secular - younger_secular
+            row.update({
+                "in_range": True,
+                "base_true_age": _round(base_true),
+                "top_true_age": _round(younger_true),
+                "duration_true": _round(duration),
+                # How much faster the clock ran: secular years elapsed per
+                # young-earth year across this unit.
+                "acceleration": _round(secular_duration / duration)
+                if duration > 0 else None,
+            })
+            younger_true = base_true
+        else:
+            row["in_range"] = False
+        younger_secular = base_secular
+        rows.append(row)
+    return rows
+
+
 def build(presets: Dict[str, Any]) -> Dict[str, Any]:
     chronologies = presets["chronologies"]
-    boundaries = presets["boundaries"]
-    second = presets["second_constraint"]
+    boundaries = presets["post_flood_boundaries"]
+    calib = presets["calibration"]
+    flood_years = float(presets["flood_duration_years"])
     points = int(presets["series"]["points"])
+    lambda_points = int(presets["series"].get("lambda_points", 400))
+    ics = json.loads(ICS_PATH.read_text())
+    units = ics["units"]
 
     out_chronologies: Dict[str, Any] = {}
     out_presets: Dict[str, Any] = {}
 
     for chron_key, chron_spec in chronologies.items():
+        # t_F == t_F2: the acceleration is instantaneous and relaxes as a
+        # single exponential.
+        # The Flood now has a real length, because lambda relaxes across it at
+        # k_F.  solve_flood_rate treats that length as an input, so the
+        # chronology has to carry it rather than collapsing t_F2 onto t_F.
+        flood_start = float(chron_spec["flood_start_date"])
         chronology = Chronology(
             age_of_earth=float(chron_spec["age_of_earth"]),
-            flood_start_date=float(chron_spec["flood_start_date"]),
+            flood_start_date=flood_start,
             flood_end_date=float(chron_spec["flood_end_date"]),
             ice_age_end_date=float(chron_spec["ice_age_end_date"]),
         )
@@ -112,18 +298,24 @@ def build(presets: Dict[str, Any]) -> Dict[str, Any]:
             "provisional": bool(chron_spec.get("provisional", False)),
             **chronology.to_dict(),
             "flood_start_age": chronology.flood_start_age,
+            "post_flood_boundary_age": chronology.flood_start_age - flood_years,
             "ice_age_end_age": chronology.ice_age_end_age,
         }
 
         for bound_key, bound_spec in boundaries.items():
+            # Three matched pairs: the Flood's onset at the pre-Flood contact,
+            # its end one year later at the selected post-Flood contact, and
+            # the end of the Ice Age well into the relaxation.  All three AGEs
+            # come from the chronology -- solve_flood_rate reads them there, so
+            # passing anything else would silently solve a different problem.
             flood_age = chronology.flood_start_age
-            second_age = chronology.ice_age_end_age
+            second_age = chronology.flood_end_age
+            ice_age = chronology.ice_age_end_age
 
-            result = solve_flood_only(
-                flood_age=flood_age,
-                flood_secular_age=float(bound_spec["secular_age"]),
-                second_age=second_age,
-                second_secular_age=float(second["secular_age"]),
+            result = solve_flood_rate(
+                pre_flood_secular_age=float(calib["flood_start"]["secular_age"]),
+                post_flood_secular_age=float(bound_spec["secular_age"]),
+                ice_age_secular_age=float(calib["ice_age_end"]["secular_age"]),
                 chronology=chronology,
             )
             model = result.model
@@ -133,13 +325,15 @@ def build(presets: Dict[str, Any]) -> Dict[str, Any]:
             # exactly the values that get written.  Rounding the input and the
             # output independently would store a pair that the model never
             # actually produced.
-            grid = _true_age_grid(chronology, model, [flood_age, second_age], points)
+            grid = _true_age_grid(chronology, model,
+                                  [flood_age, second_age, ice_age], points)
             secular = [model.forward_age(age, present) for age in grid]
+            lambda_grid = _lambda_grid(chronology, model, lambda_points)
 
             out_presets[f"{chron_key}:{bound_key}"] = {
                 "chronology": chron_key,
                 "boundary": bound_key,
-                "label": f"{chron_spec['label']} / {bound_spec['label']}",
+                "label": f"{chron_spec['label']} — Flood ends at {bound_spec['label']}",
                 "mode": "flood_only",
                 "params": {
                     "lambda_c": model.lambda_c, "lambda_F": _round(model.lambda_F),
@@ -152,17 +346,41 @@ def build(presets: Dict[str, Any]) -> Dict[str, Any]:
                 "max_abs_residual": _round(result.max_abs_residual),
                 "max_secular_age": _round(model.max_secular_age(present)),
                 "constraints": [
-                    {"label": bound_spec["label"], "true_age": flood_age,
+                    {"label": f"Flood begins — {calib['flood_start']['label']}",
+                     "true_age": flood_age,
+                     "secular_age": float(calib["flood_start"]["secular_age"]),
+                     "uncertainty": float(calib["flood_start"]["uncertainty"])},
+                    {"label": f"Flood ends — {bound_spec['label']}",
+                     "true_age": second_age,
                      "secular_age": float(bound_spec["secular_age"]),
                      "uncertainty": float(bound_spec["uncertainty"])},
-                    {"label": second["label"], "true_age": second_age,
-                     "secular_age": float(second["secular_age"]),
-                     "uncertainty": float(second["uncertainty"])},
+                    # The third pair.  It was a prediction while one k had to
+                    # serve both phases; k_PF is what makes it an anchor, and
+                    # `residuals` has always carried three entries, so omitting
+                    # it here left the list and the residuals disagreeing.
+                    {"label": calib["ice_age_end"]["label"],
+                     "true_age": ice_age,
+                     "secular_age": float(calib["ice_age_end"]["secular_age"]),
+                     "uncertainty": float(calib["ice_age_end"]["uncertainty"])},
                 ],
+                # The handover value: what the in-Flood exponential has fallen
+                # to by t_F2, and therefore where the post-Flood one starts.
+                # Not a free parameter -- continuity pins it -- but worth
+                # emitting, because it is the number that shows how much of the
+                # drop happens inside the Flood year.
+                "lambda_F2": _round(model.params.lambda_F2),
                 "series": {
                     "true_age": grid,  # already rounded, already deduplicated
-                    "secular_age": [_round(s) for s in secular],
+                    "secular_age": [_round(s, SERIES_SIGFIGS) for s in secular],
                 },
+                # lambda(t) against DATE — the one curve whose x axis is a DATE
+                # rather than an AGE, and the one that genuinely steps.
+                "lambda_history": {
+                    "date": lambda_grid,
+                    "lambda": [_round(model.lambda_func(d), SERIES_SIGFIGS)
+                               for d in lambda_grid],
+                },
+                "geologic_column": _geologic_column(model, chronology, units),
             }
 
     return {
@@ -179,15 +397,24 @@ def build(presets: Dict[str, Any]) -> Dict[str, Any]:
         "generator": {
             "card_version": CARD_VERSION,
             "series_points": points,
+            "lambda_points": lambda_points,
         },
         "defaults": presets["defaults"],
         "boundaries": {k: {"label": v["label"],
                            "secular_age": float(v["secular_age"]),
                            "uncertainty": float(v["uncertainty"])}
                        for k, v in boundaries.items()},
-        "second_constraint": {"label": second["label"],
-                              "secular_age": float(second["secular_age"]),
-                              "uncertainty": float(second["uncertainty"])},
+        # Both fixed pairs. The third — the post-Flood contact — varies per
+        # preset and lives under `boundaries`.
+        "calibration": {
+            key: {"label": spec["label"],
+                  "secular_age": float(spec["secular_age"])}
+            for key, spec in calib.items()
+        },
+        "flood_duration_years": flood_years,
+        "ics": {"version": ics["source"]["version"],
+                "url": ics["source"]["url"],
+                "reviewed": bool(ics["source"].get("reviewed", False))},
         "chronologies": out_chronologies,
         "presets": out_presets,
     }

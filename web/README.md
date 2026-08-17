@@ -7,8 +7,11 @@ there is exactly one implementation of the numerics and it is the tested one.
 Self-contained: own `package.json`, own lockfile, own CI workflow, so
 `git subtree split --prefix=web` extracts it into its own repository later.
 
-**Status: Phase 3.** The model layer and presets are built and tested; there is
-no UI yet. See `../frontend_plan.md` for the phased plan and
+**Status: Phase 4**, on the three-exponential model the authors landed in
+PR #12. The app shell and all three charts are built; free parameters are
+Phase 5. Known gaps are tracked in [OPEN_ITEMS.md](OPEN_ITEMS.md) — two of them
+(the provisional Septuagint chronology and the unverified ICS boundaries) block
+publication, and neither is catchable by any test here. See `../frontend_plan.md` for the phased plan and
 [`spike/README.md`](spike/README.md) for the Phase 2 measurements that shaped
 the architecture.
 
@@ -24,16 +27,57 @@ npm install
 npm run setup     # build the card wheel, vendor Pyodide, regenerate presets
 npm test          # fast unit tests
 npm run test:live # boots a real Pyodide interpreter (~2 s)
-npm run dev       # developer harness at http://localhost:8423
+npm run dev       # the app at http://localhost:8423
 ```
 
-`npm run dev` serves `index.html`, a **developer harness** — Phase 3 has no app
-UI. It exists because the headless tests use `DirectTransport` in Node, so the
-actual Worker path (`pyodide.worker.ts` + `WorkerTransport`) would otherwise
-never be executed. It shows first paint from the precomputed layer with Pyodide
-deliberately unstarted, boots the live source on demand or when you type a
-custom λ_F, and compares the two sources directly. Phase 4 replaces it with the
-real app.
+`/harness.html` on the same server is a **developer harness** kept from Phase 3.
+The headless tests use `DirectTransport` in Node, so it is still the only thing
+that exercises the Worker path by hand, and it is where the Phase 2 boot stall
+would be reproduced.
+
+## The three charts
+
+**Apparent age vs. true age** mirrors `card.plotting.plot_age_comparison`: two
+series on log-log axes, the model against the constant-rate reference where
+apparent equals true. The gap between them is the claim. The curve has a *kink*
+at the Flood, not a step — `forward_age` is the integral of a bounded rate and
+so is continuous.
+
+It **toggles between two orientations**, because there are two questions and
+they are not the same one. `True → apparent` is the model's forward map, both
+axes logarithmic, and is the figure the package draws. `Apparent → true` puts
+the published radiometric age on x and the young-earth age on a **descending**
+linear y — most recent at the top, the way a stratigraphic column is drawn.
+That is the direction a reader usually arrives from: they have a secular age
+and want the young-earth date. In that orientation the constant-rate reference
+is a curve rather than a straight line (log x against linear y), so it is
+sampled rather than drawn end-to-end.
+
+**Decay rate through time** mirrors `plot_lambda_history`. Its x axis is a
+**DATE** — years after Day 1 of Creation — the only chart in the app running
+that direction, and the convention whose confusion once caused a real fitting
+error in this package. This curve *does* step at the Flood, so its grid carries
+two samples a fraction of a year apart and the generator refuses to emit a
+version where rounding has collapsed them.
+
+**The geological column in young-earth time** has no counterpart in the
+package. One horizontal bar per ICS unit, spanning the true ages its secular
+boundaries map to, with time running right to left and a secondary calendar-date
+axis. Units the calibration cannot reach get a marked empty row rather than
+being dropped — pinning the Flood to K/Pg caps the model at 66 Myr, so nine of
+the fourteen have no young-earth date at all, and an empty row says that where
+an omission would not.
+
+Its durations are **precomputed exactly in Python**, not derived in the browser.
+A duration is the difference of two inverse ages that agree to four or five
+significant figures; interpolating at the precomputed layer's ~0.03% would put
+13.7% error on the Silurian. Unit boundaries live in `data/ics-units.json` and
+are **provisional** until checked against the published ICS chart.
+
+Colors are the first two categorical slots of the reference palette, validated
+in both modes: worst CVD separation ΔE 24.7 light / 26.8 dark against a ≥ 8
+target, contrast ≥ 3:1. Both charts carry a crosshair tooltip and a collapsed
+data table, so no value is reachable only by hovering a chart.
 
 ## How it fits together
 
@@ -44,7 +88,7 @@ real app.
                   │                   │
      PrecomputedSource            PyodideSource
      public/precomputed.json      Worker → Pyodide → card
-     instant, ±0.3%               ~12-42 s to boot, exact
+     instant, ±1%                 ~12-42 s to boot, exact
 ```
 
 **`ModelSource`** is the seam. Every method is async even where one
@@ -52,7 +96,7 @@ implementation could answer synchronously — the live source is genuinely acros
 a worker boundary, and retrofitting sync-to-async through a component tree later
 is miserable.
 
-**`PrecomputedSource`** reads six solved presets from a static 26 kB (gzipped)
+**`PrecomputedSource`** reads four solved presets from a static ~60 kB (gzipped)
 table generated by `card` itself. It is **not** an optimization: Pyodide is
 5.84 MB and boot is essentially all download, so for the first 12–42 s of a
 first visit this class is the entire application. It cannot solve — a request
@@ -72,17 +116,59 @@ only wants to look at the presets never pays the cost.
 
 The precomputed layer interpolates in log-log space, valid because `forward_age`
 is monotone (it is the integral of a non-negative rate). Measured against the
-live model at grid midpoints, worst case across all six presets:
+live model at grid midpoints, worst case across all four presets:
 
 | | worst error | usable for |
 | --- | --- | --- |
-| forward age | 0.275% | charts (sub-pixel on a log axis) |
-| inverse age | 0.032% | charts |
+| forward age | 0.77% | charts (sub-pixel on a log axis) |
+| inverse age | 0.86% | charts |
+
+Both grew when `k_F` sharpened the curve: just younger than the Flood,
+`forward_age` climbs by the whole post-relaxation integral, so the grid refines
+log-spaced in time-since-the-breakpoint over the window where the rate is still
+moving — computed from the model, since `k_F` and `k_PF` differ by three orders
+of magnitude and one fixed window would suit neither.
 
 Too coarse to quote as an exact figure, which is why `ModelSource.exact` exists
 and why the UI must mark interpolated scalars. The solved *parameters* and
 residuals are not interpolated — the generator ran the real solver — so those
 are exact in both sources.
+
+## The three matched pairs
+
+The package's model now relaxes at **two** rates, so three pairs fix it:
+
+1. **Flood onset ↔ the pre-Flood contact** (Precambrian–Cambrian, 541 Ma).
+2. **Flood onset + 1 year ↔ the post-Flood contact** you select (K/Pg or N/Q).
+3. **End of the Ice Age ↔ a conventional Ice Age endpoint** (12 ka).
+
+λ starts at `lambda_F`, relaxes across the Flood year at `k_F`, and hands the
+post-Flood exponential whatever it has reached at `t_F2`. That handover is
+**continuous** — `lambda_F2` is a read-only property, not a free parameter —
+which is what makes `k_F` one new degree of freedom rather than two. λ still
+steps *up* at `t_F`: the onset is the model's one genuine discontinuity.
+
+Masoretic / K-Pg comes out at:
+
+| | |
+| --- | --- |
+| λ_F | 4.55e9 × background |
+| k_F (in Flood) | 9.571 /yr |
+| k_PF (after) | 0.00480 /yr |
+| λ at the Flood's end | 3.17e5 × — a 14,300× drop inside the year |
+
+The two rates differ by a factor of 2,000, which is exactly what a single `k`
+could not express: pinning only the Flood year's two ends forced
+`k × 1 yr = ln(pre/post)`, so the relaxation was spent within a decade and the
+Cenozoic collapsed. `card`'s reference figures for the same solve are λ_F 4.53e9,
+k_F 9.56, k_PF 4.83e-3 — the small differences are its 540 Ma / 11.5 kyr anchors
+against the author's 541 Ma / 12 ka used here.
+
+> **Chronology caveat.** The Masoretic entry follows the package default, where
+> `ice_age_end_date` is a DATE and the Ice Age ends at 2556 BP. The Septuagint
+> entry is provisional: the Flood at 5324 BP is the author's figure but
+> `age_of_earth` is still a placeholder, so the two are **not on the same
+> footing** until Rick confirms them.
 
 ## Presets are data
 

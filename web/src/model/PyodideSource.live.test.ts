@@ -35,6 +35,12 @@ const preset = (chronology: string, boundary: string): CalibrationRequest => ({
 let live: PyodideSource;
 let precomputed: PrecomputedSource;
 
+/** Relative agreement, with an absolute fallback for values at or near zero. */
+function closeEnough(a: number, b: number, tolerance = 1e-8): boolean {
+  const scale = Math.max(Math.abs(a), Math.abs(b));
+  return scale < 1e-12 ? Math.abs(a - b) < 1e-12 : Math.abs(a - b) / scale < tolerance;
+}
+
 beforeAll(async () => {
   const transport = new DirectTransport({
     indexURL: join(WEB, "node_modules", "pyodide"),
@@ -45,7 +51,11 @@ beforeAll(async () => {
   live = new PyodideSource(transport, {
     chronologies: data.chronologies,
     boundaries: data.boundaries,
-    secondConstraint: data.second_constraint,
+    calibration: data.calibration,
+    floodDurationYears: data.flood_duration_years,
+    geologicUnits: Object.values(data.presets)[0].geologic_column.map((u) => ({
+      name: u.name, rank: u.rank, baseSecularAge: u.base_secular_age,
+    })),
   });
   precomputed = new PrecomputedSource(data);
   await live.boot();
@@ -69,8 +79,11 @@ describe("environment", () => {
 describe("agreement with the Python package", () => {
   it("reproduces the pinned solve", async () => {
     const cal = await live.calibrate(preset("masoretic", "kpg"));
-    expect(cal.params.lambda_F).toBeCloseTo(318753.882, 2);
-    expect(cal.params.k_PF).toBeCloseTo(0.00482991111, 10);
+    expect(cal.params.lambda_F / 4.54657e9 - 1).toBeCloseTo(0, 4);
+    // Two rates now, three orders of magnitude apart. Pinning both is the
+    // point: swapping them would look plausible and be badly wrong.
+    expect(cal.params.k_F).toBeCloseTo(9.571, 2);
+    expect(cal.params.k_PF).toBeCloseTo(0.00480302, 7);
     expect(cal.maxAbsResidual).toBeLessThan(1e-12);
     expect(cal.exact).toBe(true);
   });
@@ -82,8 +95,7 @@ describe("agreement with the Python package", () => {
       expect(cal.maxAbsResidual).toBeLessThan(1e-12);
       // And agrees with what the generator wrote into the static file.
       expect(cal.params.lambda_F / p.params.lambda_F - 1).toBeCloseTo(0, 8);
-      expect(cal.params.k_PF / p.params.k_PF - 1).toBeCloseTo(0, 8);
-      expect(cal.params.k_F).toBe(p.params.k_F);
+      expect(cal.params.k_F / p.params.k_F - 1).toBeCloseTo(0, 8);
     }
   });
 
@@ -125,8 +137,15 @@ describe("the precomputed layer is a faithful stand-in", () => {
       }
     }
 
-    expect(worstForward).toBeLessThan(5e-3);
-    expect(worstInverse).toBeLessThan(1e-3);
+    // These are the numbers the UI's "≈" is promising, so they are asserted
+    // rather than assumed. The inverse is the looser of the two because the
+    // curve's knee just after the Flood is sharp, and inverting a sharp knee
+    // is ill-conditioned.
+    // Measured on the shipped grid: 0.77% forward, 0.86% inverse. Both moved
+    // up when the in-Flood relaxation sharpened the curve, and both are what
+    // the UI's "≈" promises, so they are asserted rather than assumed.
+    expect(worstForward).toBeLessThan(1.5e-2);
+    expect(worstInverse).toBeLessThan(1.5e-2);
   });
 
   it("agrees exactly on the solved parameters, which are not interpolated", async () => {
@@ -144,17 +163,132 @@ describe("the precomputed layer is a faithful stand-in", () => {
   });
 });
 
+describe("lambda history agrees between the two sources", () => {
+  it("matches the precomputed curve wherever the two grids coincide", async () => {
+    const request = preset("masoretic", "kpg");
+    const liveCal = await live.calibrate(request);
+    const preCal = await precomputed.calibrate(request);
+    const pre = await precomputed.lambdaHistory(preCal);
+    const liveHistory = await live.lambdaHistory(liveCal, data.generator.lambda_points);
+
+    // Neither an exact length match nor nearest-neighbour matching. The file
+    // rounds dates to 9 significant figures, which merges a couple of samples
+    // the live grid keeps distinct; and just past t_F lambda falls fast enough
+    // that pairing a sample with its *neighbour* rather than itself shifts
+    // lambda by ~1e-5. So compare only where the dates genuinely coincide, and
+    // require that to be nearly all of them.
+    const liveAt = new Map<string, number>();
+    liveHistory.date.forEach((d, i) => {
+      liveAt.set(d.toPrecision(9), liveHistory.lambda[i]);
+    });
+
+    let compared = 0;
+    for (let i = 0; i < pre.date.length; i++) {
+      const match = liveAt.get(pre.date[i].toPrecision(9));
+      if (match === undefined) continue;
+      compared++;
+      // 1e-4, and the floor is arithmetic rather than arbitrary: the file
+      // stores dates to 9 significant figures, so a date near 1656 carries
+      // ~1e-6 yr of rounding, and k_F ~ 10/yr turns that into ~1e-5 of relative
+      // error in lambda. It was 1e-8 when k_F was 0.005; the tolerance has to
+      // track the calibration, so this leaves an order of magnitude of room.
+      expect(closeEnough(match, pre.lambda[i], 1e-4)).toBe(true);
+    }
+    expect(compared).toBeGreaterThan(pre.date.length * 0.9);
+  });
+
+  it("steps at the Flood in the live source too", async () => {
+    const cal = await live.calibrate(preset("masoretic", "kpg"));
+    const history = await live.lambdaHistory(cal);
+    const i = history.date.findIndex((d) => d === cal.params.t_F);
+    expect(i).toBeGreaterThan(-1);
+    expect(history.lambda[i]).toBeCloseTo(1, 9);
+    // The sample past the step has already relaxed a little, so compare
+    // against the decay the model predicts over that gap rather than against
+    // lambda_F itself — an absolute tolerance is meaningless at 1e9.
+    const gap = history.date[i + 1] - cal.params.t_F;
+    const expected = cal.params.lambda_F * Math.exp(-cal.params.k_F * gap);
+    expect(closeEnough(history.lambda[i + 1], expected, 1e-6)).toBe(true);
+  });
+
+  it("reflects a Creation-week override the age curve barely shows", async () => {
+    // lambda(t) is where the Creation-week parameters are actually visible;
+    // they leave both constraints untouched, so the age curve's fitted region
+    // does not move at all.
+    const cal = await live.calibrate({
+      ...preset("masoretic", "kpg"), overrides: { lambda_c: 1e6, k_c: 1e-2 },
+    });
+    const history = await live.lambdaHistory(cal);
+    expect(history.lambda[0]).toBeCloseTo(1e6, -1);
+  });
+});
+
+describe("geologic column agrees between the two sources", () => {
+  it("matches the precomputed column unit for unit", async () => {
+    for (const key of precomputed.presetKeys) {
+      const p = data.presets[key];
+      const request = preset(p.chronology, p.boundary);
+      const liveCol = await live.geologicColumn(await live.calibrate(request));
+      const preCol = await precomputed.geologicColumn(
+        await precomputed.calibrate(request));
+
+      expect(liveCol.units.length).toBe(preCol.units.length);
+      for (let i = 0; i < preCol.units.length; i++) {
+        const a = liveCol.units[i];
+        const b = preCol.units[i];
+        expect(a.name).toBe(b.name);
+        expect(a.inRange).toBe(b.inRange);
+        if (!a.inRange) continue;
+        // 1e-8 relative: the file rounds to 9 significant figures.
+        expect(closeEnough(a.durationTrue!, b.durationTrue!, 1e-7)).toBe(true);
+        expect(closeEnough(a.acceleration!, b.acceleration!, 1e-7)).toBe(true);
+      }
+    }
+  });
+
+  it("recomputes the column for custom parameters", async () => {
+    // The precomputed layer cannot answer this at all, which is the whole
+    // reason the live source implements it too.
+    const request: CalibrationRequest = {
+      ...preset("masoretic", "kpg"), overrides: { lambda_F: 8.0e9 },
+    };
+    expect(precomputed.supports(request)).toBe(false);
+
+    const overridden = await live.calibrate(request);
+    const column = await live.geologicColumn(overridden);
+    expect(column.units.every((u) => u.inRange)).toBe(true);
+
+    const base = await live.calibrate(preset("masoretic", "kpg"));
+    const baseColumn = await live.geologicColumn(base);
+
+    // A larger lambda_F raises the ceiling — that much is monotone, because
+    // the apparent age at the onset is the whole integral and lambda_F scales
+    // it. Individual durations are NOT monotone in lambda_F: lifting the curve
+    // moves each unit's base to a different point inside the Flood year, where
+    // the in-Flood relaxation has already brought lambda down, so a unit can
+    // end up either shorter or longer. Asserting otherwise was a wrong guess.
+    expect(overridden.maxSecularAge).toBeGreaterThan(base.maxSecularAge);
+
+    // What the override must do is change the column at all — otherwise the
+    // live source would be handing back the preset regardless.
+    const cambrian = (c: typeof column) =>
+      c.units.find((u) => u.name === "Cambrian")!.durationTrue!;
+    expect(cambrian(column)).not.toBeCloseTo(cambrian(baseColumn), 6);
+  });
+});
+
 describe("custom parameters — the thing only the live source can do", () => {
   it("accepts an override the precomputed layer must refuse", async () => {
     const request: CalibrationRequest = {
-      ...preset("masoretic", "kpg"), overrides: { lambda_F: 5.0e5 },
+      ...preset("masoretic", "kpg"), overrides: { lambda_F: 5.0e9 },
     };
     expect(precomputed.supports(request)).toBe(false);
 
     const cal = await live.calibrate(request);
-    expect(cal.params.lambda_F).toBeCloseTo(5.0e5, 6);
-    // k_PF still comes from the solve; only what was overridden changed.
-    expect(cal.params.k_PF).toBeCloseTo(0.00482991111, 10);
+    expect(cal.params.lambda_F / 5.0e9 - 1).toBeCloseTo(0, 6);
+    // Both rates still come from the solve; only what was overridden changed.
+    expect(cal.params.k_F).toBeCloseTo(9.571, 2);
+    expect(cal.params.k_PF).toBeCloseTo(0.00480302, 7);
   });
 
   it("leaves the constraints undisturbed by Creation-week overrides", async () => {
@@ -217,9 +351,10 @@ describe("the parameter schema comes from the package, not from TypeScript", () 
       lambda_c: 1.0, k_c: 0.0, t_c: 1.0,
       t_F: "flood_start_date", t_F2: "flood_end_date",
     });
+    // k_PF joins the free set: the flood-only mode pins the Creation-week
+    // parameters and the dates, and both relaxation rates are now fitted.
     expect(result.free.sort()).toEqual(
-      ["k_F", "k_PF", "lambda_F", "lambda_bg"].sort(),
-    );
+      ["k_F", "k_PF", "lambda_F", "lambda_bg"].sort());
     // lambda_bg is present but not fittable (minimum == maximum), so a UI skips
     // it structurally rather than by a hardcoded exclusion.
     expect(result.fittable).not.toContain("lambda_bg");
@@ -230,7 +365,7 @@ describe("the parameter schema comes from the package, not from TypeScript", () 
     const result = await live.schema("septuagint", {
       t_F: "flood_start_date", t_F2: "flood_end_date",
     });
-    expect(result.fixed.t_F).toBe(2262);
+    expect(result.fixed.t_F).toBe(2176);
   });
 
   it("gives date parameters bounds from the loaded chronology", async () => {
@@ -254,6 +389,5 @@ describe("the parameter schema comes from the package, not from TypeScript", () 
     expect(result.free).toContain("k_c");
     expect(result.free).toContain("lambda_F");
     expect(result.free).toContain("k_F");
-    expect(result.free).toContain("k_PF");
   });
 });

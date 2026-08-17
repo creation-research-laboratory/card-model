@@ -1,77 +1,86 @@
 {
   "$comment": [
-    "Single source of truth for presets. Read by TypeScript (src/presets) and by",
-    "Python (tools/generate_precomputed.py), so a preset cannot be defined in the",
-    "app in a form Python never validated.",
+    "Single source of truth for presets. Read by TypeScript and by",
+    "tools/generate_precomputed.py, so a preset cannot be defined in the app in",
+    "a form Python never validated.",
     "",
-    "Naming follows the package's rule: a value ending in _age is an AGE (years",
-    "before present), one ending in _date is a DATE (years after Day 1 of",
-    "Creation). Chronology fields are DATEs except age_of_earth.",
+    "THREE MATCHED DATE PAIRS, solved by card.calibrate.solve_flood_rate:",
     "",
-    "PROVISIONAL: the septuagint chronology values are placeholders chosen to",
-    "exercise a longer timeline. They are on the pre-publication checklist in",
-    "frontend_plan.md and must be reviewed, with a citation, before this ships."
+    "  1. Flood onset          <->  the pre-Flood contact (Precambrian-Cambrian).",
+    "  2. Flood onset + 1 yr   <->  the selected post-Flood contact, K/Pg or N/Q.",
+    "  3. End of the Ice Age   <->  a conventional Ice Age endpoint.",
+    "",
+    "Three pairs need three unknowns, and the model now has them: lambda_F, the",
+    "in-Flood relaxation k_F, and the post-Flood relaxation k_PF. lambda is no",
+    "longer flat across the Flood year -- it starts at lambda_F, relaxes at k_F,",
+    "and hands the post-Flood exponential whatever it has reached at t_F2. That",
+    "handover is continuous, so k_F is one new degree of freedom rather than two.",
+    "",
+    "This is what a single k could not do. Pinning only the Flood year's two ends",
+    "forced k * 1 yr = ln(pre/post), so the relaxation was spent within a decade",
+    "and the Cenozoic collapsed. With k_F and k_PF separate, the Flood year and",
+    "the millennia after it each get their own rate.",
+    "",
+    "Naming rule: a value ending in _age is an AGE (years before present), one",
+    "ending in _date is a DATE (years after Day 1 of Creation)."
   ],
-
+  "calibration": {
+    "flood_start": {
+      "label": "Precambrian-Cambrian",
+      "note": "Pre-Flood contact, matched to the Flood's onset.",
+      "secular_age": 541000000.0,
+      "uncertainty": 10000000.0
+    },
+    "ice_age_end": {
+      "label": "End of the Ice Age",
+      "note": "Conventional Ice Age endpoint, matched to the chronology's Ice Age date. 12 ka is the author's figure; the package's own run config ships 11.5 kyr.",
+      "secular_age": 12000.0,
+      "uncertainty": 1000.0
+    }
+  },
   "chronologies": {
     "masoretic": {
       "label": "Masoretic",
-      "note": "The package default (card.chronology.DEFAULT_CHRONOLOGY).",
+      "note": [
+        "The package default (card.chronology.DEFAULT_CHRONOLOGY). ice_age_end_date",
+        "is a DATE -- years after Creation -- so the Ice Age ends at 2556 BP. The",
+        "Ice Age is not a calibration anchor in this structure; it is reported as a",
+        "prediction."
+      ],
       "provisional": false,
       "age_of_earth": 6056,
       "flood_start_date": 1656,
-      "flood_end_date": 1656,
-      "ice_age_end_date": 3500
+      "ice_age_end_date": 3500,
+      "flood_end_date": 1657.0
     },
     "septuagint": {
       "label": "Septuagint (LXX)",
-      "note": "PROVISIONAL — placeholder values pending review and citation.",
+      "note": [
+        "PROVISIONAL. Flood at 5324 BP is the author's figure; age_of_earth is still",
+        "a placeholder. Needs Rick's confirmation.",
+        "",
+        "Note his geologic-column figure implies a Flood at ~5054 BP, which matches",
+        "neither chronology here exactly and is closest to this one."
+      ],
       "provisional": true,
       "age_of_earth": 7500,
-      "flood_start_date": 2262,
-      "flood_end_date": 2262,
-      "ice_age_end_date": 4100
+      "flood_start_date": 2176,
+      "ice_age_end_date": 3300,
+      "flood_end_date": 2177.0
     }
   },
-
-  "boundaries": {
-    "kpg": {
-      "label": "K/Pg boundary",
-      "note": "Cretaceous-Paleogene, 66.0 Ma (ICS).",
-      "secular_age": 66.0e6,
-      "uncertainty": 1.0e5
-    },
-    "nq": {
-      "label": "Neogene/Quaternary",
-      "note": "2.58 Ma (ICS).",
-      "secular_age": 2.58e6,
-      "uncertainty": 1.0e4
-    },
-    "pc_c": {
-      "label": "Precambrian-Cambrian",
-      "note": "540 Ma; the boundary the package's own run config fits.",
-      "secular_age": 540.0e6,
-      "uncertainty": 1.0e7
-    }
-  },
-
-  "second_constraint": {
-    "label": "End of the Ice Age",
-    "note": "Held across every preset; its AGE comes from the chronology.",
-    "secular_age": 11500,
-    "uncertainty": 30
-  },
-
   "defaults": {
     "chronology": "masoretic",
     "boundary": "kpg",
     "mode": "flood_only"
   },
-
   "modes": {
     "flood_only": {
       "label": "Flood only",
-      "note": "No Creation-week acceleration; instantaneous Flood.",
+      "note": [
+        "No Creation-week acceleration; an instantaneous onset at t_F relaxing",
+        "as a single exponential. t_F == t_F2."
+      ],
       "enabled": true,
       "fixed": {
         "lambda_c": 1.0,
@@ -101,15 +110,29 @@
       }
     }
   },
-
   "series": {
     "note": [
-      "Grid used for the precomputed first-paint layer. Log-spaced in true age:",
-      "the structure is all in the recent end and a linear grid spends every",
-      "point on the flat tail. Breakpoints and constraint ages are unioned in by",
-      "the generator so the Flood discontinuity renders as a step and the",
-      "calibration anchors are exact rows."
+      "Grid for the precomputed first-paint layer. Log-spaced in true age: the",
+      "structure is all in the recent end. Breakpoints, constraint ages and the",
+      "relaxation regions are unioned in by the generator."
     ],
-    "points": 600
+    "points": 600,
+    "lambda_points": 400
+  },
+  "flood_duration_years": 1.0,
+  "$flood_duration_note": "True years between pairs 1 and 2 -- the Flood year. The chronology must give the Flood this length (flood_end_date = flood_start_date + this), because solve_flood_rate treats it as an input, never an unknown.",
+  "post_flood_boundaries": {
+    "kpg": {
+      "label": "Cretaceous-Paleogene (K/Pg)",
+      "note": "Post-Flood contact at 66.0 Ma (ICS), one year after onset.",
+      "secular_age": 66000000.0,
+      "uncertainty": 100000.0
+    },
+    "nq": {
+      "label": "Neogene-Quaternary (N/Q)",
+      "note": "Post-Flood contact at 2.58 Ma (ICS), one year after onset.",
+      "secular_age": 2580000.0,
+      "uncertainty": 10000.0
+    }
   }
 }

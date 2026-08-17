@@ -74,21 +74,82 @@ export interface Calibration {
   readonly maxSecularAge: number;
   /**
    * False when these numbers were interpolated from the precomputed table
-   * rather than computed by the model. Interpolated values are good to ~0.3%
-   * on a forward age and ~0.03% on an inverse one — fine for a chart, too
-   * coarse to present as an exact figure. The UI should mark them.
+   * rather than computed by the model. Interpolated values are good to ~0.8%
+   * on a forward age and ~0.9% on an inverse one — fine for a chart, too coarse
+   * to present as an exact figure. The UI should mark them.
    */
   readonly exact: boolean;
   /** Set when the calibration came from a named preset. */
   readonly presetKey?: string;
 }
 
-/** Sampled curve. Parallel arrays rather than objects: this gets large. */
+/**
+ * Sampled curve. Parallel arrays rather than objects: this gets large.
+ *
+ * `exact` here asks a narrower question than `Calibration.exact`: did these
+ * sample values come from the model? For both sources they did — the
+ * precomputed generator called `forward_age` at exactly these ages. What is
+ * approximate about the precomputed source is answering at an *arbitrary* age,
+ * which interpolates between rows, and `Calibration.exact` governs that.
+ */
 export interface Series {
   /** AGEs, ascending. */
   readonly trueAge: readonly number[];
   /** Apparent secular age at each `trueAge`. */
   readonly secularAge: readonly number[];
+  readonly exact: boolean;
+}
+
+/**
+ * Decay-rate history: lambda against DATE.
+ *
+ * The one curve in the app whose x axis is a DATE (years after Day 1 of
+ * Creation) rather than an AGE. It is also the one that genuinely steps —
+ * `forward_age` is the integral of a bounded rate and therefore continuous,
+ * but lambda itself jumps at t_F, the Flood's onset. It does *not* jump at
+ * t_F2: `lambda_F2` is pinned to whatever the in-Flood exponential has reached
+ * by then, so the rate changes pace there rather than value. The onset carries
+ * two samples so a chart draws its jump rather than a ramp.
+ */
+export interface LambdaSeries {
+  /** DATEs, ascending, from 0 to the present. */
+  readonly date: readonly number[];
+  /** lambda at each DATE, as a multiple of background. */
+  readonly lambda: readonly number[];
+  readonly floodStartDate: number;
+  readonly floodEndDate: number;
+  readonly presentDate: number;
+  readonly exact: boolean;
+}
+
+/**
+ * One chronostratigraphic unit, with its secular span mapped through the model.
+ *
+ * `inRange` is false when the unit's base is older than the calibration can
+ * produce — pinning the Flood to the K/Pg boundary caps the model at 66 Myr, so
+ * the Cretaceous and everything older simply has no young-earth date. Reported
+ * rather than dropped, so a chart can say the column runs out.
+ */
+export interface GeologicUnit {
+  readonly name: string;
+  readonly rank: string;
+  /** Older boundary, secular years. */
+  readonly baseSecularAge: number;
+  /** Younger boundary, secular years. */
+  readonly topSecularAge: number;
+  readonly inRange: boolean;
+  /** AGE of the older boundary. Absent when out of range. */
+  readonly baseTrueAge?: number;
+  readonly topTrueAge?: number;
+  /** Young-earth years the unit occupies. Absent when out of range. */
+  readonly durationTrue?: number;
+  /** Secular years elapsed per young-earth year across this unit. */
+  readonly acceleration?: number | null;
+}
+
+export interface GeologicColumn {
+  readonly units: readonly GeologicUnit[];
+  readonly maxSecularAge: number;
   readonly exact: boolean;
 }
 

@@ -16,6 +16,9 @@ import {
   type Chronology,
   type Constraint,
   type GeneralParams,
+  type GeologicColumn,
+  type GeologicUnit,
+  type LambdaSeries,
   type Series,
   ModelError,
   UnsupportedRequestError,
@@ -26,7 +29,20 @@ import {
 export interface PresetCatalog {
   chronologies: PrecomputedData["chronologies"];
   boundaries: PrecomputedData["boundaries"];
-  secondConstraint: PrecomputedData["second_constraint"];
+  /**
+   * The two fixed pairs: the pre-Flood contact at the Flood's onset, and the
+   * Ice Age endpoint. The third — the post-Flood contact — is the boundary the
+   * request selects.
+   */
+  calibration: PrecomputedData["calibration"];
+  /** True years between the two pairs — the Flood year. */
+  floodDurationYears: number;
+  /**
+   * The ICS unit list, name and base age only. Passed through to `bridge.py`
+   * rather than read there: the browser already has it, and `card` has no
+   * business knowing about the chronostratigraphic chart.
+   */
+  geologicUnits: Array<{ name: string; rank: string; baseSecularAge: number }>;
 }
 
 interface BridgeError {
@@ -100,26 +116,33 @@ export class PyodideSource implements ModelSource {
       maxAbsResidual: number;
       maxSecularAge: number;
       floodStartAge: number;
+      postFloodBoundaryAge: number;
       iceAgeEndAge: number;
+      lambdaF2: number;
     }>(await this.transport.call("calibrate", JSON.stringify({
       chronology,
-      floodSecularAge: boundary.secular_age,
-      secondSecularAge: this.catalog.secondConstraint.secular_age,
+      // The two pairs are the ends of the Flood: a fixed pre-Flood/Flood
+      // boundary and the selected Flood/post-Flood one.
+      floodStartSecularAge: this.catalog.calibration.flood_start.secular_age,
+      postFloodSecularAge: boundary.secular_age,
+      iceAgeSecularAge: this.catalog.calibration.ice_age_end.secular_age,
+      floodDurationYears: this.catalog.floodDurationYears,
       overrides: request.overrides ?? {},
     })));
 
+    const calib = this.catalog.calibration;
     const constraints: Constraint[] = [
       {
-        label: boundary.label,
+        label: `Flood begins — ${calib.flood_start.label}`,
         trueAge: payload.floodStartAge,
-        secularAge: boundary.secular_age,
-        uncertainty: boundary.uncertainty,
+        secularAge: calib.flood_start.secular_age,
+        uncertainty: 0,
       },
       {
-        label: this.catalog.secondConstraint.label,
-        trueAge: payload.iceAgeEndAge,
-        secularAge: this.catalog.secondConstraint.secular_age,
-        uncertainty: this.catalog.secondConstraint.uncertainty,
+        label: `Flood ends — ${boundary.label}`,
+        trueAge: payload.postFloodBoundaryAge,
+        secularAge: boundary.secular_age,
+        uncertainty: boundary.uncertainty,
       },
     ];
 
@@ -146,6 +169,29 @@ export class PyodideSource implements ModelSource {
       })),
     );
     return { trueAge: payload.trueAge, secularAge: payload.secularAge, exact: true };
+  }
+
+  async lambdaHistory(calibration: Calibration, points = 400): Promise<LambdaSeries> {
+    const payload = this.unwrap<{
+      date: number[]; lambda: number[];
+      floodStartDate: number; floodEndDate: number; presentDate: number;
+    }>(await this.transport.call("lambda_history", JSON.stringify({
+      chronology: calibration.chronology,
+      params: calibration.params,
+      points,
+    })));
+    return { ...payload, exact: true };
+  }
+
+  async geologicColumn(calibration: Calibration): Promise<GeologicColumn> {
+    const payload = this.unwrap<{ units: GeologicUnit[]; maxSecularAge: number }>(
+      await this.transport.call("geologic_column", JSON.stringify({
+        chronology: calibration.chronology,
+        params: calibration.params,
+        units: this.catalog.geologicUnits,
+      })),
+    );
+    return { ...payload, exact: true };
   }
 
   async forwardAge(calibration: Calibration, trueAge: number): Promise<number> {

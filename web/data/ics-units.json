@@ -1,0 +1,45 @@
+{
+  "$comment": [
+    "Chronostratigraphic units and their base ages, from the ICS International",
+    "Chronostratigraphic Chart. Read by tools/generate_precomputed.py to build",
+    "the geologic-column view: each unit's secular span is converted through",
+    "the calibrated model into a young-earth duration.",
+    "",
+    "The list mixes ranks on purpose, and matches how the column is usually",
+    "drawn for this argument: the Quaternary and Neogene are split into epochs,",
+    "because that is where the interesting compression happens, and everything",
+    "older is given by period.",
+    "",
+    "`base_secular_age` is the OLDER boundary of the unit, in years. Units are",
+    "listed youngest first; each unit's younger boundary is the previous unit's",
+    "base, and the Holocene's is the present.",
+    "",
+    "PROVISIONAL: these are ICS v2023/09 values entered by hand and have not",
+    "been checked against the published chart by a geologist. They are on the",
+    "pre-publication checklist in frontend_plan.md."
+  ],
+
+  "source": {
+    "name": "ICS International Chronostratigraphic Chart",
+    "version": "v2023/09",
+    "url": "https://stratigraphy.org/chart",
+    "reviewed": false
+  },
+
+  "units": [
+    { "name": "Holocene",      "rank": "epoch",  "base_secular_age": 11700 },
+    { "name": "Pleistocene",   "rank": "epoch",  "base_secular_age": 2580000 },
+    { "name": "Pliocene",      "rank": "epoch",  "base_secular_age": 5333000 },
+    { "name": "Miocene",       "rank": "epoch",  "base_secular_age": 23030000 },
+    { "name": "Paleogene",     "rank": "period", "base_secular_age": 66000000 },
+    { "name": "Cretaceous",    "rank": "period", "base_secular_age": 145000000 },
+    { "name": "Jurassic",      "rank": "period", "base_secular_age": 201400000 },
+    { "name": "Triassic",      "rank": "period", "base_secular_age": 251902000 },
+    { "name": "Permian",       "rank": "period", "base_secular_age": 298900000 },
+    { "name": "Carboniferous", "rank": "period", "base_secular_age": 358900000 },
+    { "name": "Devonian",      "rank": "period", "base_secular_age": 419200000 },
+    { "name": "Silurian",      "rank": "period", "base_secular_age": 443800000 },
+    { "name": "Ordovician",    "rank": "period", "base_secular_age": 486850000 },
+    { "name": "Cambrian",      "rank": "period", "base_secular_age": 538800000 }
+  ]
+}

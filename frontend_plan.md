@@ -567,6 +567,10 @@ it is handed.
 - [ ] Masoretic values confirmed as still matching `DEFAULT_CHRONOLOGY` at
       time of release.
 - [ ] Boundary secular ages and uncertainties confirmed against ICS.
+- [ ] `web/data/ics-units.json` reviewed against the published ICS chart. The
+      fourteen unit boundaries were entered by hand from v2023/09 and drive the
+      geologic-column figure; a wrong boundary would produce a confident,
+      plausible, wrong duration. Set `source.reviewed` to true once checked.
 - [ ] Wording of the model's framing and caveats reviewed — the app will be
       the most-read surface this project has, and it should be at least as
       careful as the paper about what is assumed versus derived.

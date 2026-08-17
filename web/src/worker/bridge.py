@@ -19,7 +19,7 @@ import json
 import warnings
 from typing import Any, Dict, List
 
-from card.calibrate import solve_flood_only
+from card.calibrate import solve_flood_rate
 from card.chronology import Chronology
 from card.models import GeneralModel, GeneralModelParams
 from card.parameters import (
@@ -28,8 +28,20 @@ from card.parameters import (
     to_json_schema,
 )
 
-__all__ = ["calibrate", "series", "forward_age", "inverse_age", "schema",
-           "environment"]
+__all__ = ["calibrate", "series", "lambda_history", "geologic_column",
+           "forward_age", "inverse_age", "schema", "environment"]
+
+
+#: Relative offset used to place a sample just past a discontinuity.  Large
+#: enough to survive being rounded to 9 significant figures for the file, small
+#: enough to be invisible on a chart spanning thousands of years (~0.0002 yr at
+#: the Flood).
+_STEP_EPSILON = 1e-7
+
+
+def _just_after(date: float) -> float:
+    """The smallest DATE past `date` that still round-trips through the file."""
+    return date * (1.0 + _STEP_EPSILON) if date > 0.0 else _STEP_EPSILON
 
 
 def _chronology(spec: Dict[str, Any]) -> Chronology:
@@ -77,11 +89,21 @@ def calibrate(request_json: str) -> str:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
 
-            result = solve_flood_only(
-                flood_age=chronology.flood_start_age,
-                flood_secular_age=float(request["floodSecularAge"]),
-                second_age=chronology.ice_age_end_age,
-                second_secular_age=float(request["secondSecularAge"]),
+            # Three matched pairs: the Flood's onset at the pre-Flood contact,
+            # its end a year later at the selected post-Flood contact, and the
+            # end of the Ice Age well into the relaxation.  All three AGEs come
+            # from the chronology -- solve_flood_rate reads them there, so
+            # passing anything else would silently solve a different problem.
+            #
+            # This has to stay in step with web/tools/generate_precomputed.py:
+            # the two sources answer the same questions, and the live suite
+            # fails loudly if they drift.
+            flood_age = chronology.flood_start_age
+            second_age = chronology.flood_end_age
+            result = solve_flood_rate(
+                pre_flood_secular_age=float(request["floodStartSecularAge"]),
+                post_flood_secular_age=float(request["postFloodSecularAge"]),
+                ice_age_secular_age=float(request["iceAgeSecularAge"]),
                 chronology=chronology,
             )
             params = result.model.params
@@ -106,7 +128,11 @@ def calibrate(request_json: str) -> str:
                 "maxSecularAge": model.max_secular_age(present),
                 "floodDate": result.flood_date,
                 "floodStartAge": chronology.flood_start_age,
+                "postFloodBoundaryAge": second_age,
                 "iceAgeEndAge": chronology.ice_age_end_age,
+                # Pinned by continuity, not free: what the in-Flood exponential
+                # has fallen to by t_F2, and where the post-Flood one starts.
+                "lambdaF2": params.lambda_F2,
             }, caught)
     except Exception as exc:  # noqa: BLE001 — the boundary reports, never crashes
         return _error(exc)
@@ -146,6 +172,123 @@ def series(request_json: str) -> str:
             warnings.simplefilter("always")
             secular = [model.forward_age(age, present) for age in ordered]
             return _ok({"trueAge": ordered, "secularAge": secular}, caught)
+    except Exception as exc:  # noqa: BLE001
+        return _error(exc)
+
+
+def lambda_history(request_json: str) -> str:
+    """
+    Sample lambda(t) against DATE — the decay-rate history.
+
+    Mirrors `card.plotting.plot_lambda_history`: linear in DATE from 0 to the
+    present, log in lambda.  This is the one curve whose x axis is a DATE
+    (years after Day 1 of Creation) rather than an AGE, and a UI must say so.
+
+    Unlike the age curve, this one is genuinely discontinuous: `forward_age` is
+    the integral of a bounded rate and so is continuous, but lambda itself
+    steps at t_c, t_F and t_F2.  Each breakpoint therefore needs *two* samples —
+    one at the breakpoint and one just after it — or a chart draws the Flood as
+    a diagonal ramp instead of a jump.  `lambda_func` uses `<=`, so the value
+    at a breakpoint belongs to the earlier region and the partner sample has to
+    be on the later side.
+    """
+    try:
+        request = json.loads(request_json)
+        chronology = _chronology(request["chronology"])
+        params = GeneralModelParams.from_dict(request["params"])
+        model = GeneralModel(params)
+        present = chronology.present_date
+        n = max(2, int(request.get("points", 400)))
+
+        step = present / (n - 1)
+        grid = {i * step for i in range(n)}
+        grid.update({0.0, present})
+        for date in model.breakpoints():
+            if 0.0 <= date <= present:
+                grid.add(date)
+                after = _just_after(date)
+                if after <= present:
+                    grid.add(after)
+                # A linear grid cannot resolve either relaxation.  k_F reaches
+                # ~10/yr, so the in-Flood drop is over inside the Flood year,
+                # while a 400-point grid over six millennia samples every
+                # fifteen years.  Log-spaced points from each breakpoint
+                # capture the shape for any decay constant, which matters more
+                # now that k_F and k_PF differ by three orders of magnitude.
+                span = present - date
+                if span > 0:
+                    lo = max(1e-4, span * 1e-9)
+                    steps = 120
+                    ratio = (span / lo) ** (1.0 / (steps - 1))
+                    grid.update(date + lo * ratio ** i for i in range(steps))
+
+        ordered = sorted(grid)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            rates = [model.lambda_func(t) for t in ordered]
+            return _ok({
+                "date": ordered,
+                "lambda": rates,
+                # Handed over so a chart can mark the Flood without
+                # re-deriving it from the parameters.
+                "floodStartDate": params.t_F,
+                "floodEndDate": params.t_F2,
+                "presentDate": present,
+            }, caught)
+    except Exception as exc:  # noqa: BLE001
+        return _error(exc)
+
+
+def geologic_column(request_json: str) -> str:
+    """
+    Each chronostratigraphic unit's secular span, as a young-earth duration.
+
+    The unit catalogue is passed in rather than read from a file: the browser
+    already has it, and `card` has no business knowing about the ICS chart.
+
+    Durations are *differences* of inverse ages, and the older units differ
+    only in the fourth or fifth significant figure — which is why the
+    precomputed layer cannot approximate this view and ships exact numbers
+    instead.  The same reasoning is why this returns durations rather than
+    endpoints for the caller to subtract.
+    """
+    try:
+        request = json.loads(request_json)
+        chronology = _chronology(request["chronology"])
+        model = GeneralModel(GeneralModelParams.from_dict(request["params"]))
+        present = chronology.present_date
+        max_secular = model.max_secular_age(present)
+
+        rows: List[Dict[str, Any]] = []
+        younger_secular = 0.0
+        younger_true = 0.0
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            for unit in request["units"]:
+                base_secular = float(unit["baseSecularAge"])
+                row: Dict[str, Any] = {
+                    "name": unit["name"],
+                    "rank": unit.get("rank", "period"),
+                    "baseSecularAge": base_secular,
+                    "topSecularAge": younger_secular,
+                }
+                if base_secular <= max_secular:
+                    base_true = model.inverse_age(base_secular, present)
+                    duration = base_true - younger_true
+                    row.update({
+                        "inRange": True,
+                        "baseTrueAge": base_true,
+                        "topTrueAge": younger_true,
+                        "durationTrue": duration,
+                        "acceleration": ((base_secular - younger_secular) / duration
+                                         if duration > 0 else None),
+                    })
+                    younger_true = base_true
+                else:
+                    row["inRange"] = False
+                younger_secular = base_secular
+                rows.append(row)
+            return _ok({"units": rows, "maxSecularAge": max_secular}, caught)
     except Exception as exc:  # noqa: BLE001
         return _error(exc)
 

@@ -20,6 +20,8 @@ import {
   type Chronology,
   type Constraint,
   type GeneralParams,
+  type GeologicColumn,
+  type LambdaSeries,
   type Series,
   UnsupportedRequestError,
   hasOverrides,
@@ -28,7 +30,7 @@ import {
 
 /** Shape of `public/precomputed.json`, as written by generate_precomputed.py. */
 export interface PrecomputedData {
-  generator: { card_version: string; series_points: number };
+  generator: { card_version: string; series_points: number; lambda_points: number };
   defaults: { chronology: string; boundary: string; mode: string };
   chronologies: Record<string, {
     label: string;
@@ -38,10 +40,15 @@ export interface PrecomputedData {
     flood_end_date: number;
     ice_age_end_date: number;
     flood_start_age: number;
+    post_flood_boundary_age: number;
     ice_age_end_age: number;
   }>;
   boundaries: Record<string, { label: string; secular_age: number; uncertainty: number }>;
-  second_constraint: { label: string; secular_age: number; uncertainty: number };
+  calibration: {
+    flood_start: { label: string; secular_age: number };
+    ice_age_end: { label: string; secular_age: number };
+  };
+  flood_duration_years: number;
   presets: Record<string, {
     chronology: string;
     boundary: string;
@@ -54,8 +61,23 @@ export interface PrecomputedData {
     constraints: Array<{
       label: string; true_age: number; secular_age: number; uncertainty: number;
     }>;
+    /**
+     * The handover value: what the in-Flood exponential has fallen to by
+     * `t_F2`, and so the amplitude the post-Flood one starts from. Pinned by
+     * continuity rather than free — see `GeneralModelParams.lambda_F2`.
+     */
+    lambda_F2: number;
     series: { true_age: number[]; secular_age: number[] };
+    lambda_history: { date: number[]; lambda: number[] };
+    geologic_column: Array<{
+      name: string; rank: string;
+      base_secular_age: number; top_secular_age: number;
+      in_range: boolean;
+      base_true_age?: number; top_true_age?: number;
+      duration_true?: number; acceleration?: number | null;
+    }>;
   }>;
+  ics: { version: string; url: string; reviewed: boolean };
 }
 
 export class PrecomputedSource implements ModelSource {
@@ -64,7 +86,7 @@ export class PrecomputedSource implements ModelSource {
 
   constructor(private readonly data: PrecomputedData) {}
 
-  /** Load from a URL. The file is ~26 kB gzipped, so this is a cheap fetch. */
+  /** Load from a URL. ~57 kB gzipped, so this is a fetch rather than a download. */
   static async load(url = "./precomputed.json"): Promise<PrecomputedSource> {
     const response = await fetch(url);
     if (!response.ok) {
@@ -146,13 +168,61 @@ export class PrecomputedSource implements ModelSource {
 
   async series(calibration: Calibration): Promise<Series> {
     const preset = this.presetFor(calibration);
-    // `points` is ignored on purpose: resampling an interpolated table at
-    // higher density would manufacture precision the data does not have.
+    // `points` is ignored on purpose: resampling at higher density would
+    // interpolate, and manufacture precision the table does not have.
+    //
+    // `exact: true` because these sample values did come from the model — the
+    // generator called `forward_age` at exactly these ages. What is inexact
+    // about this source is `forwardAge`/`inverseAge` at an *arbitrary* age,
+    // which interpolates between rows; `Calibration.exact` governs that.
     return {
       trueAge: preset.series.true_age,
       secularAge: preset.series.secular_age,
-      exact: false,
+      exact: true,
     };
+  }
+
+  async lambdaHistory(calibration: Calibration): Promise<LambdaSeries> {
+    const preset = this.presetFor(calibration);
+    // Returned as generated, not resampled. The step at the Flood is carried
+    // by an adjacent pair of samples; interpolating between them would turn
+    // the jump this curve exists to show back into a ramp.
+    return {
+      date: preset.lambda_history.date,
+      lambda: preset.lambda_history.lambda,
+      floodStartDate: preset.params.t_F,
+      floodEndDate: preset.params.t_F2,
+      presentDate: calibration.chronology.ageOfEarth,
+      exact: true,
+    };
+  }
+
+  async geologicColumn(calibration: Calibration): Promise<GeologicColumn> {
+    const preset = this.presetFor(calibration);
+    // Exact, unlike everything else this source derives from its curve: the
+    // generator ran the real solver for these. Durations are differences of
+    // inverse ages agreeing to four or five significant figures, and
+    // interpolating them would put 13.7% error on the Silurian.
+    return {
+      units: preset.geologic_column.map((u) => ({
+        name: u.name,
+        rank: u.rank,
+        baseSecularAge: u.base_secular_age,
+        topSecularAge: u.top_secular_age,
+        inRange: u.in_range,
+        baseTrueAge: u.base_true_age,
+        topTrueAge: u.top_true_age,
+        durationTrue: u.duration_true,
+        acceleration: u.acceleration,
+      })),
+      maxSecularAge: preset.max_secular_age,
+      exact: true,
+    };
+  }
+
+  /** ICS chart the column was built from, so the UI can cite and caveat it. */
+  get icsSource(): PrecomputedData["ics"] {
+    return this.data.ics;
   }
 
   async forwardAge(calibration: Calibration, trueAge: number): Promise<number> {
