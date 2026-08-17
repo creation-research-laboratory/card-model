@@ -30,10 +30,10 @@ def fake_chain():
     rng = np.random.default_rng(0)
     chain = np.stack([
         rng.normal(6.5, 0.05, size=(40, 6)),   # log10 lambda_F
-        rng.normal(-2.2, 0.03, size=(40, 6)),  # log10 k_F
+        rng.normal(-2.2, 0.03, size=(40, 6)),  # log10 k_PF
     ], axis=-1)
     log_prob = rng.normal(-5, 1, size=(40, 6))
-    return chain, log_prob, ['lambda_F', 'k_F']
+    return chain, log_prob, ['lambda_F', 'k_PF']
 
 
 # ----------------------------------------------------------------------------
@@ -83,7 +83,7 @@ def test_parameter_sweep_writes_a_file(tmp_path):
 def test_lambda_history_writes_a_file(tmp_path):
     out = tmp_path / "lambda.png"
     result = plot_lambda_history(
-        GeneralModel.flood_only(lambda_F=1e5, k_F=1e-2), n_points=50,
+        GeneralModel.flood_only(lambda_F=1e5, k_PF=1e-2), n_points=50,
         out_file=str(out))
     assert result == str(out)
     assert out.stat().st_size > 0
@@ -95,7 +95,7 @@ def test_lambda_history_draws_the_model_not_a_copy_of_it(tmp_path):
     import matplotlib.pyplot as plt
 
     model = GeneralModel(GeneralModelParams.defaults(
-        lambda_c=1e3, lambda_F=1e5, k_c=1e-1, k_F=1e-2,
+        lambda_c=1e3, lambda_F=1e5, k_c=1e-1, k_PF=1e-2,
         t_F=FLOOD_START_DATE, t_F2=FLOOD_START_DATE + 1))
     fig, ax = plt.subplots()
     plot_lambda_history(model, n_points=200, ax=ax)
@@ -108,7 +108,7 @@ def test_lambda_history_draws_the_model_not_a_copy_of_it(tmp_path):
 
 def test_lambda_history_accepts_params_and_several_models(tmp_path):
     out = tmp_path / "many.png"
-    models = [GeneralModelParams.defaults(k_F=k) for k in (1e-2, 1e-3)]
+    models = [GeneralModelParams.defaults(k_PF=k) for k in (1e-2, 1e-3)]
     plot_lambda_history(models, labels=["fast", "slow"], n_points=50,
                         out_file=str(out))
     assert out.stat().st_size > 0
@@ -120,7 +120,7 @@ def test_lambda_history_x_axis_is_a_date(tmp_path):
     import matplotlib.pyplot as plt
 
     fig, ax = plt.subplots()
-    plot_lambda_history(GeneralModel.flood_only(lambda_F=1e5, k_F=1e-2),
+    plot_lambda_history(GeneralModel.flood_only(lambda_F=1e5, k_PF=1e-2),
                         n_points=20, ax=ax)
     assert ax.get_xlabel() == "Time (years after Creation)"
     plt.close(fig)
@@ -129,7 +129,7 @@ def test_lambda_history_x_axis_is_a_date(tmp_path):
 def test_lambda_history_rejects_mismatched_labels(tmp_path):
     with pytest.raises(ValueError, match="labels has 1 entries"):
         plot_lambda_history([GeneralModelParams.defaults(),
-                             GeneralModelParams.defaults(k_F=1e-3)],
+                             GeneralModelParams.defaults(k_PF=1e-3)],
                             labels=["only one"], n_points=10,
                             out_file=str(tmp_path / "x.png"))
 
@@ -151,14 +151,14 @@ def test_summary_reports_both_sampling_and_linear_units():
     lambda_F of 6.5; both must be available and clearly named."""
     samples = np.column_stack([
         np.full(100, 6.5),    # log10 lambda_F
-        np.full(100, -2.2),   # log10 k_F
+        np.full(100, -2.2),   # log10 k_PF
     ])
-    rows = summarize_mcmc(samples, ['lambda_F', 'k_F'])
+    rows = summarize_mcmc(samples, ['lambda_F', 'k_PF'])
     by_name = {row['parameter']: row for row in rows}
 
     assert by_name['lambda_F']['median'] == pytest.approx(6.5)
     assert by_name['lambda_F']['linear_median'] == pytest.approx(10 ** 6.5)
-    assert by_name['k_F']['linear_median'] == pytest.approx(10 ** -2.2)
+    assert by_name['k_PF']['linear_median'] == pytest.approx(10 ** -2.2)
     assert by_name['lambda_F']['log_scale'] is True
 
 
@@ -193,8 +193,8 @@ def test_corner_plot_writes_a_file(tmp_path, fake_chain):
     chain, _, names = fake_chain
     out = tmp_path / "corner.png"
     plot_mcmc_corner(chain.reshape(-1, 2), names,
-                     prior_means={'lambda_F': 6.5, 'k_F': -2.2},
-                     prior_sigmas={'lambda_F': 1.0, 'k_F': 1.0},
+                     prior_means={'lambda_F': 6.5, 'k_PF': -2.2},
+                     prior_sigmas={'lambda_F': 1.0, 'k_PF': 1.0},
                      out_file=str(out))
     assert out.stat().st_size > 0
 
@@ -238,10 +238,10 @@ def test_legacy_text_directory_is_still_readable(tmp_path):
     samples = np.arange(n_walkers * n_steps * ndim, dtype=float).reshape(-1, ndim)
     np.savetxt(tmp_path / "samples.txt", samples)
     np.savetxt(tmp_path / "log_probs.txt", np.zeros(n_walkers * n_steps))
-    (tmp_path / "param_names.txt").write_text("lambda_F\nk_F\n")
+    (tmp_path / "param_names.txt").write_text("lambda_F\nk_PF\n")
 
     results = load_legacy_text_results(str(tmp_path))
-    assert results['param_names'] == ['lambda_F', 'k_F']
+    assert results['param_names'] == ['lambda_F', 'k_PF']
     assert results['chain'].shape == (n_steps, n_walkers, ndim)
 
 
@@ -255,7 +255,7 @@ def test_return_figure_hands_back_an_open_figure():
     import matplotlib.pyplot as plt
     from matplotlib.figure import Figure
 
-    fig = plot_lambda_history(GeneralModel.flood_only(lambda_F=1e5, k_F=1e-2),
+    fig = plot_lambda_history(GeneralModel.flood_only(lambda_F=1e5, k_PF=1e-2),
                               n_points=30, out_file=None, return_figure=True)
     assert isinstance(fig, Figure)
     assert plt.fignum_exists(fig.number), "the figure was closed"

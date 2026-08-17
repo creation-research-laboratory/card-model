@@ -194,16 +194,16 @@ def _run_fit(args) -> int:
             out_file=os.path.join(out_dir, "trace_plot.png")))
 
         stats = {row["parameter"]: row for row in summary}
-        if {"lambda_F", "k_F"} <= set(stats):
+        if {"lambda_F", "k_PF"} <= set(stats):
             # The age-comparison figure is a flood-only picture, so it is only
             # drawn when those are the parameters that were actually sampled.
             # Note the linear_ keys: both are sampled in log10.
             written.append(plot_age_comparison(
                 age_of_earth=config.chronology.age_of_earth,
                 lambda_F=stats["lambda_F"]["linear_mean"],
-                k_F=stats["k_F"]["linear_mean"],
+                k_PF=stats["k_PF"]["linear_mean"],
                 lambda_F_median=stats["lambda_F"]["linear_median"],
-                k_F_median=stats["k_F"]["linear_median"],
+                k_PF_median=stats["k_PF"]["linear_median"],
                 flood_date=config.chronology.flood_start_date,
                 out_file=os.path.join(out_dir, "age_comparison_posterior.png")))
 
@@ -234,7 +234,7 @@ def _run_calibrate(args) -> int:
     if len(config.constraints) != 2:
         raise ValueError(
             f"`card calibrate` needs exactly two matched date pairs — two "
-            f"equations for lambda_F and k_F — but {args.config!r} has "
+            f"equations for lambda_F and k_PF — but {args.config!r} has "
             f"{len(config.constraints)}.  Use `card fit` for an over- or "
             "under-determined problem."
         )
@@ -247,10 +247,14 @@ def _run_calibrate(args) -> int:
         second_age=second.young_age,
         second_secular_age=second.secular_age,
         chronology=config.chronology,
+        k_F=float(config.fixed_params.get("k_F", 0.0)),
     )
 
     print(f"lambda_F = {result.lambda_F:.6g}  (x background)")
-    print(f"k_F      = {result.k_F:.6g}  /year")
+    print(f"k_PF     = {result.k_PF:.6g}  /year")
+    print(f"k_F      = {result.k_F:.6g}  /year  (held fixed; two pairs cannot "
+          "determine three rates)")
+    print(f"lambda_F2 = {result.lambda_F2:.6g}  (x background, at the Flood's end)")
     print(f"Flood placed at DATE {result.flood_date:g} "
           f"(AGE {flood.young_age:g} YBP)")
     for constraint, residual in zip((flood, second), result.residuals):

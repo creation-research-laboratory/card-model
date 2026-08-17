@@ -15,8 +15,8 @@ CARD ("Calibrating Accelerated Radiometric Decay", formerly RIAG) is a research 
   - `constants.py` — numerical settings plus chronology conveniences.
   - `parameters.py` — `ParamSpec` metadata (symbol, unit, bounds, log-scale, description) and helpers. Stdlib only.
   - `models.py` — `DecayModel` ABC, `ConstantDecayModel`, `GeneralModel`, `GeneralModelParams`. **Stdlib only** since 2026-08-05 (see `_solvers.py`); the sole exception is the `quad` fallback in `DecayModel.compute_integral`, which imports scipy inside the method and is unreachable for the two concrete models.
-  - `calibrate.py` — deterministic solves from matched date pairs. **Stdlib only.**
-  - `_solvers.py` — `brentq`, a port of scipy's `Zeros/brentq.c` that returns bit-identical results. Private. Exists so `models.py`/`calibrate.py` need no scipy: in a Pyodide build the numpy + scipy wheels are 16 MB against a 5.8 MB Python runtime, and the model path used numpy only as a slower spelling of `math.exp`/`math.expm1`/`math.isfinite`. Type checks use `numbers.Real`, which numpy scalars satisfy by ABC registration, so callers passing numpy values are unaffected. Do not add general-purpose numerics here — anything needing real scipy should import it lazily at its use site.
+  - `calibrate.py` — deterministic solves from matched date pairs (`solve_lambda_F`, `solve_flood_only`, `solve_flood_rate`). **Stdlib only.**
+  - `_solvers.py` — `brentq`, a port of scipy's `Zeros/brentq.c`; bit-identical to scipy's on smooth objectives, and within `xtol` always (clang's FMA contraction in the C interpolation step can move an iterate by an ULP — see the module docstring). Private. Exists so `models.py`/`calibrate.py` need no scipy: in a Pyodide build the numpy + scipy wheels are 16 MB against a 5.8 MB Python runtime, and the model path used numpy only as a slower spelling of `math.exp`/`math.expm1`/`math.isfinite`. Type checks use `numbers.Real`, which numpy scalars satisfy by ABC registration, so callers passing numpy values are unaffected. Do not add general-purpose numerics here — anything needing real scipy should import it lazily at its use site.
   - `inference.py` — `MCMCFitter` (emcee) + HDF5 chain io. emcee/h5py imported inside methods.
   - `plotting.py` — the only core module importing matplotlib; age curves plus the styled MCMC corner/trace/summary figures.
   - `config.py` — `RunConfig`/`Constraint`/`SamplerConfig`: a whole fit described by a YAML or JSON file. Stdlib + chronology only (`yaml` is imported inside the loader), so a frontend can validate a config without the numerical stack.
@@ -46,9 +46,49 @@ CARD ("Calibrating Accelerated Radiometric Decay", formerly RIAG) is a research 
   - **`*_DATE`** — years after Day 1 of Creation (forward time `t`). Model parameters `t_c`/`t_F`/`t_F2` and `lambda_func(t)` are DATEs.
   - **`*_AGE`** — years before present (YBP, `tau`). Everything into or out of `forward_age`/`inverse_age`, and all `CARDMCMC` data ages, are AGEs.
   - A DATE and its matching AGE sum to `AGE_OF_EARTH`; `tests/test_chronology.py` pins these relationships so a refactor cannot silently flip one.
-- Chronology values are **user-specifiable modeling assumptions, not constants**: the frozen `Chronology` dataclass in `chronology.py` holds `age_of_earth` (6056), `flood_start_date`/`flood_end_date` (1656), `ice_age_end_date` (3500), derives the matching AGEs as properties, and loads/saves JSON config files. `DEFAULT_CHRONOLOGY` backs the convenience constants in `constants.py` (`AGE_OF_EARTH`, `FLOOD_START_DATE`, `FLOOD_END_DATE`, `FLOOD_AGE` = 4400, `ICE_AGE_END_DATE` = 3500, `ICE_AGE_END_AGE` = 2556). MCMC results generated before 2026-07-19 fit the Ice Age at 3500 YBP instead of 2556 and are stale.
+- Chronology values are **user-specifiable modeling assumptions, not constants**: the frozen `Chronology` dataclass in `chronology.py` holds `age_of_earth` (6056), `flood_start_date` (1656), `flood_end_date` (1657 — the Flood is a year long), `ice_age_end_date` (3500), derives the matching AGEs and `flood_duration` as properties, and loads/saves JSON config files. `DEFAULT_CHRONOLOGY` backs the convenience constants in `constants.py` (`AGE_OF_EARTH`, `FLOOD_START_DATE`, `FLOOD_END_DATE`, `FLOOD_AGE` = 4400, `ICE_AGE_END_DATE` = 3500, `ICE_AGE_END_AGE` = 2556, `FLOOD_END_DATE` = 1657, `FLOOD_END_AGE` = 4399, `FLOOD_DURATION` = 1). MCMC results generated before 2026-07-19 fit the Ice Age at 3500 YBP instead of 2556 and are stale.
 - Removed 2026-07-26: `FLOOD_START`/`FLOOD_END` (now `*_DATE`), `ICE_AGE_END_YBP` (now `ICE_AGE_END_AGE`), and `PC_CAMBRIAN_BOUNDARY` (was labeled years-after-Creation but the paper used 5400 as YBP; it matched neither current constant and had no callers). Note `ICE_AGE_END_AGE` **kept its name but changed meaning** — it is now 2556 (YBP), not 3500.
-- `GeneralModelParams` validates on construction: all lambdas >= 1 (rates are multiples of background), `k_c`/`k_F` >= 0 (the minus sign is already in `exp(-k*dt)`, so positive k is what decays; k=0 is the no-relaxation limit), dates ordered `t_c <= t_F <= t_F2` (equality of the last pair is the instantaneous-Flood limit), and a warning when the Flood exceeds `MAX_UNREMARKED_FLOOD_DURATION` (2 years) or when `lambda_bg != 1` (which is normalized to 1 rather than rejected). `CARDMCMC.log_likelihood` catches `ValueError` specifically, which is how these bounds reach the sampler — do not widen it back to `except Exception`.
+- `GeneralModelParams` validates on construction: all lambdas >= 1 (rates are multiples of background), `k_c`/`k_F`/`k_PF` >= 0 (the minus sign is already in `exp(-k*dt)`, so positive k is what decays; k=0 is the no-relaxation limit), dates ordered `t_c <= t_F <= t_F2` (equality of the last pair is the instantaneous-Flood limit), and a warning when the Flood exceeds `MAX_UNREMARKED_FLOOD_DURATION` (2 years) or when `lambda_bg != 1` (which is normalized to 1 rather than rejected). `CARDMCMC.log_likelihood` catches `ValueError` specifically, which is how these bounds reach the sampler — do not widen it back to `except Exception`.
+
+## The decay-rate model (updated 2026-08-09)
+
+`lambda(t)` has four regions; each accelerated phase relaxes with **its own**
+constant, and there are now three of them:
+
+  1. `t <= t_c`            — `lambda_c` (constant)
+  2. `t_c < t <= t_F`      — relaxes toward background at `k_c`
+  3. `t_F < t <= t_F2`     — relaxes toward background at `k_F` *during the Flood*
+  4. `t > t_F2`            — relaxes toward background at `k_PF` *after it*
+
+- **`k_F` and `k_PF` are not the old `k_F`.** Before 2026-08-09 there was one
+  post-Flood constant called `k_F`; it is now `k_PF`, and `k_F` names the new
+  in-Flood one. Both are valid parameter names, so an untouched config or
+  script still runs and silently means something else — `config._check_renamed_k_F`
+  errors on a prior over `k_F` with no `k_PF` anywhere, and warns on a nonzero
+  fixed `k_F`. Do not weaken that guard.
+- `k_F` is sampled **linearly** (`log_scale=False`), unlike the other two k's:
+  over a one-year Flood its range is a few multiples of 1/year, and its default
+  of 0 has no log10.
+- **`lambda_F2` is a read-only property**, not a field: continuity at `t_F2`
+  pins it to `(lambda_F - lambda_bg) * exp(-k_F * (t_F2 - t_F)) + lambda_bg`.
+  That floored form is what makes `lambda_F2 >= lambda_bg` automatic, so no
+  validation rule is needed for it. `to_dict` omits it (it would not round-trip
+  through `from_dict`); read it from the property or the model.
+- **`t_F2` is structural**: a settable field carrying **no ParamSpec**, so
+  `parameter_specs`/the fitter/sliders/JSON schema never offer it as free.
+  It defaults to `t_F + FLOOD_DURATION` (one year). `parameters.structural_names`
+  is what distinguishes such fields; `split_fixed_and_free` and
+  `GeneralModelParams.defaults` accept them, `theta_to_params` passes them
+  through, and nothing fits them. Setting `t_F2 == t_F` still gives the
+  instantaneous-Flood limit for anyone who wants it.
+- **`k_F = 0` reproduces the previous constant-rate Flood exactly**, which is
+  what makes this a generalization; `tests/test_models.py` pins that.
+- Two pairs cannot determine three rates, so `solve_flood_only`/`solve_lambda_F`
+  take `k_F` as an input (default 0). `solve_flood_rate` solves all three from
+  three pairs, by the decoupling described in its docstring.
+  `solve_flood_duration` and `solve_linear_flood` were **removed**: the first
+  inferred the Flood's length, which is now fixed at a year, and the second
+  modeled the Flood as a linear ramp, which the exponential replaced.
 
 ## Architecture
 

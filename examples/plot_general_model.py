@@ -32,7 +32,7 @@ LAMBDA_C = 1e3      # Creation week
 LAMBDA_F = 1e5      # Flood
 
 # One year of Flood, so the constant-rate region is visible on the figure.  The
-# flood-only limit used elsewhere sets t_F2 == t_F, which has no width to draw.
+# The chronology's Flood already runs a year, which is wide enough to draw.
 FLOOD_END = max(FLOOD_END_DATE, FLOOD_START_DATE + 1)
 
 # Relaxation constants, applied to both the post-Creation and post-Flood decay.
@@ -46,14 +46,15 @@ def main():
             lambda_F=LAMBDA_F,
             lambda_bg=1.0,
             k_c=k,
-            k_F=k,
+            k_F=0.0,
+            k_PF=k,
             t_c=1.0,
             t_F=FLOOD_START_DATE,
             t_F2=FLOOD_END,
         )
         for k in DECAY_CONSTANTS
     ]
-    labels = [f"$k_c = k_F$ = {k:g}" for k in DECAY_CONSTANTS]
+    labels = [f"$k_c = k_{{PF}}$ = {k:g}" for k in DECAY_CONSTANTS]
 
     out_file = plot_lambda_history(
         models, labels=labels, out_file='general_model_plot.png')

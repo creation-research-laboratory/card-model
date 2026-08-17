@@ -13,7 +13,7 @@ Example::
     chronology:                 # optional; omitted means DEFAULT_CHRONOLOGY
       age_of_earth: 6056
       flood_start_date: 1656
-      flood_end_date: 1656
+      flood_end_date: 1657      # a year-long Flood
       ice_age_end_date: 3500
 
     constraints:                # matched date pairs; young ages are AGEs
@@ -28,13 +28,14 @@ Example::
     fixed:                      # linear units, whatever the sampling space
       lambda_c: 1.0
       k_c: 0.0
+      k_F: 0.0
       t_c: 1.0
       t_F: flood_start_date
       t_F2: flood_end_date
 
     priors:                     # in each parameter's *sampling* space
       lambda_F: {mean: 6.0, sigma: 1.0}   # log-scale, so these are log10
-      k_F: {mean: -3.0, sigma: 1.0}
+      k_PF: {mean: -3.0, sigma: 1.0}
 
     sampler:
       n_walkers: 32
@@ -58,6 +59,7 @@ would otherwise silently fall back to a default and change the posterior.
 """
 
 import json
+import warnings
 import os
 from collections.abc import Mapping as MappingABC
 from collections.abc import Sequence as SequenceABC
@@ -159,6 +161,50 @@ def _reject_unknown(data: Mapping[str, Any], known: Sequence[str],
         raise ValueError(
             f"{where}: unrecognized key(s) {sorted(unknown)}; "
             f"expected any of {sorted(known)}."
+        )
+
+
+def _check_renamed_k_F(fixed: Mapping[str, Any],
+                       *prior_sections: Mapping[str, Any]) -> None:
+    """
+    Catch a config written against the old meaning of ``k_F``.
+
+    ``k_F`` used to be the *post-Flood* relaxation constant and is now the
+    *in-Flood* one, the post-Flood constant having become ``k_PF``.  Both names
+    are valid parameters, so an untouched config would still load, still parse,
+    and quietly fit a different quantity than its author meant.
+
+    Naming ``k_PF`` anywhere means the config has been through the rename, and
+    it is then taken at its word.  Otherwise:
+
+      * a **prior** on ``k_F`` is an error.  The old config's whole purpose was
+        to fit the post-Flood constant, and it would now fit the in-Flood one
+        instead while k_PF quietly took a default prior — a wrong answer that
+        looks like a right one.
+      * a nonzero **fixed** ``k_F`` only warns.  ``k_F: 0.0`` is the new idiom
+        for a constant-rate Flood and must stay silent, but any other pinned
+        value most likely meant the post-Flood rate.
+    """
+    priors = set().union(*(set(section) for section in prior_sections))
+    if "k_PF" in priors or "k_PF" in fixed:
+        return
+    if "k_F" in priors:
+        raise ValueError(
+            "this config puts a prior on k_F but never mentions k_PF, which "
+            "means it was written before the two were split.  k_F is now the "
+            "relaxation constant *during* the Flood; the post-Flood constant "
+            "this config means is k_PF.  Rename the prior — and pin k_F (0.0 "
+            "holds the rate constant across the Flood, which is what the old "
+            "model did) if you do not want it fitted."
+        )
+    if "k_F" in fixed and fixed["k_F"] != 0.0:
+        warnings.warn(
+            f"this config pins k_F to {fixed['k_F']!r} and never mentions "
+            "k_PF.  k_F is now the relaxation constant *during* the Flood, "
+            "not after it; if this value was meant for the post-Flood "
+            "relaxation it should be k_PF.  Pin k_F to 0.0 to hold the rate "
+            "constant across the Flood, which is what the old model did.",
+            stacklevel=2,
         )
 
 
@@ -356,6 +402,8 @@ class RunConfig:
                         f"{where}.sigma must be positive, got {sigma!r}")
                 prior_sigmas[name] = sigma
 
+        _check_renamed_k_F(fixed, prior_means, prior_sigmas)
+
         output = _require_mapping(data.get("output"), "output")
         _reject_unknown(output, ("directory", "figures"), "output")
 
@@ -437,20 +485,25 @@ class RunConfig:
         if len(self.constraints) != 2:
             raise ValueError(
                 f"sampler.initial_guess: {SamplerConfig.CALIBRATE!r} solves "
-                "two matched date pairs for lambda_F and k_F, but this config "
+                "two matched date pairs for lambda_F and k_PF, but this config "
                 f"has {len(self.constraints)} constraint(s).  Give explicit "
                 "starting values instead."
             )
         flood, second = sorted(self.constraints, key=lambda c: c.young_age,
                                reverse=True)
+        # k_F is a third unknown that two pairs cannot determine, so the solve
+        # holds it at whatever the config pinned it to (0 if unpinned — a
+        # constant-rate Flood).  Starting the walkers from a solve that assumed
+        # a different k_F would put them somewhere the posterior does not peak.
         result = solve_flood_only(
             flood_age=flood.young_age,
             flood_secular_age=flood.secular_age,
             second_age=second.young_age,
             second_secular_age=second.secular_age,
             chronology=self.chronology,
+            k_F=float(self.fixed_params.get("k_F", 0.0)),
         )
-        return {"lambda_F": result.lambda_F, "k_F": result.k_F}
+        return {"lambda_F": result.lambda_F, "k_PF": result.k_PF}
 
     def initial_guess_for(self, fitter) -> Optional[list]:
         """

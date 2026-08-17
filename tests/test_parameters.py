@@ -13,14 +13,23 @@ from card.parameters import (
     parameter_names,
     parameter_specs,
     split_fixed_and_free,
+    structural_names,
     to_json_schema,
 )
 
 
-def test_every_model_parameter_has_a_spec():
+def test_every_fitted_model_parameter_has_a_spec():
     specs = parameter_specs(GeneralModelParams)
     assert set(specs) == {"lambda_c", "lambda_F", "lambda_bg",
-                          "k_c", "k_F", "t_c", "t_F", "t_F2"}
+                          "k_c", "k_F", "k_PF", "t_c", "t_F"}
+
+
+def test_t_F2_is_structural_rather_than_specified():
+    """The Flood's length is a chronology assumption, not something to infer
+    from age constraints, so t_F2 carries no spec and nothing reading the
+    specs — fitter, sliders, JSON schema — can offer it as free."""
+    assert "t_F2" not in parameter_specs(GeneralModelParams)
+    assert structural_names(GeneralModelParams) == ("t_F2",)
 
 
 def test_specs_are_consistent_with_validation():
@@ -31,20 +40,24 @@ def test_specs_are_consistent_with_validation():
     assert specs["lambda_F"].minimum == 1.0
     assert specs["k_c"].minimum == 0.0
     assert specs["k_F"].minimum == 0.0
-    for name in ("t_c", "t_F", "t_F2"):
+    assert specs["k_PF"].minimum == 0.0
+    for name in ("t_c", "t_F"):
         assert specs[name].minimum == 0.0
 
 
 def test_defaults_construct_a_valid_model():
     params = GeneralModelParams.defaults()
     assert params.lambda_bg == 1.0
-    assert params.t_F == params.t_F2  # instantaneous Flood by default
+    # t_F2 has no spec, so `defaults()` does not supply it and the dataclass
+    # falls back to a year-long Flood.
+    assert params.t_F2 == params.t_F + 1.0
+    assert params.k_F == 0.0            # constant rate across the Flood
 
 
 def test_defaults_accept_overrides():
-    params = GeneralModelParams.defaults(lambda_F=1e6, k_F=1e-2)
+    params = GeneralModelParams.defaults(lambda_F=1e6, k_PF=1e-2)
     assert params.lambda_F == 1e6
-    assert params.k_F == 1e-2
+    assert params.k_PF == 1e-2
 
 
 def test_defaults_reject_unknown_names():
@@ -60,9 +73,11 @@ def test_every_default_is_inside_its_own_bounds():
 def test_scale_flags_match_the_physics():
     """Rates and relaxation constants span orders of magnitude; dates do not."""
     specs = parameter_specs(GeneralModelParams)
-    for name in ("lambda_c", "lambda_F", "k_c", "k_F"):
+    for name in ("lambda_c", "lambda_F", "k_c", "k_PF"):
         assert specs[name].log_scale is True, name
-    for name in ("t_c", "t_F", "t_F2"):
+    # k_F is the exception: over a one-year Flood its interesting range is a
+    # few multiples of 1/year, and its default of 0 has no log10.
+    for name in ("k_F", "t_c", "t_F"):
         assert specs[name].log_scale is False, name
 
 
@@ -90,9 +105,12 @@ def test_bounds_and_defaults_cover_all_parameters():
 
 def test_split_fixed_and_free():
     free, fixed = split_fixed_and_free(GeneralModelParams,
-                                       {"t_F": 1656.0, "t_F2": 1656.0})
+                                       {"t_F": 1656.0, "t_F2": 1657.0})
     assert set(fixed) == {"t_F", "t_F2"}
     assert "lambda_F" in free and "t_F" not in free
+    # t_F2 may be pinned but is never offered as free, spec or no spec.
+    assert "t_F2" not in free
+    assert "t_F2" not in split_fixed_and_free(GeneralModelParams, {})[0]
 
 
 def test_split_rejects_unknown_fixed_names():
@@ -111,7 +129,7 @@ def test_json_schema_is_usable_by_a_front_end():
 
 
 def test_spec_is_immutable():
-    spec = parameter_specs(GeneralModelParams)["k_F"]
+    spec = parameter_specs(GeneralModelParams)["k_PF"]
     with pytest.raises(Exception):
         spec.default = 1.0
 
@@ -119,7 +137,7 @@ def test_spec_is_immutable():
 def test_specs_are_reachable_from_the_class():
     assert GeneralModelParams.specs() == parameter_specs(GeneralModelParams)
     assert GeneralModelParams.names() == parameter_names(GeneralModelParams)
-    assert isinstance(GeneralModelParams.specs()["k_F"], ParamSpec)
+    assert isinstance(GeneralModelParams.specs()["k_PF"], ParamSpec)
 
 
 # ----------------------------------------------------------------------------
@@ -132,7 +150,7 @@ def test_date_parameters_are_marked_as_such():
     those are without pattern-matching on the unit string."""
     specs = parameter_specs(GeneralModelParams)
     dates = {name for name, spec in specs.items() if spec.is_date}
-    assert dates == {'t_c', 't_F', 't_F2'}
+    assert dates == {'t_c', 't_F'}
 
 
 def test_bounds_follow_a_custom_chronology():

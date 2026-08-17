@@ -2,7 +2,7 @@
 
 A **matched date pair** is one event dated two ways: a young AGE (years before
 present) and the secular age rock formed then would appear to have. Each pair
-is one equation, so two pairs determine the two free parameters of the
+is one equation, so two pairs determine the two fitted parameters of the
 flood-only model.
 
 There are two ways to use them, and they answer different questions:
@@ -32,14 +32,14 @@ result = solve_flood_only(
 )
 
 print(f"lambda_F = {result.lambda_F:,.0f} x background")
-print(f"k_F      = {result.k_F:.6g} / year")
+print(f"k_PF     = {result.k_PF:.6g} / year")
 print(f"largest relative residual: {result.max_abs_residual:.1e}")
 ```
 
 ```text
-lambda_F = 3,223,698 x background
-k_F      = 0.00595882 / year
-largest relative residual: 2.0e-15
+lambda_F = 3,204,607 x background
+k_PF     = 0.00595883 / year
+largest relative residual: 1.1e-15
 ```
 
 Both constraints are honored to machine precision, which is what "solved"
@@ -53,14 +53,16 @@ print(f"{model.inverse_age(65e6):,.0f} YBP")
 ```
 
 ```text
+
 541,000,000
 4,044 YBP
 ```
 
 !!! tip "One pair, one unknown"
 
-    With \(k_F\) known from elsewhere, a single pair determines \(\lambda_F\):
-    `solve_lambda_F(flood_age=..., flood_secular_age=..., k_F=...)`. The
+    With \(k_{PF}\) known from elsewhere, a single pair determines
+    \(\lambda_F\):
+    `solve_lambda_F(flood_age=..., flood_secular_age=..., k_PF=...)`. The
     secular age is strictly increasing in \(\lambda_F\), so the root is unique
     and bisection finds it with no initial guess.
 
@@ -84,19 +86,21 @@ data = [
 
 fitter = MCMCFitter(
     data,
-    # Pin everything but lambda_F and k_F: the flood-only limit.  Fixed values
-    # are always linear, whatever space the parameter is sampled in.
-    fixed_params={'lambda_c': 1.0, 'k_c': 0.0, 't_c': 1.0,
+    # Pin everything but lambda_F and k_PF: the flood-only limit, with the
+    # rate held constant across the Flood year (k_F = 0).  Fixed values are
+    # always linear, whatever space the parameter is sampled in.
+    fixed_params={'lambda_c': 1.0, 'k_c': 0.0, 'k_F': 0.0, 't_c': 1.0,
                   't_F': FLOOD_START_DATE, 't_F2': FLOOD_END_DATE},
-    # lambda_F and k_F are log-scale parameters, so their priors are log10.
-    prior_means={'lambda_F': 6.5, 'k_F': -2.2},
-    prior_sigmas={'lambda_F': 1.0, 'k_F': 1.0},
+    # lambda_F and k_PF are log-scale parameters, so their priors are log10.
+    prior_means={'lambda_F': 6.5, 'k_PF': -2.2},
+    prior_sigmas={'lambda_F': 1.0, 'k_PF': 1.0},
 )
 print(fitter.free_param_names, fitter.ndim)
 ```
 
 ```text
-('lambda_F', 'k_F') 2
+
+('lambda_F', 'k_PF') 2
 ```
 
 Which parameters are free, whether each is sampled in log10, and the default
@@ -111,7 +115,7 @@ Now the part that matters. **Do not start this fit at the prior means.**
 import numpy as np
 
 exact = solve_flood_only(FLOOD_AGE, 541e6, ICE_AGE_END_AGE, 11.7e3)
-initial_guess = [np.log10(exact.lambda_F), np.log10(exact.k_F)]
+initial_guess = [np.log10(exact.lambda_F), np.log10(exact.k_PF)]
 
 # `seed` makes the run reproducible.  It seeds the fitter's own generator, not
 # numpy's global one, so two fits in the same process — or in two threads of a
@@ -124,12 +128,14 @@ print(f"acceptance fraction:  {results['acceptance_fraction']:.2f}")
 ```
 
 ```text
+
 stuck walkers:        0
 acceptance fraction:  0.72
 ```
 
 This posterior is bimodal. Besides the real solution there is a local maximum
-at tiny \(\lambda_F\) with a \(k_F\) small enough that the rate never relaxes:
+at tiny \(\lambda_F\) with a \(k_{PF}\) small enough that the rate never
+relaxes:
 it fits the tight Ice Age constraint while missing the Flood by ~50\(\sigma\).
 Started from the prior means, roughly a quarter of the walkers fall into it
 during burn-in and **can never leave** — the barrier between the modes is
@@ -163,8 +169,9 @@ for row in summary:
 ```
 
 ```text
- lambda_F: 3.22204e+06 [3.16281e+06, 3.28574e+06]
-      k_F: 0.00595986 [0.00594769, 0.00597026]
+
+ lambda_F: 3.20077e+06 [3.14004e+06, 3.26688e+06]
+     k_PF: 0.00595941 [0.00594814, 0.00597]
 ```
 
 Use the `linear_*` keys whenever you feed a posterior back into a model. The
@@ -189,7 +196,8 @@ print(reloaded['chain'].shape, reloaded['param_names'])
 ```
 
 ```text
-(400, 16, 2) ['lambda_F', 'k_F']
+
+(400, 16, 2) ['lambda_F', 'k_PF']
 ```
 
 For a long run, pass `backend_path="chain.h5"` to `run_mcmc` instead: emcee
@@ -209,7 +217,7 @@ plot_mcmc_traces(results['chain'], results['log_prob_chain'],
 ```
 
 The corner plot of a converged run shows one tight, strongly correlated ridge:
-\(\lambda_F\) and \(k_F\) trade off against each other, since a faster
+\(\lambda_F\) and \(k_{PF}\) trade off against each other, since a faster
 relaxation can be compensated by a higher peak rate.
 
 ## Doing this without Python

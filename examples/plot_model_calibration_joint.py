@@ -1,8 +1,8 @@
 """
 Model calibration plot (joint solve): secular age vs. young-age age for two
-flood-only calibration scenarios, solving for BOTH lambda_F and k_F.
+flood-only calibration scenarios, solving for BOTH lambda_F and k_PF.
 
-Unlike plot_model_calibration.py (which fixes k_F and solves lambda_F on the
+Unlike plot_model_calibration.py (which fixes k_PF and solves lambda_F on the
 Flood pair only), here each scenario's two paired dates give two equations in
 two unknowns, so both calibration points are honored exactly:
 
@@ -51,7 +51,7 @@ def main():
 
     for name, sc in SCENARIOS.items():
         result = calibrate(sc['flood_ybp'], sc['ice_age_ybp'])
-        lambda_F, k_F, model = result.lambda_F, result.k_F, result.model
+        lambda_F, k_PF, model = result.lambda_F, result.k_PF, result.model
 
         secular = np.array([model.forward_age(t) for t in young_ages])
 
@@ -59,15 +59,15 @@ def main():
               f"Ice Age end {sc['ice_age_ybp']} YBP")
         print(f"  solved lambda_F = {lambda_F:.4g} "
               f"(log10 = {np.log10(lambda_F):.4f})")
-        print(f"  solved k_F      = {k_F:.4g} yr^-1 "
-              f"(log10 = {np.log10(k_F):.4f})")
+        print(f"  solved k_PF      = {k_PF:.4g} yr^-1 "
+              f"(log10 = {np.log10(k_PF):.4f})")
         print(f"  Flood check:   {model.forward_age(sc['flood_ybp']):.6g} yr "
               f"(target {FLOOD_SECULAR:.4g})")
         print(f"  Ice Age check: {model.forward_age(sc['ice_age_ybp']):.6g} yr "
               f"(target {ICE_AGE_SECULAR:.4g})")
 
         label = (f"{name}: Flood {sc['flood_ybp']} YBP, "
-                 f"$k_F$ = {k_F:.4f}, "
+                 f"$k_{{PF}}$ = {k_PF:.4f}, "
                  f"$\\lambda_F$ = {lambda_F:.3g}")
         ax.semilogy(young_ages, secular, color=sc['color'], linewidth=2,
                     label=label)
@@ -93,7 +93,7 @@ def main():
 
     ax.set_xlabel('Young-age age (years before present)')
     ax.set_ylabel('Secular age (years)')
-    ax.set_title('Model calibration (joint solve for $\\lambda_F$ and $k_F$)')
+    ax.set_title('Model calibration (joint solve for $\\lambda_F$ and $k_{PF}$)')
     ax.set_xlim(0, 6000)
     ax.set_ylim(1, 5e9)
     ax.grid(True, which='major', alpha=0.3)

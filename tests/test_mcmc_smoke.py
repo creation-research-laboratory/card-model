@@ -25,17 +25,17 @@ from card.cli import main
 
 SMOKE_CONFIG = {
     "chronology": {"age_of_earth": 6056.0, "flood_start_date": 1656.0,
-                   "flood_end_date": 1656.0, "ice_age_end_date": 3500.0},
+                   "flood_end_date": 1657.0, "ice_age_end_date": 3500.0},
     "constraints": [
         {"young_age": "flood_start_age", "secular_age": 541.0e6,
          "uncertainty": 1.0e7, "label": "Precambrian-Cambrian boundary"},
         {"young_age": "ice_age_end_age", "secular_age": 11700.0,
          "uncertainty": 100.0, "label": "end of the Ice Age"},
     ],
-    "fixed": {"lambda_c": 1.0, "k_c": 0.0, "t_c": 1.0,
+    "fixed": {"lambda_c": 1.0, "k_c": 0.0, "k_F": 0.0, "t_c": 1.0,
               "t_F": "flood_start_date", "t_F2": "flood_end_date"},
     "priors": {"lambda_F": {"mean": 6.5, "sigma": 1.0},
-               "k_F": {"mean": -2.2, "sigma": 1.0}},
+               "k_PF": {"mean": -2.2, "sigma": 1.0}},
     # `calibrate` starts the walkers at the exact solution to these two
     # constraints.  Without it a 60-step run does not converge at all — half
     # the walkers end up trapped in the far local maximum — so this is what
@@ -77,7 +77,7 @@ def test_saved_chain_has_the_requested_shape(tmp_path, config_path):
     out = fit(config_path, tmp_path / "run")
     results = load_results(str(out / "chain.h5"))
     assert results["chain"].shape == (60, 8, 2)
-    assert results["param_names"] == ["lambda_F", "k_F"]
+    assert results["param_names"] == ["lambda_F", "k_PF"]
     assert results["log_scale"] == [True, True]
     assert results["present_time"] == 6056.0
     assert 0.0 < results["acceptance_fraction"] < 1.0
@@ -99,7 +99,7 @@ def test_chain_lands_near_the_deterministic_solution(tmp_path, config_path):
 
     median = np.median(results["samples"], axis=0)
     assert 10 ** median[0] == pytest.approx(truth.lambda_F, rel=0.5)
-    assert 10 ** median[1] == pytest.approx(truth.k_F, rel=0.2)
+    assert 10 ** median[1] == pytest.approx(truth.k_PF, rel=0.2)
 
 
 def test_the_seed_makes_a_run_reproducible(tmp_path, config_path):

@@ -82,7 +82,7 @@ Python 3.10+.
 ```python
 from card import GeneralModel, FLOOD_AGE
 
-model = GeneralModel.flood_only(lambda_F=3.2e6, k_F=6e-3)
+model = GeneralModel.flood_only(lambda_F=3.2e6, k_PF=6e-3)
 
 model.forward_age(FLOOD_AGE)   # 533337566.7  — how old Flood rock looks
 model.inverse_age(65e6)        # 4049.2       — the young age of a "65 Myr" rock

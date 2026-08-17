@@ -23,7 +23,7 @@ package, so it is available from a `pip install` with no repository checkout:
 chronology:
   age_of_earth: 6056
   flood_start_date: 1656
-  flood_end_date: 1656
+  flood_end_date: 1657
   ice_age_end_date: 3500
 
 constraints:
@@ -39,13 +39,14 @@ constraints:
 fixed:                                # linear units, always
   lambda_c: 1.0
   k_c: 0.0
+  k_F: 0.0
   t_c: 1.0
   t_F: flood_start_date
   t_F2: flood_end_date
 
 priors:                               # in each parameter's sampling space
   lambda_F: {mean: 6.0, sigma: 1.0}   # log-scale, so these are log10
-  k_F: {mean: -3.0, sigma: 1.0}
+  k_PF: {mean: -3.0, sigma: 1.0}
 
 sampler:
   n_walkers: 32
@@ -75,7 +76,8 @@ which writes `chain.h5`, `run_config.json`, `summary_statistics.txt`,
 ### `chronology`
 
 Optional; omitted means the package default (Earth 6056 years old, an
-instantaneous Flood 1656 years after Creation, Ice Age ending at 3500). Fields
+Flood running from 1656 to 1657 years after Creation, Ice Age ending at
+3500). Fields
 are those of [`Chronology`](api/chronology.md). Whatever you set here governs
 the whole fit, including the `present_time` that forward ages are measured
 against.
@@ -96,8 +98,8 @@ un-fittable, like `lambda_bg`) is free.
 ### `priors`
 
 Gaussian priors, in each parameter's **sampling space** — log10 for the
-log-scale parameters (`lambda_c`, `lambda_F`, `k_c`, `k_F`), linear for the
-times. Omitted parameters fall back to the spec's defaults.
+log-scale parameters (`lambda_c`, `lambda_F`, `k_c`, `k_PF`), linear for
+`k_F` and the times. Omitted parameters fall back to the spec's defaults.
 
 ### `sampler`
 
@@ -188,7 +190,7 @@ config = RunConfig.from_dict({
         {"young_age": "ice_age_end_age", "secular_age": 11500.0,
          "uncertainty": 30.0},
     ],
-    "fixed": {"lambda_c": 1.0, "k_c": 0.0, "t_c": 1.0,
+    "fixed": {"lambda_c": 1.0, "k_c": 0.0, "k_F": 0.0, "t_c": 1.0,
               "t_F": "flood_start_date", "t_F2": "flood_end_date"},
 })
 print(config.constraints[0].young_age, config.fixed_params["t_F"])
@@ -242,6 +244,7 @@ print(f"stopped early: {results['stopped_early']}, "
 ```
 
 ```text
+
 sampling  33.3% acceptance 0.73
 sampling  66.7% acceptance 0.73
 sampling 100.0% acceptance 0.74

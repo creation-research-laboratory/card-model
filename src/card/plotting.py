@@ -87,10 +87,11 @@ def plot_age_comparison(
     out_file: str = "age_comparison_plot.png",
     show: bool = False,
     lambda_F: float = 5e5,
-    k_F: float = 0.5e-2,
+    k_PF: float = 0.5e-2,
     lambda_F_median: Optional[float] = None,
-    k_F_median: Optional[float] = None,
+    k_PF_median: Optional[float] = None,
     flood_date: Optional[float] = None,
+    k_F: float = 0.0,
     ax: Optional[Axes] = None,
     return_figure: bool = False,
 ) -> FigureResult:
@@ -102,10 +103,14 @@ def plot_age_comparison(
         out_file: Output filename for the figure.
         show: If True, display the figure (ignored when `ax` is given).
         lambda_F: Posterior mean lambda_F for the general model.
-        k_F: Posterior mean k_F for the general model.
-        lambda_F_median: Posterior median lambda_F; plotted if given with k_F_median.
-        k_F_median: Posterior median k_F; plotted if given with lambda_F_median.
-        flood_date: DATE of the Flood (default: the chronology's Flood date).
+        k_PF: Posterior mean k_PF (post-Flood relaxation) for the general model.
+        lambda_F_median: Posterior median lambda_F; plotted if given with
+            k_PF_median.
+        k_PF_median: Posterior median k_PF; plotted if given with
+            lambda_F_median.
+        flood_date: DATE of the Flood's onset (default: the chronology's).
+        k_F: In-Flood relaxation constant, applied to both curves.  Defaults to
+            0 — a rate held constant across the Flood year.
         ax: Optional existing axes to draw into.  When supplied the caller owns
             the figure and this returns the axes instead of a path.
         return_figure: Return the matplotlib Figure instead of the path, and
@@ -119,12 +124,13 @@ def plot_age_comparison(
         flood_date = FLOOD_START_DATE
 
     const_model = ConstantDecayModel(lambda_bg=LAMBDA_BG)
-    general_model = GeneralModel.flood_only(lambda_F=lambda_F, k_F=k_F,
-                                            t_F=flood_date)
+    general_model = GeneralModel.flood_only(lambda_F=lambda_F, k_PF=k_PF,
+                                            t_F=flood_date, k_F=k_F)
     median_model = None
-    if lambda_F_median is not None and k_F_median is not None:
+    if lambda_F_median is not None and k_PF_median is not None:
         median_model = GeneralModel.flood_only(lambda_F=lambda_F_median,
-                                               k_F=k_F_median, t_F=flood_date)
+                                               k_PF=k_PF_median,
+                                               t_F=flood_date, k_F=k_F)
 
     flood_secular_age = general_model.forward_age(FLOOD_START_AGE)
 
@@ -286,16 +292,16 @@ def plot_general_model_parameter_sweep(
             lambda_F=1e5,
             lambda_bg=1.0,
             k_c=1e-1,
-            k_F=8.04e-3,
+            k_F=0.0,
+            k_PF=8.04e-3,
             t_c=1,
             t_F=FLOOD_START_DATE,
-            t_F2=FLOOD_START_DATE + 1,
         )
 
     if vary_params is None:
         vary_params = {
             'lambda_F': [1e5, 5e5, 1e6],
-            'k_F': [2e-3, 5e-3, 8e-3],
+            'k_PF': [2e-3, 5e-3, 8e-3],
         }
 
     base_dict = base_params.to_dict()

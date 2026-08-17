@@ -114,11 +114,11 @@ def test_a_full_forward_and_inverse_solve_needs_only_the_stdlib():
         from card.calibrate import solve_flood_only
         result = solve_flood_only(4400.0, 5.4e8, 2556.0, 11500.0)
         round_trip = result.model.inverse_age(result.model.forward_age(3000.0))
-        print(f'{result.lambda_F:.6g} {result.k_F:.6g} {round_trip:.6f}')
+        print(f'{result.lambda_F:.6g} {result.k_PF:.6g} {round_trip:.6f}')
     """)
-    lambda_F, k_F, round_trip = out.split()
-    assert float(lambda_F) == pytest.approx(3.22367e6, rel=1e-5)
-    assert float(k_F) == pytest.approx(0.00596981, rel=1e-5)
+    lambda_F, k_PF, round_trip = out.split()
+    assert float(lambda_F) == pytest.approx(3.204548e6, rel=1e-5)
+    assert float(k_PF) == pytest.approx(0.00596981, rel=1e-5)
     assert float(round_trip) == pytest.approx(3000.0, abs=1e-6)
 
 
@@ -403,7 +403,7 @@ def test_abstract_model_cannot_be_instantiated():
 
 def test_general_model_declares_its_discontinuities():
     params = GeneralModelParams(lambda_c=1e3, lambda_F=1e5, lambda_bg=1.0,
-                                k_c=1e-1, k_F=8.04e-3,
+                                k_c=1e-1, k_F=0.0, k_PF=8.04e-3,
                                 t_c=1, t_F=1656, t_F2=1657)
     assert GeneralModel(params).breakpoints() == (1, 1656, 1657)
 

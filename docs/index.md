@@ -67,8 +67,9 @@ use the models without a plotting stack.
 ```python
 from card import GeneralModel, FLOOD_AGE
 
-# The flood-only limit: no Creation-week acceleration, instantaneous Flood.
-model = GeneralModel.flood_only(lambda_F=3.2e6, k_F=6e-3)
+# The flood-only limit: no Creation-week acceleration, so the year-long
+# Flood is the only accelerated phase.
+model = GeneralModel.flood_only(lambda_F=3.2e6, k_PF=6e-3)
 
 # A rock formed at the Flood appears this old to a secular clock:
 print(f"{model.forward_age(FLOOD_AGE):.4g} years")
@@ -78,8 +79,8 @@ print(f"{model.inverse_age(65e6):.0f} years before present")
 ```
 
 ```text
-5.333e+08 years
-4049 years before present
+5.365e+08 years
+4048 years before present
 ```
 
 Fitting that model to dated events is the subject of
@@ -93,11 +94,12 @@ result = solve_flood_only(
     flood_age=FLOOD_AGE,            flood_secular_age=541e6,
     second_age=ICE_AGE_END_AGE,     second_secular_age=11.7e3,
 )
-print(f"lambda_F = {result.lambda_F:,.0f}, k_F = {result.k_F:.4g}")
+print(f"lambda_F = {result.lambda_F:,.0f}, k_PF = {result.k_PF:.4g}")
 ```
 
 ```text
-lambda_F = 3,223,698, k_F = 0.005959
+
+lambda_F = 3,204,607, k_PF = 0.005959
 ```
 
 ## Ages and dates

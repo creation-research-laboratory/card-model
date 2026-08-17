@@ -24,10 +24,10 @@ MINIMAL = {
         {"young_age": "ice_age_end_age", "secular_age": 11500.0,
          "uncertainty": 30.0},
     ],
-    "fixed": {"lambda_c": 1.0, "k_c": 0.0, "t_c": 1.0,
+    "fixed": {"lambda_c": 1.0, "k_c": 0.0, "k_F": 0.0, "t_c": 1.0,
               "t_F": "flood_start_date", "t_F2": "flood_end_date"},
     "priors": {"lambda_F": {"mean": 6.0, "sigma": 1.0},
-               "k_F": {"mean": -3.0, "sigma": 1.0}},
+               "k_PF": {"mean": -3.0, "sigma": 1.0}},
 }
 
 
@@ -48,7 +48,7 @@ def test_minimal_config_parses():
     config = RunConfig.from_dict(MINIMAL)
     assert len(config.constraints) == 2
     assert config.fixed_params["lambda_c"] == 1.0
-    assert config.prior_means == {"lambda_F": 6.0, "k_F": -3.0}
+    assert config.prior_means == {"lambda_F": 6.0, "k_PF": -3.0}
     assert config.output_dir == "mcmc_output"
 
 
@@ -192,7 +192,7 @@ def test_empty_file_says_so(tmp_path):
 
 def test_build_fitter_frees_the_unpinned_parameters():
     fitter = RunConfig.from_dict(MINIMAL).build_fitter()
-    assert fitter.free_param_names == ("lambda_F", "k_F")
+    assert fitter.free_param_names == ("lambda_F", "k_PF")
     assert fitter.prior_means["lambda_F"] == 6.0
 
 
@@ -223,7 +223,7 @@ def test_calibrate_keyword_starts_at_the_exact_solution():
 
     truth = solve_flood_only(4400.0, 540e6, 2556.0, 11500.0)
     assert guess == pytest.approx([np.log10(truth.lambda_F),
-                                   np.log10(truth.k_F)])
+                                   np.log10(truth.k_PF)])
 
 
 def test_calibrate_keyword_needs_two_constraints():
@@ -236,16 +236,16 @@ def test_calibrate_keyword_needs_two_constraints():
 
 def test_explicit_initial_guess_is_ordered_by_free_parameters():
     config = RunConfig.from_dict(dict(
-        MINIMAL, sampler={"initial_guess": {"k_F": -2.2, "lambda_F": 6.5}}))
+        MINIMAL, sampler={"initial_guess": {"k_PF": -2.2, "lambda_F": 6.5}}))
     fitter = config.build_fitter()
-    assert fitter.free_param_names == ("lambda_F", "k_F")
+    assert fitter.free_param_names == ("lambda_F", "k_PF")
     assert config.initial_guess_for(fitter) == [6.5, -2.2]
 
 
 def test_incomplete_initial_guess_is_rejected():
     config = RunConfig.from_dict(dict(
         MINIMAL, sampler={"initial_guess": {"lambda_F": 6.5}}))
-    with pytest.raises(ValueError, match="missing: \\['k_F'\\]"):
+    with pytest.raises(ValueError, match="missing: \\['k_PF'\\]"):
         config.initial_guess_for(config.build_fitter())
 
 
@@ -267,3 +267,66 @@ def test_sampler_config_is_replaceable():
 
     sampler = dataclasses.replace(SamplerConfig(), n_steps=10)
     assert sampler.n_steps == 10 and sampler.n_walkers == 32
+
+
+# ----------------------------------------------------------------------------
+# The k_F / k_PF rename
+#
+# Both names are valid parameters, so a config written against the old meaning
+# of k_F still parses.  These pin the guard that stops it being fitted silently.
+# ----------------------------------------------------------------------------
+
+def test_legacy_prior_on_k_F_is_rejected():
+    """The dangerous case: k_F used to *be* the post-Flood constant."""
+    legacy = dict(MINIMAL,
+                  fixed={"lambda_c": 1.0, "k_c": 0.0, "t_c": 1.0,
+                         "t_F": "flood_start_date"},
+                  priors={"lambda_F": {"mean": 6.0, "sigma": 1.0},
+                          "k_F": {"mean": -3.0, "sigma": 1.0}})
+    with pytest.raises(ValueError, match="written before the two were split"):
+        RunConfig.from_dict(legacy)
+
+
+def test_legacy_nonzero_fixed_k_F_warns():
+    legacy = dict(MINIMAL,
+                  fixed={"lambda_c": 1.0, "k_c": 0.0, "k_F": 8.04e-3,
+                         "t_c": 1.0, "t_F": "flood_start_date"},
+                  priors={"lambda_F": {"mean": 6.0, "sigma": 1.0}})
+    with pytest.warns(UserWarning, match="not after it"):
+        RunConfig.from_dict(legacy)
+
+
+def test_pinning_k_F_to_zero_is_the_new_idiom_and_is_silent(recwarn):
+    """A constant-rate Flood is what the old model did, and says so clearly."""
+    config = RunConfig.from_dict(dict(
+        MINIMAL,
+        fixed={"lambda_c": 1.0, "k_c": 0.0, "k_F": 0.0, "t_c": 1.0,
+               "t_F": "flood_start_date"},
+        priors={"lambda_F": {"mean": 6.0, "sigma": 1.0}}))
+    assert config.fixed_params["k_F"] == 0.0
+    assert [w for w in recwarn if "k_F" in str(w.message)] == []
+
+
+def test_naming_k_PF_anywhere_takes_the_config_at_its_word(recwarn):
+    config = RunConfig.from_dict(dict(
+        MINIMAL,
+        fixed={"lambda_c": 1.0, "k_c": 0.0, "k_F": 2.0, "t_c": 1.0,
+               "t_F": "flood_start_date"},
+        priors={"lambda_F": {"mean": 6.0, "sigma": 1.0},
+                "k_PF": {"mean": -3.0, "sigma": 1.0}}))
+    assert config.fixed_params["k_F"] == 2.0
+    assert [w for w in recwarn if "k_F" in str(w.message)] == []
+
+
+def test_t_F2_may_be_pinned_but_is_never_fitted():
+    """The Flood's length is settable and structural: pinned, never free."""
+    config = RunConfig.from_dict(dict(
+        MINIMAL,
+        fixed={"lambda_c": 1.0, "k_c": 0.0, "k_F": 0.0, "t_c": 1.0,
+               "t_F": "flood_start_date", "t_F2": "flood_end_date"},
+        priors={"lambda_F": {"mean": 6.0, "sigma": 1.0},
+                "k_PF": {"mean": -3.0, "sigma": 1.0}}))
+    fitter = config.build_fitter()
+    assert config.fixed_params["t_F2"] == 1657.0
+    assert "t_F2" not in fitter.free_param_names
+    assert fitter.theta_to_params(np.array([6.0, -3.0])).t_F2 == 1657.0

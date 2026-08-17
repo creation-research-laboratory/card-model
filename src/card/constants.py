@@ -24,7 +24,13 @@ PRESENT_DATE = DEFAULT_CHRONOLOGY.present_date          # DATE of the present
 FLOOD_START_DATE = DEFAULT_CHRONOLOGY.flood_start_date  # DATE the Flood begins
 FLOOD_END_DATE = DEFAULT_CHRONOLOGY.flood_end_date      # DATE the Flood ends
 FLOOD_START_AGE = DEFAULT_CHRONOLOGY.flood_start_age    # AGE the Flood begins
+FLOOD_END_AGE = DEFAULT_CHRONOLOGY.flood_end_age        # AGE the Flood ends
 FLOOD_AGE = FLOOD_START_AGE                             # alias: AGE of the Flood
+
+# Length of the Flood in true years.  The model treats t_F2 as t_F plus this
+# rather than as a free parameter; it is a chronology assumption, so a caller
+# exploring a different Flood length sets it there rather than editing this.
+FLOOD_DURATION = DEFAULT_CHRONOLOGY.flood_duration
 
 ICE_AGE_END_DATE = DEFAULT_CHRONOLOGY.ice_age_end_date  # DATE the Ice Age ends
 ICE_AGE_END_AGE = DEFAULT_CHRONOLOGY.ice_age_end_age    # AGE the Ice Age ends
@@ -40,15 +46,17 @@ SOLVER_TOLERANCE = 1e-10
 # Relative error still considered acceptable when verifying a solved age.
 ACCEPTABLE_ERROR = 5e-3
 
-# Longest Flood duration (years) that passes without comment.  The Flood is
-# modeled as brief relative to the post-Flood relaxation; a longer t_F2 - t_F
-# is legal but likely a units or convention slip, so it is warned about.
+# Longest Flood duration (years) that passes without comment.  The Flood runs
+# for a year by default; a much longer t_F2 - t_F is legal but is usually a
+# DATE/AGE slip (t_F2 given as an age before present), so it is warned about.
 MAX_UNREMARKED_FLOOD_DURATION = 2.0
 
 __all__ = [
     "ACCEPTABLE_ERROR",
     "AGE_OF_EARTH",
     "FLOOD_AGE",
+    "FLOOD_DURATION",
+    "FLOOD_END_AGE",
     "FLOOD_END_DATE",
     "FLOOD_START_AGE",
     "FLOOD_START_DATE",

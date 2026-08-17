@@ -31,14 +31,14 @@ drift apart.
 ## Calibration against two dated events
 
 `examples/plot_model_calibration.py` — two scenarios, each pinning the Flood to
-541 Ma with \(k_F\) fixed, solving for \(\lambda_F\). The Ice Age point is then
+541 Ma with \(k_{PF}\) fixed, solving for \(\lambda_F\). The Ice Age point is then
 a *check*, and it misses by ~18%, which is the useful part: one constraint
 cannot honor two dates.
 
 ![Calibration with k_F fixed](img/model_calibration_plot.png){ loading=lazy }
 
 `examples/plot_model_calibration_joint.py` — the same two scenarios solving for
-**both** \(\lambda_F\) and \(k_F\). Two equations, two unknowns, so both
+**both** \(\lambda_F\) and \(k_{PF}\). Two equations, two unknowns, so both
 calibration points land exactly on the curve.
 
 ![Joint calibration](img/model_calibration_joint_plot.png){ loading=lazy }
@@ -49,7 +49,7 @@ calibration points land exactly on the curve.
 parameters vary, via
 [`plot_general_model_parameter_sweep`](api/plotting.md).
 
-![Sweep over lambda_F and k_F](img/demo_sweep_lambdaF_kF.png){ loading=lazy }
+![Sweep over lambda_F and k_PF](img/demo_sweep_lambdaF_kF.png){ loading=lazy }
 
 ![Sweep over lambda_F alone](img/demo_sweep_lambdaF_only.png){ loading=lazy }
 

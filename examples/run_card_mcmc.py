@@ -61,11 +61,12 @@ def main():
         't_c': 1.0,
         't_F': FLOOD_START_DATE,
         't_F2': FLOOD_END_DATE,
+        'k_F': 0.0,          # rate held constant across the Flood year
     }
 
-    # lambda_F and k_F are log-scale parameters, so their priors are log10.
-    prior_means = {'lambda_F': 6.0, 'k_F': -3.0}
-    prior_sigmas = {'lambda_F': 1.0, 'k_F': 1.0}
+    # lambda_F and k_PF are log-scale parameters, so their priors are log10.
+    prior_means = {'lambda_F': 6.0, 'k_PF': -3.0}
+    prior_sigmas = {'lambda_F': 1.0, 'k_PF': 1.0}
 
     fitter = MCMCFitter(
         data,
@@ -76,13 +77,13 @@ def main():
 
     # Start the walkers at the exact solution to the same two constraints,
     # not at the prior means.  The posterior has a second, far local maximum
-    # (tiny lambda_F, k_F small enough that the rate never relaxes) that fits
+    # (tiny lambda_F, k_PF small enough that the rate never relaxes) that fits
     # the tight Ice Age constraint while missing the Flood by ~50 sigma; from
     # the prior means about a quarter of the walkers fall into it and never
     # leave, contaminating every percentile.  MCMCFitter warns when that
     # happens.  In sampling space, so log10 for these two.
     exact = solve_flood_only(FLOOD_AGE, 540_000_000, ICE_AGE_END_AGE, 11_500.0)
-    initial_guess = [math.log10(exact.lambda_F), math.log10(exact.k_F)]
+    initial_guess = [math.log10(exact.lambda_F), math.log10(exact.k_PF)]
 
     results = fitter.run_mcmc(n_walkers=32, n_steps=n_steps, burn_in=n_burn,
                               initial_guess=initial_guess)
@@ -109,15 +110,15 @@ def main():
     )
 
     # Age-comparison figure from the posterior.  Note the `linear_` keys:
-    # lambda_F and k_F are sampled in log10, so the raw `mean`/`median` are
+    # lambda_F and k_PF are sampled in log10, so the raw `mean`/`median` are
     # log10 values.  Passing those straight through — as this script used to —
     # plotted a lambda_F of ~6.5 instead of ~3.2e6.
     stats = {row['parameter']: row for row in summary}
     plot_age_comparison(
         lambda_F=stats['lambda_F']['linear_mean'],
-        k_F=stats['k_F']['linear_mean'],
+        k_PF=stats['k_PF']['linear_mean'],
         lambda_F_median=stats['lambda_F']['linear_median'],
-        k_F_median=stats['k_F']['linear_median'],
+        k_PF_median=stats['k_PF']['linear_median'],
         out_file=os.path.join(out_dir, 'age_comparison_posterior.png'),
     )
 
