@@ -85,7 +85,7 @@ Letting the decay rate fall across the Flood therefore costs a single new degree
 Note that $\lambda(t)$ is *not* required to be continuous at $t_{F}$: the onset of the Flood is a step up in the decay rate, and is the only genuine discontinuity in the model.
 Setting $k_F = 0$ recovers a Flood that holds $\lambda$ at $\lambda_F$ throughout, which is the constant-rate Flood of the simpler model, so nothing available before is lost.
 
-We further take the Flood to be a single year, $t_{F2} = t_{F} + 1$, following the chronology rather than the data: the Flood's *duration* is an assumption of the framework, not a quantity we solve for.
+We further take the Flood to be a single year, $t_{F2} = t_{F} + 1$: the Flood's *duration* is an assumption of the framework, not a quantity we solve for.
 
 We can plot the general mathematical model represented in @eq-general-model using Python:
 
@@ -129,14 +129,8 @@ The remaining two symbols are determined rather than chosen:
 - $t_{F2}$: the end time of accelerated decay during the Flood, equal to $t_{F} + 1$.
 - $\lambda_{F2}$: the decay rate ($\lambda(t)$) at the end of the Flood, given by @eq-flood-continuity. It equals $\lambda_F$ when $k_F = 0$ and is smaller otherwise.
 
-There are other models that would be more general extensions of this model, for example, we could have a ramp-up of accelerated decay rates or non-constant decay rates during the Creation week or the Flood, but this model is a good starting point for understanding the general behavior of the system and how it can be used to make predictions and test hypotheses.
-
-From this general model various simplifications can be derived.
-The simplification we develop at length below is the **flood-only** case: $\lambda_c = \lambda_{bg}$, which implies no acceleration of decay during the Creation week, so that the Flood is the only accelerated period.
-In this scenario $\lambda(t)$ is simply the background rate until the start of the Flood, at which time it jumps up, relaxes across the Flood year at $k_F$, and then decays back toward the background rate at $k_{PF}$ over some longer period of time.
-
-If we additionally set $k_F = 0$ — a Flood that holds its peak rate for the whole year — then $\lambda_{F2} = \lambda_F$ by @eq-flood-continuity and only the post-Flood relaxation is left to describe.
-Writing the result in terms of the age $\tau$ (years before present) rather than the date $t$, @eq-general-model becomes:
+We note that the model can be re-written in terms of the age $\tau$ (years before present) rather than the date $t$. 
+In that case @eq-general-model becomes:
 $$
 \lambda(\tau) = \begin{cases}
 \left(\lambda_F - \lambda_{bg}\right) e^{-k_{PF} (A_{F2} - \tau)} + \lambda_{bg} & \tau \le A_{F2} \\
@@ -148,14 +142,24 @@ $$ {#eq-flood-only-model}
 where $A_F = A_E - t_F$ and $A_{F2} = A_E - t_{F2} = A_F - 1$ are the ages of the Flood's onset and end, i.e. the dates $t_F$ and $t_{F2}$ expressed in years before present.
 Note that the exponential is anchored at the *end* of the Flood: $\lambda$ is at its peak throughout the Flood year and has relaxed back toward $\lambda_{bg}$ by the present ($\tau = 0$).
 
-The derivation that follows is written for this case, because it is the one for which the integral has a compact closed form worth stating; the general case is integrated region by region in the same way, and is what the `card` package evaluates.
+There are other models that would be more general extensions of this model, for example, we could have a ramp-up of accelerated decay rates or non-constant decay rates during the Creation week or the Flood, but this model is a good starting point for understanding the general behavior of the system and how it can be used to make predictions and test hypotheses. 
+In addition, we try to minimize the number of free parameters that would require addtional data to be able to constrain. 
+The current model can be calibrated using only two or three matched date pairs (depending on what behavior is assumed during the Flood year). 
 
+## The Flood-Only Model
 
-Now consider the differential equation for radiometric decay, which is given by:
+From the general model even simpler versions can be derived.
+The simplification we will develop at length below is to consider accelerated decay that occured only during and following the Flood; this is termed the ``**flood-only**'' case and mathematically corresponds to setting $\lambda_c = \lambda_{bg}$. 
+This implies no acceleration of decay during the Creation week, and in this scenario $\lambda(t)$ is simply the background rate until the start of the Flood.
+This will be the primary model that we work with in this paper. 
+Other possibile simplifications including setting $k_F = 0$ — a Flood that holds its peak rate for the whole year — then $\lambda_{F2} = \lambda_F$ by @eq-flood-continuity and only the post-Flood relaxation is left to describe. 
+Another is that $k_f = k_{PF}$, so that the decay rate falls at the same rate during and after the Flood, which is a single-parameter model for the Flood's decay behavior.
+
+Consider the differential equation for radiometric decay, which is given by:
 $$
 \frac{dN}{dt} = -\lambda(t) N
 $$ {#eq-decay-rate-differential}
-Note that here we have switched to $t$ again to denote that this is forward time. 
+Note that this is forward time (i.e., time after creation). 
 This can be solved to give the number of atoms remaining as a function of time:
 $$
 N(t) = N_0 e^{-\int_{t_f}^{t_p} \lambda(t') dt'}
