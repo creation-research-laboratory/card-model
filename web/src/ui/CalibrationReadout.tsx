@@ -14,15 +14,15 @@ interface Props {
   calibration: Calibration;
   sourceKind: SourceKind;
   /**
-   * What this calibration says the Ice Age dates to. Not a constraint in this
-   * structure — the author's framework anchors on it instead, so showing the
-   * divergence keeps that disagreement visible rather than silent.
+   * The rate the in-Flood exponential has fallen to by the Flood's end, and so
+   * where the post-Flood one begins. Not free — continuity pins it — but it is
+   * the number that shows how much of the drop happens inside the Flood year.
    */
-  iceAgePrediction?: { true_age: number; secular_age: number };
+  lambdaF2?: number;
 }
 
 export function CalibrationReadout({
-  calibration, sourceKind, iceAgePrediction,
+  calibration, sourceKind, lambdaF2,
 }: Props) {
   const { params, constraints, residuals, maxAbsResidual, exact } = calibration;
 
@@ -33,8 +33,21 @@ export function CalibrationReadout({
       <dl className="readout">
         <dt>λ<sub>F</sub></dt>
         <dd>{formatMultiplier(params.lambda_F)}× background</dd>
-        <dt>k<sub>F</sub></dt>
+        <dt>k<sub>F</sub> (in Flood)</dt>
         <dd>{trim(params.k_F, 6)} yr⁻¹</dd>
+        <dt>k<sub>PF</sub> (after)</dt>
+        <dd>{trim(params.k_PF, 6)} yr⁻¹</dd>
+        {lambdaF2 !== undefined ? (
+          <>
+            <dt>λ at Flood&rsquo;s end</dt>
+            <dd>
+              {formatMultiplier(lambdaF2)}×{" "}
+              <span style={{ color: "var(--text-muted)" }}>
+                (÷{formatMultiplier(params.lambda_F / lambdaF2)} inside the year)
+              </span>
+            </dd>
+          </>
+        ) : null}
         <dt>λ<sub>c</sub> / k<sub>c</sub></dt>
         <dd>{formatMultiplier(params.lambda_c)}× / {trim(params.k_c, 4)}</dd>
         <dt>oldest apparent</dt>
@@ -64,29 +77,11 @@ export function CalibrationReadout({
         </dd>
       </dl>
 
-      {iceAgePrediction ? (
-        <>
-          <h2 style={{ marginTop: "1.1rem" }}>Prediction</h2>
-          <dl className="readout stacked">
-            <dt>End of the Ice Age</dt>
-            <dd>
-              {formatAge(iceAgePrediction.true_age)} →{" "}
-              {formatAge(iceAgePrediction.secular_age)}
-              <br />
-              <span style={{ color: "var(--text-muted)" }}>
-                not an anchor here — the relaxation is over within a decade, so
-                post-Flood rock is essentially uninflated
-              </span>
-            </dd>
-          </dl>
-        </>
-      ) : null}
-
       {sourceKind === "precomputed" ? (
         <p className="notice" style={{ marginTop: "1rem", marginBottom: 0 }}>
           Values marked <strong>≈</strong> are interpolated between precomputed
-          points: good to about 0.3% converting a true age forwards, and about
-          1% converting an apparent age back. The parameters, residuals and the
+          points: good to about 0.8% converting a true age forwards, and about
+          0.9% converting an apparent age back. The parameters, residuals and the
           plotted curves themselves are exact — the solver produced them
           directly. Load the full model to make every value exact.
         </p>

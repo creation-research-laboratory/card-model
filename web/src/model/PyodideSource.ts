@@ -29,7 +29,11 @@ import {
 export interface PresetCatalog {
   chronologies: PrecomputedData["chronologies"];
   boundaries: PrecomputedData["boundaries"];
-  /** The fixed first pair: the pre-Flood contact at the Flood's onset. */
+  /**
+   * The two fixed pairs: the pre-Flood contact at the Flood's onset, and the
+   * Ice Age endpoint. The third — the post-Flood contact — is the boundary the
+   * request selects.
+   */
   calibration: PrecomputedData["calibration"];
   /** True years between the two pairs — the Flood year. */
   floodDurationYears: number;
@@ -114,13 +118,14 @@ export class PyodideSource implements ModelSource {
       floodStartAge: number;
       postFloodBoundaryAge: number;
       iceAgeEndAge: number;
-      iceAgePrediction: number;
+      lambdaF2: number;
     }>(await this.transport.call("calibrate", JSON.stringify({
       chronology,
       // The two pairs are the ends of the Flood: a fixed pre-Flood/Flood
       // boundary and the selected Flood/post-Flood one.
       floodStartSecularAge: this.catalog.calibration.flood_start.secular_age,
       postFloodSecularAge: boundary.secular_age,
+      iceAgeSecularAge: this.catalog.calibration.ice_age_end.secular_age,
       floodDurationYears: this.catalog.floodDurationYears,
       overrides: request.overrides ?? {},
     })));

@@ -19,7 +19,7 @@ import json
 import warnings
 from typing import Any, Dict, List
 
-from card.calibrate import solve_flood_only
+from card.calibrate import solve_flood_rate
 from card.chronology import Chronology
 from card.models import GeneralModel, GeneralModelParams
 from card.parameters import (
@@ -89,21 +89,22 @@ def calibrate(request_json: str) -> str:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
 
-            # Both matched pairs are the ends of the Flood: it begins at the
-            # pre-Flood/Flood boundary and ends at the selected
-            # Flood/post-Flood one.
-            # The Flood year's two ends: the onset at the pre-Flood contact,
-            # and one year later at the selected post-Flood contact. Decay
-            # begins declining at the onset, so t_F == t_F2 throughout.
+            # Three matched pairs: the Flood's onset at the pre-Flood contact,
+            # its end a year later at the selected post-Flood contact, and the
+            # end of the Ice Age well into the relaxation.  All three AGEs come
+            # from the chronology -- solve_flood_rate reads them there, so
+            # passing anything else would silently solve a different problem.
+            #
+            # This has to stay in step with web/tools/generate_precomputed.py:
+            # the two sources answer the same questions, and the live suite
+            # fails loudly if they drift.
             flood_age = chronology.flood_start_age
-            second_age = flood_age - float(request["floodDurationYears"])
-            result = solve_flood_only(
-                flood_age=flood_age,
-                flood_secular_age=float(request["floodStartSecularAge"]),
-                second_age=second_age,
-                second_secular_age=float(request["postFloodSecularAge"]),
+            second_age = chronology.flood_end_age
+            result = solve_flood_rate(
+                pre_flood_secular_age=float(request["floodStartSecularAge"]),
+                post_flood_secular_age=float(request["postFloodSecularAge"]),
+                ice_age_secular_age=float(request["iceAgeSecularAge"]),
                 chronology=chronology,
-                k_F_bracket=(1e-9, 400.0),
             )
             params = result.model.params
 
@@ -129,10 +130,9 @@ def calibrate(request_json: str) -> str:
                 "floodStartAge": chronology.flood_start_age,
                 "postFloodBoundaryAge": second_age,
                 "iceAgeEndAge": chronology.ice_age_end_age,
-                # Not a constraint here: what this calibration predicts for the
-                # Ice Age, which the author's framework instead anchors on.
-                "iceAgePrediction": model.forward_age(
-                    chronology.ice_age_end_age, present),
+                # Pinned by continuity, not free: what the in-Flood exponential
+                # has fallen to by t_F2, and where the post-Flood one starts.
+                "lambdaF2": params.lambda_F2,
             }, caught)
     except Exception as exc:  # noqa: BLE001 — the boundary reports, never crashes
         return _error(exc)

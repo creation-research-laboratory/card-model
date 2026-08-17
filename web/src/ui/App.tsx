@@ -134,9 +134,9 @@ export function App({ data }: Props) {
         <p>
           Converting between young-earth ages and the apparent ages rock would
           yield under a time-varying decay rate. The Flood begins at the
-          Precambrian–Cambrian boundary and its deposition ceases a year later
-          at the contact you choose; the model is calibrated so that both
-          contacts carry exactly their stratigraphic ages.
+          Precambrian–Cambrian contact and ends a year later at the boundary you
+          choose; the rate relaxes at one pace across that year and a far slower
+          one for millennia after, so three matched dates fix the curve exactly.
         </p>
       </header>
 
@@ -154,9 +154,9 @@ export function App({ data }: Props) {
             <CalibrationReadout
               calibration={calibration}
               sourceKind={sourceKind}
-              iceAgePrediction={
+              lambdaF2={
                 data.presets[`${request.chronology}:${request.boundary}`]
-                  ?.ice_age_prediction
+                  ?.lambda_F2
               }
             />
           ) : null}
@@ -173,7 +173,7 @@ export function App({ data }: Props) {
               )}
             </p>
             <span className={`badge ${sourceKind === "live" ? "live" : ""}`}>
-              {sourceKind === "live" ? "live · exact" : "precomputed · ≈0.3%"}
+              {sourceKind === "live" ? "live · exact" : "precomputed · ≈1%"}
             </span>
             {sourceKind !== "live" ? (
               <p style={{ margin: ".7rem 0 0" }}>

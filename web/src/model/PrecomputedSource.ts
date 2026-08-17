@@ -44,7 +44,10 @@ export interface PrecomputedData {
     ice_age_end_age: number;
   }>;
   boundaries: Record<string, { label: string; secular_age: number; uncertainty: number }>;
-  calibration: { flood_start: { label: string; secular_age: number } };
+  calibration: {
+    flood_start: { label: string; secular_age: number };
+    ice_age_end: { label: string; secular_age: number };
+  };
   flood_duration_years: number;
   presets: Record<string, {
     chronology: string;
@@ -58,8 +61,12 @@ export interface PrecomputedData {
     constraints: Array<{
       label: string; true_age: number; secular_age: number; uncertainty: number;
     }>;
-    /** Not a constraint here: what this calibration says the Ice Age dates to. */
-    ice_age_prediction: { true_age: number; secular_age: number };
+    /**
+     * The handover value: what the in-Flood exponential has fallen to by
+     * `t_F2`, and so the amplitude the post-Flood one starts from. Pinned by
+     * continuity rather than free — see `GeneralModelParams.lambda_F2`.
+     */
+    lambda_F2: number;
     series: { true_age: number[]; secular_age: number[] };
     lambda_history: { date: number[]; lambda: number[] };
     geologic_column: Array<{

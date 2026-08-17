@@ -4,26 +4,22 @@
     "tools/generate_precomputed.py, so a preset cannot be defined in the app in",
     "a form Python never validated.",
     "",
-    "THE TWO MATCHED DATE PAIRS ARE THE FLOOD YEAR'S TWO ENDS:",
+    "THREE MATCHED DATE PAIRS, solved by card.calibrate.solve_flood_rate:",
     "",
-    "  1. Flood onset  <->  the Precambrian-Cambrian boundary (~541 Ma), the",
-    "     pre-Flood contact. Fixed in every scenario.",
-    "  2. Flood onset + 1 year  <->  the selected post-Flood boundary, K/Pg or",
-    "     N/Q. This is the variable input.",
+    "  1. Flood onset          <->  the pre-Flood contact (Precambrian-Cambrian).",
+    "  2. Flood onset + 1 yr   <->  the selected post-Flood contact, K/Pg or N/Q.",
+    "  3. End of the Ice Age   <->  a conventional Ice Age endpoint.",
     "",
-    "The decay rate begins declining IMMEDIATELY at the onset: lambda spikes at",
-    "t_F and relaxes as a single exponential, so t_F == t_F2 and there is no",
-    "constant-rate plateau across the Flood year. The curve is then fit so that",
-    "one year in, the apparent age is the selected boundary's.",
+    "Three pairs need three unknowns, and the model now has them: lambda_F, the",
+    "in-Flood relaxation k_F, and the post-Flood relaxation k_PF. lambda is no",
+    "longer flat across the Flood year -- it starts at lambda_F, relaxes at k_F,",
+    "and hands the post-Flood exponential whatever it has reached at t_F2. That",
+    "handover is continuous, so k_F is one new degree of freedom rather than two.",
     "",
-    "Consequence worth knowing: pinning those two points one year apart forces",
-    "k_F * 1 yr = ln(541/boundary), so k_F lands near 2 and the relaxation is",
-    "over within about a decade. The author's own lambda(t) schematic shows a",
-    "far gentler decay (k ~ 0.005-0.1), and his geologic-column figure needs",
-    "BOTH -- k ~ 1.7 to compress the Paleozoic into weeks and k ~ 0.012 to spread",
-    "the Cenozoic over centuries. A single post-Flood exponential cannot do both.",
-    "That is an open question with the model author; this file implements the",
-    "one-year reading, which reproduces his Mesozoic and Paleozoic durations.",
+    "This is what a single k could not do. Pinning only the Flood year's two ends",
+    "forced k * 1 yr = ln(pre/post), so the relaxation was spent within a decade",
+    "and the Cenozoic collapsed. With k_F and k_PF separate, the Flood year and",
+    "the millennia after it each get their own rate.",
     "",
     "Naming rule: a value ending in _age is an AGE (years before present), one",
     "ending in _date is a DATE (years after Day 1 of Creation)."
@@ -31,9 +27,15 @@
   "calibration": {
     "flood_start": {
       "label": "Precambrian-Cambrian",
-      "note": "Pre-Flood/Flood contact, matched to the Flood's onset.",
+      "note": "Pre-Flood contact, matched to the Flood's onset.",
       "secular_age": 541000000.0,
       "uncertainty": 10000000.0
+    },
+    "ice_age_end": {
+      "label": "End of the Ice Age",
+      "note": "Conventional Ice Age endpoint, matched to the chronology's Ice Age date. 12 ka is the author's figure; the package's own run config ships 11.5 kyr.",
+      "secular_age": 12000.0,
+      "uncertainty": 1000.0
     }
   },
   "chronologies": {
@@ -48,7 +50,8 @@
       "provisional": false,
       "age_of_earth": 6056,
       "flood_start_date": 1656,
-      "ice_age_end_date": 3500
+      "ice_age_end_date": 3500,
+      "flood_end_date": 1657.0
     },
     "septuagint": {
       "label": "Septuagint (LXX)",
@@ -62,7 +65,8 @@
       "provisional": true,
       "age_of_earth": 7500,
       "flood_start_date": 2176,
-      "ice_age_end_date": 3300
+      "ice_age_end_date": 3300,
+      "flood_end_date": 2177.0
     }
   },
   "defaults": {
@@ -116,7 +120,7 @@
     "lambda_points": 400
   },
   "flood_duration_years": 1.0,
-  "$flood_duration_note": "True years between the two matched pairs: the Flood year. Sets k_F, since k_F * this = ln(541 Ma / boundary).",
+  "$flood_duration_note": "True years between pairs 1 and 2 -- the Flood year. The chronology must give the Flood this length (flood_end_date = flood_start_date + this), because solve_flood_rate treats it as an input, never an unknown.",
   "post_flood_boundaries": {
     "kpg": {
       "label": "Cretaceous-Paleogene (K/Pg)",

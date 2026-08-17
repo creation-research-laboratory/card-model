@@ -36,7 +36,7 @@ if str(REPO / "src") not in sys.path:
     sys.path.insert(0, str(REPO / "src"))
 
 from card import __version__ as CARD_VERSION  # noqa: E402
-from card.calibrate import solve_flood_only  # noqa: E402
+from card.calibrate import solve_flood_rate  # noqa: E402
 from card.chronology import Chronology  # noqa: E402
 from card.models import GeneralModel  # noqa: E402
 
@@ -276,11 +276,14 @@ def build(presets: Dict[str, Any]) -> Dict[str, Any]:
     for chron_key, chron_spec in chronologies.items():
         # t_F == t_F2: the acceleration is instantaneous and relaxes as a
         # single exponential.
+        # The Flood now has a real length, because lambda relaxes across it at
+        # k_F.  solve_flood_rate treats that length as an input, so the
+        # chronology has to carry it rather than collapsing t_F2 onto t_F.
         flood_start = float(chron_spec["flood_start_date"])
         chronology = Chronology(
             age_of_earth=float(chron_spec["age_of_earth"]),
             flood_start_date=flood_start,
-            flood_end_date=flood_start,
+            flood_end_date=float(chron_spec["flood_end_date"]),
             ice_age_end_date=float(chron_spec["ice_age_end_date"]),
         )
         out_chronologies[chron_key] = {
@@ -293,22 +296,20 @@ def build(presets: Dict[str, Any]) -> Dict[str, Any]:
         }
 
         for bound_key, bound_spec in boundaries.items():
-            # The two matched pairs are the Flood year's two ends: its onset
-            # at the pre-Flood contact, and one year later at the selected
-            # post-Flood contact.  Decay begins declining at the onset, so
-            # t_F == t_F2 and this is a single exponential throughout.
+            # Three matched pairs: the Flood's onset at the pre-Flood contact,
+            # its end one year later at the selected post-Flood contact, and
+            # the end of the Ice Age well into the relaxation.  All three AGEs
+            # come from the chronology -- solve_flood_rate reads them there, so
+            # passing anything else would silently solve a different problem.
             flood_age = chronology.flood_start_age
-            second_age = flood_age - flood_years
+            second_age = chronology.flood_end_age
+            ice_age = chronology.ice_age_end_age
 
-            result = solve_flood_only(
-                flood_age=flood_age,
-                flood_secular_age=float(calib["flood_start"]["secular_age"]),
-                second_age=second_age,
-                second_secular_age=float(bound_spec["secular_age"]),
+            result = solve_flood_rate(
+                pre_flood_secular_age=float(calib["flood_start"]["secular_age"]),
+                post_flood_secular_age=float(bound_spec["secular_age"]),
+                ice_age_secular_age=float(calib["ice_age_end"]["secular_age"]),
                 chronology=chronology,
-                # k_F * 1 yr = ln(541 Ma / boundary), so k_F lands near 2 --
-                # well past the package default bracket's upper end.
-                k_F_bracket=(1e-9, 400.0),
             )
             model = result.model
             present = chronology.present_date
@@ -317,7 +318,8 @@ def build(presets: Dict[str, Any]) -> Dict[str, Any]:
             # exactly the values that get written.  Rounding the input and the
             # output independently would store a pair that the model never
             # actually produced.
-            grid = _true_age_grid(chronology, model, [flood_age, second_age], points)
+            grid = _true_age_grid(chronology, model,
+                                  [flood_age, second_age, ice_age], points)
             secular = [model.forward_age(age, present) for age in grid]
             lambda_grid = _lambda_grid(chronology, model, lambda_points)
 
@@ -345,15 +347,21 @@ def build(presets: Dict[str, Any]) -> Dict[str, Any]:
                      "true_age": second_age,
                      "secular_age": float(bound_spec["secular_age"]),
                      "uncertainty": float(bound_spec["uncertainty"])},
+                    # The third pair.  It was a prediction while one k had to
+                    # serve both phases; k_PF is what makes it an anchor, and
+                    # `residuals` has always carried three entries, so omitting
+                    # it here left the list and the residuals disagreeing.
+                    {"label": calib["ice_age_end"]["label"],
+                     "true_age": ice_age,
+                     "secular_age": float(calib["ice_age_end"]["secular_age"]),
+                     "uncertainty": float(calib["ice_age_end"]["uncertainty"])},
                 ],
-                # Not a constraint here: what the calibration predicts for the
-                # Ice Age, which the author's framework instead uses as an
-                # anchor.  Reported so the divergence is visible.
-                "ice_age_prediction": {
-                    "true_age": chronology.ice_age_end_age,
-                    "secular_age": _round(
-                        model.forward_age(chronology.ice_age_end_age, present)),
-                },
+                # The handover value: what the in-Flood exponential has fallen
+                # to by t_F2, and therefore where the post-Flood one starts.
+                # Not a free parameter -- continuity pins it -- but worth
+                # emitting, because it is the number that shows how much of the
+                # drop happens inside the Flood year.
+                "lambda_F2": _round(model.params.lambda_F2),
                 "series": {
                     "true_age": grid,  # already rounded, already deduplicated
                     "secular_age": [_round(s, SERIES_SIGFIGS) for s in secular],
@@ -389,9 +397,12 @@ def build(presets: Dict[str, Any]) -> Dict[str, Any]:
                            "secular_age": float(v["secular_age"]),
                            "uncertainty": float(v["uncertainty"])}
                        for k, v in boundaries.items()},
+        # Both fixed pairs. The third — the post-Flood contact — varies per
+        # preset and lives under `boundaries`.
         "calibration": {
-            "flood_start": {"label": calib["flood_start"]["label"],
-                            "secular_age": float(calib["flood_start"]["secular_age"])},
+            key: {"label": spec["label"],
+                  "secular_age": float(spec["secular_age"])}
+            for key, spec in calib.items()
         },
         "flood_duration_years": flood_years,
         "ics": {"version": ics["source"]["version"],
