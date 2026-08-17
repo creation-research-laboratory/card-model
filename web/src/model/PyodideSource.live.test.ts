@@ -70,7 +70,7 @@ describe("agreement with the Python package", () => {
   it("reproduces the pinned solve", async () => {
     const cal = await live.calibrate(preset("masoretic", "kpg"));
     expect(cal.params.lambda_F).toBeCloseTo(318753.882, 2);
-    expect(cal.params.k_F).toBeCloseTo(0.00482991111, 10);
+    expect(cal.params.k_PF).toBeCloseTo(0.00482991111, 10);
     expect(cal.maxAbsResidual).toBeLessThan(1e-12);
     expect(cal.exact).toBe(true);
   });
@@ -82,7 +82,8 @@ describe("agreement with the Python package", () => {
       expect(cal.maxAbsResidual).toBeLessThan(1e-12);
       // And agrees with what the generator wrote into the static file.
       expect(cal.params.lambda_F / p.params.lambda_F - 1).toBeCloseTo(0, 8);
-      expect(cal.params.k_F / p.params.k_F - 1).toBeCloseTo(0, 8);
+      expect(cal.params.k_PF / p.params.k_PF - 1).toBeCloseTo(0, 8);
+      expect(cal.params.k_F).toBe(p.params.k_F);
     }
   });
 
@@ -152,8 +153,8 @@ describe("custom parameters — the thing only the live source can do", () => {
 
     const cal = await live.calibrate(request);
     expect(cal.params.lambda_F).toBeCloseTo(5.0e5, 6);
-    // k_F still comes from the solve; only what was overridden changed.
-    expect(cal.params.k_F).toBeCloseTo(0.00482991111, 10);
+    // k_PF still comes from the solve; only what was overridden changed.
+    expect(cal.params.k_PF).toBeCloseTo(0.00482991111, 10);
   });
 
   it("leaves the constraints undisturbed by Creation-week overrides", async () => {
@@ -216,7 +217,9 @@ describe("the parameter schema comes from the package, not from TypeScript", () 
       lambda_c: 1.0, k_c: 0.0, t_c: 1.0,
       t_F: "flood_start_date", t_F2: "flood_end_date",
     });
-    expect(result.free.sort()).toEqual(["k_F", "lambda_F", "lambda_bg"].sort());
+    expect(result.free.sort()).toEqual(
+      ["k_F", "k_PF", "lambda_F", "lambda_bg"].sort(),
+    );
     // lambda_bg is present but not fittable (minimum == maximum), so a UI skips
     // it structurally rather than by a hardcoded exclusion.
     expect(result.fittable).not.toContain("lambda_bg");
@@ -251,5 +254,6 @@ describe("the parameter schema comes from the package, not from TypeScript", () 
     expect(result.free).toContain("k_c");
     expect(result.free).toContain("lambda_F");
     expect(result.free).toContain("k_F");
+    expect(result.free).toContain("k_PF");
   });
 });

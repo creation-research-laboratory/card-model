@@ -48,7 +48,10 @@ describe("generated data", () => {
   it("reproduces the values pinned from the Python package", async () => {
     const cal = await source.calibrate(preset("masoretic", "kpg"));
     expect(cal.params.lambda_F).toBeCloseTo(318754, -1);
-    expect(cal.params.k_F).toBeCloseTo(0.00482991, 8);
+    // The solved relaxation is the post-Flood one. `k_F` governs the Flood
+    // year itself and is zero here, so pinning it would pass vacuously.
+    expect(cal.params.k_PF).toBeCloseTo(0.00482991, 8);
+    expect(cal.params.k_F).toBe(0);
   });
 
   it("flags the provisional chronology so the UI can say so", () => {
