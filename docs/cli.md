@@ -9,7 +9,7 @@ config rather than an edit to a script.
 ```bash
 card init myrun.yaml         # write a documented starter config
 card fit myrun.yaml          # run the MCMC, write chain + figures + summary
-card calibrate myrun.yaml    # solve the same two constraints exactly
+card calibrate myrun.yaml    # solve the same constraints exactly
 card schema                  # print the parameter spec as JSON Schema
 card --version
 ```
@@ -26,27 +26,31 @@ chronology:
   flood_end_date: 1657
   ice_age_end_date: 3500
 
-constraints:
+constraints:                          # three pairs, three unknown rates
   - young_age: flood_start_age        # 4400 YBP under the chronology above
     secular_age: 540.0e6
     uncertainty: 1.0e7
     label: Precambrian-Cambrian boundary
+  - young_age: flood_end_age          # 4399 YBP — one year later
+    secular_age: 66.0e6
+    uncertainty: 1.0e5
+    label: Cretaceous-Paleogene boundary
   - young_age: ice_age_end_age        # 2556 YBP
     secular_age: 11500.0
     uncertainty: 30.0
     label: end of the Ice Age
 
 fixed:                                # linear units, always
-  lambda_c: 1.0
+  lambda_c: 1.0                       # k_F is absent: it is fitted now
   k_c: 0.0
-  k_F: 0.0
   t_c: 1.0
   t_F: flood_start_date
   t_F2: flood_end_date
 
 priors:                               # in each parameter's sampling space
-  lambda_F: {mean: 6.0, sigma: 1.0}   # log-scale, so these are log10
-  k_PF: {mean: -3.0, sigma: 1.0}
+  lambda_F: {mean: 9.7, sigma: 1.0}   # log-scale, so these are log10
+  k_F: {mean: 9.6, sigma: 5.0}        # linear — a one-year Flood
+  k_PF: {mean: -2.3, sigma: 1.0}
 
 sampler:
   n_walkers: 32
@@ -86,8 +90,22 @@ against.
 
 A list of matched date pairs. `young_age` is an **AGE** — years before present;
 `uncertainty` is the standard deviation on `secular_age`, in years; `label` is
-optional and appears in printed output. At least one is required, and `card
-calibrate` needs exactly two.
+optional and appears in printed output. At least one is required.
+
+`card fit` samples however many you give it. `card calibrate` solves them
+exactly, so it needs the count to match the number of unknown rates:
+
+| Pairs | Solves for | Via |
+| --- | --- | --- |
+| 2 | `lambda_F`, `k_PF` (at whatever `k_F` is pinned to) | [`solve_flood_only`](api/calibrate.md) |
+| 3 | `lambda_F`, `k_F`, `k_PF` | [`solve_flood_rate`](api/calibrate.md) |
+
+The three-pair solve reads its pairs by AGE, oldest first — the Flood's onset,
+the Flood's end, then a later event — and takes those AGEs from the chronology.
+A pair aimed somewhere else is refused rather than quietly resolved to the
+chronology's value, so write `young_age: flood_end_age` and let it follow. Three
+pairs also cannot come with a pinned `k_F`: it is what the third pair
+determines.
 
 ### `fixed`
 
@@ -107,16 +125,18 @@ log-scale parameters (`lambda_c`, `lambda_F`, `k_c`, `k_PF`), linear for
 `initial_guess`.
 
 `initial_guess` is where the walkers start, in sampling space. It is either a
-mapping of free-parameter names to values, or the string `calibrate`, which
-solves the config's two constraints exactly with
-[`solve_flood_only`](api/calibrate.md) and starts there.
+mapping of free-parameter names to values, or the string `calibrate`, which runs
+the exact solve above — two pairs or three — and starts there. It is the same
+code path as `card calibrate`, so the two cannot answer different problems from
+one file.
 
 !!! danger "Use it"
 
-    This posterior has a second, far local maximum that traps walkers
-    permanently. Started from the prior means, about a quarter of them fall in
-    during burn-in and contaminate every percentile. `initial_guess: calibrate`
-    is the cure; see [tutorial 2](tutorials/fitting.md#start-the-walkers-at-the-answer).
+    The two-pair form of this fit has a second, far local maximum that traps
+    walkers permanently. Started from the prior means, about a quarter of them
+    fall in during burn-in and contaminate every percentile.
+    `initial_guess: calibrate` is the cure; see
+    [tutorial 2](tutorials/fitting.md#start-the-walkers-at-the-answer).
 
 ### `output`
 
@@ -201,8 +221,9 @@ print(config.constraints[0].young_age, config.fixed_params["t_F"])
 ```
 
 `RunConfig.from_file` loads YAML or JSON; `build_fitter()` returns the
-configured [`MCMCFitter`](api/inference.md); `calibrated_start()` runs the
-deterministic solve.
+configured [`MCMCFitter`](api/inference.md); `solve_exactly()` runs the
+deterministic solve and hands back the `CalibrationResult`, and
+`calibrated_start()` reduces it to the linear starting values the sampler wants.
 
 ## Embedding CARD in an application
 
@@ -245,8 +266,8 @@ print(f"stopped early: {results['stopped_early']}, "
 
 ```text
 
-sampling  33.3% acceptance 0.73
-sampling  66.7% acceptance 0.73
-sampling 100.0% acceptance 0.74
+sampling  33.3% acceptance 0.67
+sampling  66.7% acceptance 0.68
+sampling 100.0% acceptance 0.69
 stopped early: False, steps: 60
 ```

@@ -30,6 +30,30 @@ MINIMAL = {
                "k_PF": {"mean": -3.0, "sigma": 1.0}},
 }
 
+#: The three-pair form: k_F is fitted, so it is absent from `fixed`.
+_THREE_PAIR_FIXED = {"lambda_c": 1.0, "k_c": 0.0, "t_c": 1.0,
+                     "t_F": "flood_start_date", "t_F2": "flood_end_date"}
+
+
+def _three_pair_config(**overrides):
+    """MINIMAL with the Flood's end added as a third pair."""
+    data = {
+        "constraints": [
+            {"young_age": "flood_start_age", "secular_age": 540e6,
+             "uncertainty": 1e7},
+            {"young_age": "flood_end_age", "secular_age": 66e6,
+             "uncertainty": 1e5},
+            {"young_age": "ice_age_end_age", "secular_age": 11500.0,
+             "uncertainty": 30.0},
+        ],
+        "fixed": dict(_THREE_PAIR_FIXED),
+        "priors": {"lambda_F": {"mean": 9.7, "sigma": 1.0},
+                   "k_F": {"mean": 9.6, "sigma": 5.0},
+                   "k_PF": {"mean": -2.3, "sigma": 1.0}},
+    }
+    data.update(overrides)
+    return data
+
 
 def write(tmp_path, data, name="run.yaml"):
     path = tmp_path / name
@@ -69,7 +93,10 @@ def test_bundled_example_config_loads(tmp_path):
 
     config = load_config(str(path))
     assert config.chronology == Chronology()
-    assert [c.young_age for c in config.constraints] == [4400.0, 2556.0]
+    # Three pairs: the Flood's onset, its end one year later, and the Ice Age.
+    assert [c.young_age for c in config.constraints] == [4400.0, 4399.0, 2556.0]
+    # k_F is what the third pair buys, so the shipped config must not pin it.
+    assert "k_F" not in config.fixed_params
     assert config.sampler.seed is not None       # must be reproducible
     assert config.sampler.initial_guess == "calibrate"  # must not get stuck
 
@@ -226,12 +253,56 @@ def test_calibrate_keyword_starts_at_the_exact_solution():
                                    np.log10(truth.k_PF)])
 
 
-def test_calibrate_keyword_needs_two_constraints():
+def test_calibrate_keyword_needs_two_or_three_constraints():
     config = RunConfig.from_dict(dict(
         MINIMAL, constraints=MINIMAL["constraints"][:1],
         sampler={"initial_guess": "calibrate"}))
     with pytest.raises(ValueError, match="two matched date pairs"):
         config.initial_guess_for(config.build_fitter())
+
+
+def test_calibrate_keyword_solves_three_pairs_including_k_F():
+    """Three pairs determine k_F, so the starting position must include it —
+    and linearly, because k_F is the one rate not sampled in log10."""
+    from card import solve_flood_rate
+
+    config = RunConfig.from_dict(_three_pair_config(
+        sampler={"initial_guess": "calibrate"}))
+    fitter = config.build_fitter()
+    assert fitter.free_param_names == ("lambda_F", "k_F", "k_PF")
+
+    truth = solve_flood_rate(540e6, 66e6, 11500.0)
+    assert config.initial_guess_for(fitter) == pytest.approx(
+        [np.log10(truth.lambda_F), truth.k_F, np.log10(truth.k_PF)])
+
+
+def test_three_pairs_reject_a_pinned_k_F():
+    config = RunConfig.from_dict(_three_pair_config(
+        fixed=dict(_THREE_PAIR_FIXED, k_F=0.0)))
+    with pytest.raises(ValueError, match="also pins it"):
+        config.solve_exactly()
+
+
+def test_three_pairs_reject_a_pair_aimed_elsewhere():
+    """`solve_flood_rate` takes all three AGEs from the chronology, so a pair
+    sitting somewhere else would be solved as a problem the file never
+    described.  It must be refused, not silently relocated."""
+    data = _three_pair_config()
+    data["constraints"][1] = dict(data["constraints"][1], young_age=4000.0)
+    with pytest.raises(ValueError, match="the Flood's end"):
+        RunConfig.from_dict(data).solve_exactly()
+
+
+def test_two_pairs_still_solve_at_a_pinned_k_F():
+    """The two-pair solve is not superseded — it is what you use when k_F is
+    known rather than fitted."""
+    from card import solve_flood_only
+
+    config = RunConfig.from_dict(MINIMAL)
+    result = config.solve_exactly()
+    truth = solve_flood_only(4400.0, 540e6, 2556.0, 11500.0)
+    assert result.lambda_F == pytest.approx(truth.lambda_F)
+    assert result.k_F == 0.0
 
 
 def test_explicit_initial_guess_is_ordered_by_free_parameters():

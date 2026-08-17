@@ -334,14 +334,12 @@ Everything above is one YAML file and one command — see
 [run configs and CLI](../cli.md):
 
 ```bash
-card init myrun.yaml         # a worked run config to edit
+card init myrun.yaml         # the three-pair fit above, as a config file
+card calibrate myrun.yaml    # the exact solve, in milliseconds
 card fit myrun.yaml          # the full MCMC, figures included
-card calibrate myrun.yaml    # the exact solve
 ```
 
-!!! note "`card calibrate` is the two-pair solve"
-
-    `card fit` samples however many constraints the config lists, but
-    `card calibrate` requires exactly two and calls `solve_flood_only`. The
-    three-pair `solve_flood_rate` shown above is not yet exposed on the command
-    line; call it from Python, or use `card fit`.
+The config `card init` writes is this tutorial's fit: three constraints, with
+`k_F` free and the walkers started at the exact solve. `card calibrate` picks
+the solve from the number of pairs — two for `solve_flood_only`, three for
+`solve_flood_rate` — so the same file drives both commands.

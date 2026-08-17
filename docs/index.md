@@ -84,23 +84,34 @@ print(f"{model.inverse_age(65e6):.0f} years before present")
 ```
 
 Fitting that model to dated events is the subject of
-[tutorial 2](tutorials/fitting.md); the short version is that two matched date
-pairs determine both parameters exactly:
+[tutorial 2](tutorials/fitting.md). The short version: the Flood carries three
+unknown rates — a peak \(\lambda_F\), a relaxation \(k_F\) *during* the Flood
+year and a relaxation \(k_{PF}\) *after* it — so three matched date pairs
+determine all three exactly. The Flood is one year long, and its two ends are
+two of those anchors:
 
 ```python
-from card import solve_flood_only, FLOOD_AGE, ICE_AGE_END_AGE
+from card import solve_flood_rate
 
-result = solve_flood_only(
-    flood_age=FLOOD_AGE,            flood_secular_age=541e6,
-    second_age=ICE_AGE_END_AGE,     second_secular_age=11.7e3,
+result = solve_flood_rate(
+    pre_flood_secular_age=541e6,    # Flood onset, 4400 YBP
+    post_flood_secular_age=66e6,    # Flood end,   4399 YBP
+    ice_age_secular_age=11.5e3,     # Ice Age end, 2556 YBP
 )
-print(f"lambda_F = {result.lambda_F:,.0f}, k_PF = {result.k_PF:.4g}")
+print(f"lambda_F = {result.lambda_F:.4g}")
+print(f"k_F      = {result.k_F:.4g} / year   (during the Flood)")
+print(f"k_PF     = {result.k_PF:.4g} / year  (after it)")
 ```
 
 ```text
-
-lambda_F = 3,204,607, k_PF = 0.005959
+lambda_F = 4.543e+09
+k_F      = 9.564 / year   (during the Flood)
+k_PF     = 0.004833 / year  (after it)
 ```
+
+Every residual lands at machine precision. Two pairs still work when \(k_F\) is
+supplied rather than solved — that is `solve_flood_only`, whose `k_F=0` default
+is the old constant-rate Flood.
 
 ## Ages and dates
 

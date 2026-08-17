@@ -68,9 +68,12 @@ from dataclasses import dataclass, field
 # spellings are needed, and dropping either one is only visible on Python
 # <= 3.13: from 3.14 (PEP 649) annotations are evaluated lazily, so a missing
 # name in a signature raises nothing until something asks for the type hints.
-from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Mapping, Optional, Sequence, Tuple
 
 from .chronology import DEFAULT_CHRONOLOGY, Chronology
+
+if TYPE_CHECKING:            # annotation only — keeps this module stdlib-only
+    from .calibrate import CalibrationResult
 
 __all__ = [
     "Constraint",
@@ -101,6 +104,12 @@ def example_config_text() -> str:
 DEFAULT_N_WALKERS = 32
 DEFAULT_N_STEPS = 20000
 DEFAULT_BURN_IN = 5000
+
+#: How far a constraint's AGE may sit from the chronology's before the
+#: three-pair solve refuses it.  Years, and generous: the point is to catch a
+#: pair aimed at a different event, not to police floating-point noise from a
+#: chronology keyword.
+_AGE_TOLERANCE = 1e-6
 
 
 def _chronology_keywords(chronology: Chronology) -> Dict[str, float]:
@@ -257,10 +266,11 @@ class SamplerConfig:
     `initial_guess` is where the walkers start, in each parameter's **sampling
     space** (log10 for the log-scale ones, like `priors`).  It is either a
     mapping of free-parameter names to values, or the string ``calibrate``,
-    which solves the config's two constraints exactly with
-    `card.calibrate.solve_flood_only` and starts there.  Omitting it starts the
-    walkers at the prior means, which is emcee's usual advice and is wrong for
-    this posterior — see `MCMCFitter._find_stuck_walkers`.
+    which solves the config's constraints exactly and starts there — two pairs
+    via `card.calibrate.solve_flood_only`, three via
+    `card.calibrate.solve_flood_rate`.  Omitting it starts the walkers at the
+    prior means, which is emcee's usual advice and is wrong for this posterior
+    — see `MCMCFitter._find_stuck_walkers`.
     """
 
     n_walkers: int = DEFAULT_N_WALKERS
@@ -472,38 +482,105 @@ class RunConfig:
             present_time=self.chronology.present_date,
         )
 
-    def calibrated_start(self) -> Dict[str, float]:
+    def solve_exactly(self) -> "CalibrationResult":
         """
-        Solve this config's two constraints exactly, in **linear** units.
+        Solve this config's constraints exactly, with no sampling.
+
+        The number of matched pairs picks the solve, because each pair is one
+        equation:
+
+          * **two** pairs determine `lambda_F` and `k_PF`, holding `k_F` at
+            whatever the config pinned it to (0 if unpinned — a constant-rate
+            Flood).  Starting the walkers from a solve that assumed a different
+            `k_F` would put them somewhere the posterior does not peak.
+          * **three** pairs determine `k_F` as well, via `solve_flood_rate`.
+            The three are read by AGE, oldest first: the Flood's onset, the
+            Flood's end, and a later event.
+
+        Returns:
+            The `card.calibrate.CalibrationResult` for whichever solve applies.
 
         Raises:
-            ValueError: Unless the config has exactly two constraints, which is
-                what makes the flood-only solve determined.
+            ValueError: If the config has any other number of constraints, if a
+                three-pair config also pins `k_F`, or if its three AGEs are not
+                the three the chronology places.
         """
-        from .calibrate import solve_flood_only
+        from .calibrate import solve_flood_only, solve_flood_rate
 
-        if len(self.constraints) != 2:
-            raise ValueError(
-                f"sampler.initial_guess: {SamplerConfig.CALIBRATE!r} solves "
-                "two matched date pairs for lambda_F and k_PF, but this config "
-                f"has {len(self.constraints)} constraint(s).  Give explicit "
-                "starting values instead."
+        ordered = sorted(self.constraints, key=lambda c: c.young_age,
+                         reverse=True)
+        if len(ordered) == 2:
+            flood, second = ordered
+            return solve_flood_only(
+                flood_age=flood.young_age,
+                flood_secular_age=flood.secular_age,
+                second_age=second.young_age,
+                second_secular_age=second.secular_age,
+                chronology=self.chronology,
+                k_F=float(self.fixed_params.get("k_F", 0.0)),
             )
-        flood, second = sorted(self.constraints, key=lambda c: c.young_age,
-                               reverse=True)
-        # k_F is a third unknown that two pairs cannot determine, so the solve
-        # holds it at whatever the config pinned it to (0 if unpinned — a
-        # constant-rate Flood).  Starting the walkers from a solve that assumed
-        # a different k_F would put them somewhere the posterior does not peak.
-        result = solve_flood_only(
-            flood_age=flood.young_age,
-            flood_secular_age=flood.secular_age,
-            second_age=second.young_age,
-            second_secular_age=second.secular_age,
-            chronology=self.chronology,
-            k_F=float(self.fixed_params.get("k_F", 0.0)),
+        if len(ordered) == 3:
+            if "k_F" in self.fixed_params:
+                raise ValueError(
+                    "three matched date pairs determine k_F, but this config "
+                    f"also pins it (fixed.k_F = "
+                    f"{self.fixed_params['k_F']!r}).  Remove it to solve for "
+                    "it, or drop a constraint to solve two pairs at that fixed "
+                    "k_F."
+                )
+            # `solve_flood_rate` reads all three AGEs from the chronology, so a
+            # config whose pairs sit anywhere else would be solved as a problem
+            # it does not describe.  Check rather than silently substitute.
+            pre, post, ice = ordered
+            roles = (
+                (pre, self.chronology.flood_start_age, "the Flood's onset",
+                 "flood_start_age"),
+                (post, self.chronology.flood_end_age, "the Flood's end",
+                 "flood_end_age"),
+                (ice, self.chronology.ice_age_end_age,
+                 "the end of the Ice Age", "ice_age_end_age"),
+            )
+            for constraint, expected, role, keyword in roles:
+                if abs(constraint.young_age - expected) > _AGE_TOLERANCE:
+                    raise ValueError(
+                        f"the three-pair solve matches {role} at "
+                        f"{expected:g} YBP under this chronology, but the "
+                        f"constraint there has young_age "
+                        f"{constraint.young_age:g}.  Write "
+                        f"`young_age: {keyword}` so the pair follows the "
+                        "chronology, or use two constraints."
+                    )
+            return solve_flood_rate(
+                pre_flood_secular_age=pre.secular_age,
+                post_flood_secular_age=post.secular_age,
+                ice_age_secular_age=ice.secular_age,
+                chronology=self.chronology,
+            )
+        raise ValueError(
+            f"an exact solve needs two matched date pairs (lambda_F and k_PF) "
+            f"or three (k_F as well), but this config has {len(ordered)}.  Use "
+            "`card fit` for an over- or under-determined problem."
         )
-        return {"lambda_F": result.lambda_F, "k_PF": result.k_PF}
+
+    def calibrated_start(self) -> Dict[str, float]:
+        """
+        Solve this config's constraints exactly, in **linear** units.
+
+        Raises:
+            ValueError: If `solve_exactly` cannot apply — see its docstring.
+        """
+        try:
+            result = self.solve_exactly()
+        except ValueError as error:
+            raise ValueError(
+                f"sampler.initial_guess: {SamplerConfig.CALIBRATE!r} could not "
+                f"solve this config.  {error}  Give explicit starting values "
+                "instead."
+            ) from error
+        start = {"lambda_F": result.lambda_F, "k_PF": result.k_PF}
+        if len(self.constraints) == 3:
+            start["k_F"] = result.k_F
+        return start
 
     def initial_guess_for(self, fitter) -> Optional[list]:
         """
