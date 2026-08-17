@@ -92,6 +92,7 @@ def plot_age_comparison(
     k_PF_median: Optional[float] = None,
     flood_date: Optional[float] = None,
     k_F: float = 0.0,
+    k_F_median: Optional[float] = None,
     ax: Optional[Axes] = None,
     return_figure: bool = False,
 ) -> FigureResult:
@@ -109,8 +110,12 @@ def plot_age_comparison(
         k_PF_median: Posterior median k_PF; plotted if given with
             lambda_F_median.
         flood_date: DATE of the Flood's onset (default: the chronology's).
-        k_F: In-Flood relaxation constant, applied to both curves.  Defaults to
-            0 — a rate held constant across the Flood year.
+        k_F: In-Flood relaxation constant for the mean curve.  Defaults to 0 —
+            a rate held constant across the Flood year.
+        k_F_median: In-Flood relaxation constant for the median curve,
+            defaulting to `k_F`.  Pass it when k_F was fitted rather than
+            pinned, so the median curve is drawn from the median of every
+            parameter rather than borrowing the mean of this one.
         ax: Optional existing axes to draw into.  When supplied the caller owns
             the figure and this returns the axes instead of a path.
         return_figure: Return the matplotlib Figure instead of the path, and
@@ -128,9 +133,10 @@ def plot_age_comparison(
                                             t_F=flood_date, k_F=k_F)
     median_model = None
     if lambda_F_median is not None and k_PF_median is not None:
-        median_model = GeneralModel.flood_only(lambda_F=lambda_F_median,
-                                               k_PF=k_PF_median,
-                                               t_F=flood_date, k_F=k_F)
+        median_model = GeneralModel.flood_only(
+            lambda_F=lambda_F_median, k_PF=k_PF_median, t_F=flood_date,
+            k_F=k_F if k_F_median is None else k_F_median,
+        )
 
     flood_secular_age = general_model.forward_age(FLOOD_START_AGE)
 

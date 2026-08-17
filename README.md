@@ -88,13 +88,16 @@ model.forward_age(FLOOD_AGE)   # 533337566.7  — how old Flood rock looks
 model.inverse_age(65e6)        # 4049.2       — the young age of a "65 Myr" rock
 ```
 
-Fitting the model to two dated events, exactly or with uncertainties, is
+Fitting the model to dated events, exactly or with uncertainties, is
 [tutorial 2](https://creation-research-laboratory.github.io/card-model/tutorials/fitting/).
-A whole fit can also be described in a YAML file and run from the command line:
+The Flood carries three unknown rates — a peak `lambda_F`, a relaxation `k_F`
+*during* the Flood year and a relaxation `k_PF` *after* it — so the default fit
+takes three matched date pairs, the Flood's two ends among them. A whole fit can
+also be described in a YAML file and run from the command line:
 
 ```bash
 card init myrun.yaml         # a documented starter config, ready to edit
-card calibrate myrun.yaml    # solve its two constraints exactly, in milliseconds
+card calibrate myrun.yaml    # solve its constraints exactly, in milliseconds
 card fit myrun.yaml          # the full MCMC: chain, figures, summary
 ```
 

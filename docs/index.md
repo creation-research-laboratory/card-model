@@ -19,7 +19,7 @@ uncertainties.
 
 -   :material-school: **[Tutorials](tutorials/forward-inverse.md)**
 
-    Convert ages in both directions, then fit the model to two dated events.
+    Convert ages in both directions, then fit the model to three dated events.
 
 -   :material-console: **[Run configs and CLI](cli.md)**
 

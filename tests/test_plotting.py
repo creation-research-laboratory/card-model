@@ -72,6 +72,38 @@ def test_age_comparison_writes_a_file(tmp_path):
     assert out.stat().st_size > 0
 
 
+def _median_curve(tmp_path, **overrides):
+    """y-data of the dashed posterior-median curve, drawn into our own axes."""
+    import matplotlib.pyplot as plt
+
+    kwargs = dict(n_points=40, lambda_F=4.5e9, k_PF=4.8e-3, k_F=9.5,
+                  lambda_F_median=4.4e9, k_PF_median=4.8e-3)
+    kwargs.update(overrides)
+    fig, ax = plt.subplots()
+    plot_age_comparison(ax=ax, out_file=str(tmp_path / "unused.png"), **kwargs)
+    line, = [ln for ln in ax.get_lines()
+             if ln.get_label() == "Posterior median general"]
+    y = np.array(line.get_ydata(), dtype=float)
+    plt.close(fig)
+    return y
+
+
+def test_median_curve_can_use_its_own_k_F(tmp_path):
+    """k_F is fitted in the default three-pair fit, so the median curve has to
+    be drawable from the median of every parameter rather than borrowing the
+    mean of this one."""
+    shared = _median_curve(tmp_path)
+    own = _median_curve(tmp_path, k_F_median=2.0)
+    assert not np.allclose(shared, own)
+
+
+def test_median_curve_defaults_to_the_mean_k_F(tmp_path):
+    """Omitting k_F_median must keep the previous behaviour exactly, so the
+    parameter is additive rather than a silent change to existing callers."""
+    assert np.allclose(_median_curve(tmp_path),
+                       _median_curve(tmp_path, k_F_median=9.5))
+
+
 def test_parameter_sweep_writes_a_file(tmp_path):
     out = tmp_path / "sweep.png"
     result = plot_general_model_parameter_sweep(
