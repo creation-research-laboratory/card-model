@@ -38,7 +38,12 @@ if str(REPO / "src") not in sys.path:
 from card import __version__ as CARD_VERSION  # noqa: E402
 from card.calibrate import solve_flood_rate  # noqa: E402
 from card.chronology import Chronology  # noqa: E402
-from card.models import GeneralModel  # noqa: E402
+from card.models import GeneralModel, GeneralModelParams  # noqa: E402
+from card.parameters import (  # noqa: E402
+    parameter_specs,
+    split_fixed_and_free,
+    to_json_schema,
+)
 
 PRESETS_PATH = WEB / "presets" / "presets.json"
 ICS_PATH = WEB / "data" / "ics-units.json"
@@ -267,6 +272,56 @@ def _geologic_column(model: GeneralModel, chronology: Chronology,
     return rows
 
 
+def _mode_schemas(presets: Dict[str, Any],
+                  chronologies: Dict[str, Chronology]) -> Dict[str, Any]:
+    """
+    The parameter form, per mode and per chronology, from the package itself.
+
+    The live source can answer this at runtime (`bridge.schema`), but only once
+    Pyodide has booted -- and it deliberately does not boot until a reader asks
+    for something the presets cannot answer.  Without the schema up front the
+    parameter panel would have nothing to draw until after a 5.8 MB download,
+    which is precisely backwards: the controls are what tell a reader the
+    download is worth starting.
+
+    So the same `to_json_schema` call runs here too.  Nothing is transcribed;
+    adding a parameter to `GeneralModelParams` still makes a control appear with
+    no frontend change, which is the property the whole approach exists for.
+    Date bounds vary with the chronology, so there is one schema per pair.
+    """
+    specs = parameter_specs(GeneralModelParams)
+    out: Dict[str, Any] = {}
+    for mode_key, mode in presets["modes"].items():
+        per_chronology: Dict[str, Any] = {}
+        for chron_key, chronology in chronologies.items():
+            # Chronology *names* resolve the way run configs let them, so a mode
+            # can say `t_F: flood_start_date` and stay correct across
+            # chronologies rather than hardcoding a date.
+            resolved = {
+                name: (float(getattr(chronology, value))
+                       if isinstance(value, str) else float(value))
+                for name, value in mode["fixed"].items()
+            }
+            free, pinned = split_fixed_and_free(GeneralModelParams, resolved)
+            per_chronology[chron_key] = {
+                "schema": to_json_schema(GeneralModelParams,
+                                         chronology=chronology),
+                # Order matters: this is the order controls are rendered in, and
+                # it is the dataclass's own declaration order.
+                "free": list(free),
+                "fixed": {name: resolved[name] for name in pinned},
+            }
+        out[mode_key] = {
+            "label": mode["label"],
+            "enabled": bool(mode.get("enabled", False)),
+            "by_chronology": per_chronology,
+        }
+    # `is_fittable` is false exactly when minimum == maximum (lambda_bg), so a
+    # UI skips it structurally rather than by a hardcoded exclusion.
+    out["$fittable"] = [n for n, s in specs.items() if s.is_fittable]
+    return out
+
+
 def build(presets: Dict[str, Any]) -> Dict[str, Any]:
     chronologies = presets["chronologies"]
     boundaries = presets["post_flood_boundaries"]
@@ -279,6 +334,9 @@ def build(presets: Dict[str, Any]) -> Dict[str, Any]:
 
     out_chronologies: Dict[str, Any] = {}
     out_presets: Dict[str, Any] = {}
+    # Kept so the schemas can be built against the same objects the presets
+    # were solved with, rather than reconstructed from the emitted dicts.
+    built_chronologies: Dict[str, Chronology] = {}
 
     for chron_key, chron_spec in chronologies.items():
         # t_F == t_F2: the acceleration is instantaneous and relaxes as a
@@ -293,6 +351,7 @@ def build(presets: Dict[str, Any]) -> Dict[str, Any]:
             flood_end_date=float(chron_spec["flood_end_date"]),
             ice_age_end_date=float(chron_spec["ice_age_end_date"]),
         )
+        built_chronologies[chron_key] = chronology
         out_chronologies[chron_key] = {
             "label": chron_spec["label"],
             "provisional": bool(chron_spec.get("provisional", False)),
@@ -416,6 +475,7 @@ def build(presets: Dict[str, Any]) -> Dict[str, Any]:
                 "url": ics["source"]["url"],
                 "reviewed": bool(ics["source"].get("reviewed", False))},
         "chronologies": out_chronologies,
+        "modes": _mode_schemas(presets, built_chronologies),
         "presets": out_presets,
     }
 

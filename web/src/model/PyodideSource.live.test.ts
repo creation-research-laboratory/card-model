@@ -316,6 +316,44 @@ describe("custom parameters — the thing only the live source can do", () => {
   });
 });
 
+describe("residuals describe the model on screen", () => {
+  it("reports machine precision only while nothing is overridden", async () => {
+    const cal = await live.calibrate(preset("masoretic", "kpg"));
+    expect(cal.maxAbsResidual).toBeLessThan(1e-12);
+  });
+
+  it("recomputes them once a fitted parameter is moved", async () => {
+    // The bug this pins: residuals used to be taken from the solve, which runs
+    // *before* overrides are applied. Moving lambda_F then left the readout
+    // claiming an exact fit for a curve that missed every constraint. Free
+    // parameters are exactly what made that reachable.
+    const base = await live.calibrate(preset("masoretic", "kpg"));
+    const moved = await live.calibrate({
+      ...preset("masoretic", "kpg"),
+      overrides: { lambda_F: base.params.lambda_F * 1.66 },
+    });
+    expect(moved.maxAbsResidual).toBeGreaterThan(0.1);
+
+    // And the reported residuals match what the model actually produces.
+    for (let i = 0; i < moved.constraints.length; i++) {
+      const c = moved.constraints[i];
+      const got = await live.forwardAge(moved, c.trueAge);
+      expect(moved.residuals[i]).toBeCloseTo(got / c.secularAge - 1, 9);
+    }
+  });
+
+  it("still reports exact for a Creation-week override", async () => {
+    // lambda_c and k_c do not enter any constraint — every constraint age maps
+    // to a formation DATE at or after t_F — so the fit is genuinely untouched.
+    // This is what the recompute must NOT break.
+    const cal = await live.calibrate({
+      ...preset("masoretic", "kpg"),
+      overrides: { lambda_c: 1e8, k_c: 1e-3 },
+    });
+    expect(cal.maxAbsResidual).toBeLessThan(1e-12);
+  });
+});
+
 describe("errors and warnings come from the package", () => {
   it("surfaces the package's own prose for an out-of-domain age", async () => {
     const cal = await live.calibrate(preset("masoretic", "kpg"));

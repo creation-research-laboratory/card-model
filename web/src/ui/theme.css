@@ -220,3 +220,25 @@ dl.readout.stacked { grid-template-columns: 1fr; gap: .1rem; }
 dl.readout.stacked dt { white-space: normal; margin-top: .45rem; }
 dl.readout.stacked dt:first-child { margin-top: 0; }
 dl.readout.stacked dd { padding-left: .1rem; }
+
+/* Parameter controls. Generated from the package's ParamSpec, so the styling
+   has to work for a log slider spanning eleven decades and a linear one
+   spanning [0, 50] without knowing which is which. */
+.param { margin-bottom: .9rem; }
+.param-label {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: .5rem; font-size: .82rem; margin-bottom: .2rem;
+}
+.param-label > span { color: var(--text-secondary); }
+.param-unit { color: var(--text-muted); font-size: .75rem; }
+.param-label output {
+  font-family: var(--mono); font-size: .8rem;
+  font-variant-numeric: tabular-nums; color: var(--text-primary);
+}
+.param-label output.changed { color: var(--series-1); font-weight: 600; }
+.param input[type="range"] { width: 100%; accent-color: var(--series-1); }
+.param input[type="range"]:disabled { opacity: .5; }
+.param-help {
+  margin: .15rem 0 0; font-size: .72rem; color: var(--text-muted);
+  line-height: 1.4;
+}

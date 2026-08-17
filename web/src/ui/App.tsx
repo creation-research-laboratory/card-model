@@ -14,6 +14,7 @@ import { AgeComparisonChart, type AgeOrientation } from "../charts/AgeComparison
 import { GeologicColumnChart } from "../charts/GeologicColumnChart.js";
 import { LambdaHistoryChart, type LambdaZoom } from "../charts/LambdaHistoryChart.js";
 import { CalibrationReadout } from "./CalibrationReadout.js";
+import { ParameterPanel } from "./ParameterPanel.js";
 import { PresetPicker } from "./PresetPicker.js";
 import { SeriesTable } from "./SeriesTable.js";
 import { ModelSourceManager, type ManagerState } from "../model/ModelSourceManager.js";
@@ -21,7 +22,8 @@ import { PrecomputedSource, type PrecomputedData } from "../model/PrecomputedSou
 import { PyodideSource } from "../model/PyodideSource.js";
 import { WorkerTransport } from "../worker/transport.js";
 import type {
-  Calibration, CalibrationRequest, GeologicColumn, LambdaSeries, Series,
+  Calibration, CalibrationRequest, GeneralParams, GeologicColumn,
+  LambdaSeries, Series,
 } from "../model/types.js";
 
 interface Props {
@@ -87,6 +89,21 @@ export function App({ data }: Props) {
   const [orientation, setOrientation] = useState<AgeOrientation>("apparent");
   const [lambdaZoom, setLambdaZoom] = useState<LambdaZoom>("full");
 
+  // Parameter overrides the reader has made. Empty means "the preset as
+  // calibrated"; anything in here makes the request non-preset, which only the
+  // live source can answer.
+  const [overrides, setOverrides] = useState<Partial<GeneralParams>>({});
+  const overridden = useMemo(
+    () => new Set(Object.keys(overrides)), [overrides],
+  );
+
+  // The parameter form, from the package. Available before Pyodide boots
+  // because the generator emits it alongside the presets.
+  const modeSchema = useMemo(
+    () => precomputed.schemaFor(request.mode, request.chronology),
+    [precomputed, request.mode, request.chronology],
+  );
+
   useEffect(() => manager.subscribe(setState), [manager]);
 
   // A Pyodide instance holds ~100 MB; terminating on pagehide is what makes
@@ -123,7 +140,25 @@ export function App({ data }: Props) {
     }
   }, [manager]);
 
-  useEffect(() => { void load(request); }, [load, request]);
+  // Overrides are part of what gets solved, so they belong in the request the
+  // loader sees rather than in a second channel.
+  const effectiveRequest = useMemo<CalibrationRequest>(
+    () => (overridden.size ? { ...request, overrides } : request),
+    [request, overrides, overridden.size],
+  );
+
+  useEffect(() => { void load(effectiveRequest); }, [load, effectiveRequest]);
+
+  // Changing preset abandons any overrides: they were values for a different
+  // calibration, and carrying them across would silently mix two scenarios.
+  const changePreset = useCallback((patch: Partial<CalibrationRequest>) => {
+    setOverrides({});
+    setRequest((r) => ({ ...r, ...patch }));
+  }, []);
+
+  const onParameter = useCallback((name: string, value: number) => {
+    setOverrides((o) => ({ ...o, [name]: value }));
+  }, []);
 
   const sourceKind = state.kind;
 
@@ -147,8 +182,8 @@ export function App({ data }: Props) {
             data={data}
             chronology={request.chronology}
             boundary={request.boundary}
-            onChronology={(chronology) => setRequest((r) => ({ ...r, chronology }))}
-            onBoundary={(boundary) => setRequest((r) => ({ ...r, boundary }))}
+            onChronology={(chronology) => changePreset({ chronology })}
+            onBoundary={(boundary) => changePreset({ boundary })}
           />
 
           {calibration ? (
@@ -159,6 +194,20 @@ export function App({ data }: Props) {
                 data.presets[`${request.chronology}:${request.boundary}`]
                   ?.lambda_F2
               }
+            />
+          ) : null}
+
+          {modeSchema && calibration ? (
+            <ParameterPanel
+              mode={modeSchema}
+              fittable={precomputed.fittable}
+              values={calibration.params}
+              overridden={overridden}
+              onChange={onParameter}
+              onReset={() => setOverrides({})}
+              // Honest about the cost before it is incurred, rather than
+              // freezing on a 5.8 MB fetch the reader did not ask for.
+              willStartDownload={sourceKind !== "live"}
             />
           ) : null}
 
