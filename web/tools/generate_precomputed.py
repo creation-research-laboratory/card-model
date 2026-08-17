@@ -330,6 +330,7 @@ def build(presets: Dict[str, Any]) -> Dict[str, Any]:
                     "lambda_c": model.lambda_c, "lambda_F": _round(model.lambda_F),
                     "lambda_bg": model.lambda_bg,
                     "k_c": model.k_c, "k_F": _round(model.k_F),
+                    "k_PF": _round(model.k_PF),
                     "t_c": model.t_c, "t_F": model.t_F, "t_F2": model.t_F2,
                 },
                 "residuals": [_round(r) for r in result.residuals],
@@ -431,7 +432,7 @@ def main() -> int:
           f"{n_presets} presets, {size_kb:.0f} kB (card {CARD_VERSION})")
     for key, preset in payload["presets"].items():
         print(f"  {key:24s} lambda_F={preset['params']['lambda_F']:<12.6g} "
-              f"k_F={preset['params']['k_F']:<12.6g} "
+              f"k_PF={preset['params']['k_PF']:<12.6g} "
               f"max|res|={preset['max_abs_residual']:.1e}")
     return 0
 

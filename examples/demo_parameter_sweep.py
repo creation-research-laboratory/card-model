@@ -13,14 +13,15 @@ def demo_parameter_sweep():
 
     print("Creating parameter sweep plots...")
 
-    # Example 1: Vary lambda_F and k_F
-    print("\n1. Varying lambda_F and k_F:")
+    # Example 1: Vary lambda_F and k_PF
+    print("\n1. Varying lambda_F and k_PF:")
     base_params = GeneralModelParams(
         lambda_c=1e3,
         lambda_F=1e5,  # This will be overridden by vary_params
         lambda_bg=1.0,
         k_c=1e-1,
-        k_F=8.04e-3,  # This will be overridden by vary_params
+        k_F=0.0,
+        k_PF=8.04e-3,  # This will be overridden by vary_params
         t_c=1,
         t_F=1656,
         t_F2=1657
@@ -28,7 +29,7 @@ def demo_parameter_sweep():
 
     vary_params = {
         'lambda_F': [1e4, 1e5, 1e6],
-        'k_F': [1e-3, 8.04e-3, 1e-2]
+        'k_PF': [1e-3, 8.04e-3, 1e-2]
     }
 
     plot_general_model_parameter_sweep(
@@ -54,10 +55,10 @@ def demo_parameter_sweep():
     print("   Saved: demo_sweep_lambdaF_only.png")
 
     # Example 3: Vary decay constants
-    print("\n3. Varying decay constants k_c and k_F:")
+    print("\n3. Varying decay constants k_c and k_PF:")
     vary_params_decay = {
         'k_c': [1e-2, 1e-1, 1e0],
-        'k_F': [1e-4, 1e-3, 1e-2]
+        'k_PF': [1e-4, 1e-3, 1e-2]
     }
 
     plot_general_model_parameter_sweep(

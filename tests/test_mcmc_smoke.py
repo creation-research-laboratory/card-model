@@ -25,17 +25,17 @@ from card.cli import main
 
 SMOKE_CONFIG = {
     "chronology": {"age_of_earth": 6056.0, "flood_start_date": 1656.0,
-                   "flood_end_date": 1656.0, "ice_age_end_date": 3500.0},
+                   "flood_end_date": 1657.0, "ice_age_end_date": 3500.0},
     "constraints": [
         {"young_age": "flood_start_age", "secular_age": 541.0e6,
          "uncertainty": 1.0e7, "label": "Precambrian-Cambrian boundary"},
         {"young_age": "ice_age_end_age", "secular_age": 11700.0,
          "uncertainty": 100.0, "label": "end of the Ice Age"},
     ],
-    "fixed": {"lambda_c": 1.0, "k_c": 0.0, "t_c": 1.0,
+    "fixed": {"lambda_c": 1.0, "k_c": 0.0, "k_F": 0.0, "t_c": 1.0,
               "t_F": "flood_start_date", "t_F2": "flood_end_date"},
     "priors": {"lambda_F": {"mean": 6.5, "sigma": 1.0},
-               "k_F": {"mean": -2.2, "sigma": 1.0}},
+               "k_PF": {"mean": -2.2, "sigma": 1.0}},
     # `calibrate` starts the walkers at the exact solution to these two
     # constraints.  Without it a 60-step run does not converge at all — half
     # the walkers end up trapped in the far local maximum — so this is what
@@ -77,7 +77,7 @@ def test_saved_chain_has_the_requested_shape(tmp_path, config_path):
     out = fit(config_path, tmp_path / "run")
     results = load_results(str(out / "chain.h5"))
     assert results["chain"].shape == (60, 8, 2)
-    assert results["param_names"] == ["lambda_F", "k_F"]
+    assert results["param_names"] == ["lambda_F", "k_PF"]
     assert results["log_scale"] == [True, True]
     assert results["present_time"] == 6056.0
     assert 0.0 < results["acceptance_fraction"] < 1.0
@@ -99,7 +99,7 @@ def test_chain_lands_near_the_deterministic_solution(tmp_path, config_path):
 
     median = np.median(results["samples"], axis=0)
     assert 10 ** median[0] == pytest.approx(truth.lambda_F, rel=0.5)
-    assert 10 ** median[1] == pytest.approx(truth.k_F, rel=0.2)
+    assert 10 ** median[1] == pytest.approx(truth.k_PF, rel=0.2)
 
 
 def test_the_seed_makes_a_run_reproducible(tmp_path, config_path):
@@ -155,7 +155,7 @@ def test_init_writes_a_config_that_actually_runs(capsys, tmp_path):
     assert "Wrote" in capsys.readouterr().out
 
     config = load_config(str(path))
-    assert len(config.constraints) == 2
+    assert len(config.constraints) == 3
 
     out = tmp_path / "run"
     assert main(["fit", str(path), "-o", str(out), *FIT_ARGS]) == 0
@@ -198,13 +198,43 @@ def test_calibrate_solves_the_same_config(capsys, config_path):
     assert "Precambrian-Cambrian boundary" in printed
 
 
-def test_calibrate_needs_exactly_two_constraints(capsys, tmp_path):
+def test_calibrate_needs_two_or_three_constraints(capsys, tmp_path):
     single = dict(SMOKE_CONFIG,
                   constraints=SMOKE_CONFIG["constraints"][:1])
     path = tmp_path / "one.yaml"
     path.write_text(yaml.safe_dump(single))
     assert main(["calibrate", str(path)]) == 2
-    assert "exactly two" in capsys.readouterr().err
+    assert "two matched date pairs" in capsys.readouterr().err
+
+
+def test_calibrate_solves_three_pairs(capsys, tmp_path):
+    """The whole point of the third pair: k_F stops being an input and comes
+    out of the solve, with all three residuals still at machine precision."""
+    from card import solve_flood_rate
+
+    three = dict(
+        SMOKE_CONFIG,
+        constraints=[
+            {"young_age": "flood_start_age", "secular_age": 540e6,
+             "uncertainty": 1e7, "label": "Precambrian-Cambrian boundary"},
+            {"young_age": "flood_end_age", "secular_age": 66e6,
+             "uncertainty": 1e5, "label": "Cretaceous-Paleogene boundary"},
+            {"young_age": "ice_age_end_age", "secular_age": 11500.0,
+             "uncertainty": 30.0, "label": "end of the Ice Age"},
+        ],
+        fixed={"lambda_c": 1.0, "k_c": 0.0, "t_c": 1.0,
+               "t_F": "flood_start_date", "t_F2": "flood_end_date"},
+    )
+    path = tmp_path / "three.yaml"
+    path.write_text(yaml.safe_dump(three))
+
+    assert main(["calibrate", str(path)]) == 0
+    printed = capsys.readouterr().out
+
+    truth = solve_flood_rate(540e6, 66e6, 11500.0)
+    assert f"{truth.k_F:.6g}" in printed
+    assert "solved; three pairs" in printed
+    assert "Cretaceous-Paleogene boundary" in printed
 
 
 def test_schema_prints_the_parameter_spec(capsys):

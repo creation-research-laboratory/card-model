@@ -30,7 +30,8 @@ STANDARD_GENERAL_PARAMS = GeneralModelParams(
     lambda_F=1e5,
     lambda_bg=1.0,
     k_c=1e-1,
-    k_F=8.04e-3,
+    k_F=0.0,
+    k_PF=8.04e-3,
     t_c=1,
     t_F=1656,
     t_F2=1657,
@@ -60,7 +61,7 @@ def make_constant():
 
 
 def make_flood_only():
-    return GeneralModel.flood_only(lambda_F=1e5, k_F=8.04e-3)
+    return GeneralModel.flood_only(lambda_F=1e5, k_PF=8.04e-3)
 
 
 def make_general():
@@ -194,27 +195,95 @@ def test_negative_ages_rejected(model):
 # ----------------------------------------------------------------------------
 
 def test_flood_only_factory_matches_explicit_params():
-    factory_model = GeneralModel.flood_only(lambda_F=1e5, k_F=8.04e-3, t_F=1656)
+    factory_model = GeneralModel.flood_only(lambda_F=1e5, k_PF=8.04e-3, t_F=1656)
     explicit_model = GeneralModel(GeneralModelParams(
         lambda_c=1.0,
         lambda_F=1e5,
         lambda_bg=1.0,
         k_c=1.0,
-        k_F=8.04e-3,
+        k_F=0.0,
+        k_PF=8.04e-3,
         t_c=1.0,
         t_F=1656,
-        t_F2=1656,
+        # t_F2 left unset: the factory and the dataclass must agree on the
+        # year-long default rather than each having its own idea of it.
     ))
+    assert factory_model.t_F2 == 1657
     for true_age in [100, 1000, 4000, 5000]:
         assert factory_model.forward_age(true_age) == pytest.approx(
             explicit_model.forward_age(true_age), rel=1e-12)
 
 
 def test_flood_only_rate_is_background_before_flood():
-    m = GeneralModel.flood_only(lambda_F=1e5, k_F=8.04e-3, t_F=1656)
+    m = GeneralModel.flood_only(lambda_F=1e5, k_PF=8.04e-3, t_F=1656)
     assert m.lambda_func(1000) == pytest.approx(1.0)
-    assert m.lambda_func(1657) < 1e5
-    assert m.lambda_func(1657) > 1.0
+    # The Flood runs to 1657 inclusive, and k_F defaults to 0, so the rate is
+    # still at its peak there and only relaxes afterwards.
+    assert m.lambda_func(1657) == pytest.approx(1e5)
+    assert 1.0 < m.lambda_func(1700) < 1e5
+
+
+# ----------------------------------------------------------------------------
+# The in-Flood relaxation: k_F
+#
+# The Flood no longer holds lambda constant unless asked to.  These pin the two
+# properties that make k_F a *generalization* rather than a replacement — the
+# k_F = 0 limit reproduces the constant-rate Flood exactly, and lambda is
+# continuous where the Flood hands off to the post-Flood relaxation.
+# ----------------------------------------------------------------------------
+
+def flood_params(**overrides):
+    values = dict(lambda_c=1.0, lambda_F=1e6, lambda_bg=1.0, k_c=1.0,
+                  k_F=0.0, k_PF=6e-3, t_c=1.0, t_F=1656.0)
+    values.update(overrides)
+    return GeneralModelParams(**values)
+
+
+def test_k_F_zero_is_a_constant_rate_flood():
+    """k_F = 0 must leave lambda at lambda_F for the whole Flood."""
+    model = GeneralModel(flood_params(k_F=0.0))
+    assert model.lambda_F2 == pytest.approx(1e6)
+    # The Flood is the half-open interval (t_F, t_F2]: lambda steps up *at*
+    # t_F, so t_F itself still reads as the pre-Flood rate.
+    assert model.lambda_func(1656.0) == pytest.approx(1.0)
+    for t in np.linspace(1656.0, 1657.0, 11)[1:]:
+        assert model.lambda_func(t) == pytest.approx(1e6, rel=1e-12)
+    # ... and the Flood's contribution is then exactly lambda_F * duration.
+    assert model.compute_integral(1656.0, 1657.0) == pytest.approx(1e6)
+
+
+@pytest.mark.parametrize("k_F", [0.0, 1e-9, 0.5, 2.0, 25.0])
+def test_lambda_is_continuous_at_the_flood_end(k_F):
+    """lambda_F2 is defined so region 4 starts where region 3 finished."""
+    params = flood_params(k_F=k_F)
+    model = GeneralModel(params)
+    eps = 1e-7
+    before = model.lambda_func(params.t_F2 - eps)
+    after = model.lambda_func(params.t_F2 + eps)
+    assert before == pytest.approx(after, rel=1e-6)
+    assert model.lambda_func(params.t_F2) == pytest.approx(params.lambda_F2)
+
+
+@pytest.mark.parametrize("k_F", [0.0, 0.5, 2.0, 25.0])
+def test_in_flood_integral_matches_quadrature(k_F):
+    """The closed form for region 3 against a fine trapezoid rule."""
+    params = flood_params(k_F=k_F)
+    model = GeneralModel(params)
+    # Start just inside the Flood, so every sampled point is in region 3 and
+    # the comparison is not contaminated by the step at t_F.
+    lo, hi = params.t_F + 1e-6, params.t_F2
+    grid = np.linspace(lo, hi, 200_001)
+    reference = np.trapezoid([model.lambda_func(t) for t in grid], grid)
+    closed = model.compute_integral(lo, hi)
+    assert closed == pytest.approx(reference, rel=1e-6)
+
+
+def test_larger_k_F_means_a_faster_drop_across_the_flood():
+    rates = [GeneralModel(flood_params(k_F=k)).lambda_F2
+             for k in (0.0, 0.5, 2.0, 10.0)]
+    assert rates == sorted(rates, reverse=True)
+    # However fast it falls, it can never relax past background.
+    assert all(rate >= 1.0 for rate in rates)
 
 
 # ----------------------------------------------------------------------------
@@ -234,7 +303,8 @@ SHORT_FLOOD_PARAMS = GeneralModelParams(
     lambda_F=5e8,
     lambda_bg=1.0,
     k_c=1.0,
-    k_F=5e-3,
+    k_F=0.0,
+    k_PF=5e-3,
     t_c=1.0,
     t_F=1656.0,
     t_F2=1656.5,
@@ -271,23 +341,23 @@ def test_inverse_age_round_trips_across_full_secular_range(params):
         assert model.forward_age(true_age) == pytest.approx(target, rel=1e-9)
 
 
-@pytest.mark.parametrize("k_F", [1e-3, 1e-8, 1e-12, 0.0])
-def test_integral_is_stable_as_decay_constant_approaches_zero(k_F):
+@pytest.mark.parametrize("k_PF", [1e-3, 1e-8, 1e-12, 0.0])
+def test_integral_is_stable_as_decay_constant_approaches_zero(k_PF):
     """k -> 0 means lambda never relaxes; the integral must stay finite and
     approach the constant-rate limit rather than dividing by zero."""
     lambda_F = 1e5
     t_F = 1656
-    model = GeneralModel.flood_only(lambda_F=lambda_F, k_F=k_F, t_F=t_F)
+    model = GeneralModel.flood_only(lambda_F=lambda_F, k_PF=k_PF, t_F=t_F)
     secular = model.forward_age(AGE_OF_EARTH)
     assert np.isfinite(secular)
 
     post_flood_span = AGE_OF_EARTH - t_F
-    if k_F * post_flood_span < 1e-4:
+    if k_PF * post_flood_span < 1e-4:
         # lambda barely relaxes, so the result approaches the constant-rate
         # limit.  The leading correction is k*span/2 in relative terms, so the
-        # tolerance has to admit it; at k_F == 0 the match is exact.
+        # tolerance has to admit it; at k_PF == 0 the match is exact.
         expected = t_F + lambda_F * post_flood_span
-        tolerance = max(1e-15, k_F * post_flood_span)
+        tolerance = max(1e-15, k_PF * post_flood_span)
         assert secular == pytest.approx(expected, rel=tolerance)
 
 

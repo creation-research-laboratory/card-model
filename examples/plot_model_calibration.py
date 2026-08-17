@@ -4,7 +4,7 @@ calibration scenarios.
 
 Each scenario pins the Flood and the end of the Ice Age to paired
 secular / young-age dates. With lambda_c = lambda_bg = 1 the model reduces
-to the flood-only limit of the General model, and with k_F specified the
+to the flood-only limit of the General model, and with k_PF specified the
 single unknown lambda_F is solved so the Flood pair is honored exactly.
 The Ice Age pair is then a check on the calibration; the script prints
 the residual.
@@ -22,21 +22,21 @@ FLOOD_SECULAR = 541e6    # Precambrian-Cambrian boundary
 ICE_AGE_SECULAR = 12e3   # End of the Ice Age
 
 SCENARIOS = {
-    'Scenario 1': {'flood_ybp': 5324, 'ice_age_ybp': 4200, 'k_F': 0.0097,
+    'Scenario 1': {'flood_ybp': 5324, 'ice_age_ybp': 4200, 'k_PF': 0.0097,
                    'color': '#e34948'},
-    'Scenario 2': {'flood_ybp': 4374, 'ice_age_ybp': 3500, 'k_F': 0.0124,
+    'Scenario 2': {'flood_ybp': 4374, 'ice_age_ybp': 3500, 'k_PF': 0.0124,
                    'color': '#2a78d6'},
 }
 
 
-def calibrate(flood_ybp: float, k_F: float):
-    """Flood-only calibration at fixed k_F, via card.calibrate.
+def calibrate(flood_ybp: float, k_PF: float):
+    """Flood-only calibration at fixed k_PF, via card.calibrate.
 
     The solve used to live in this script; it now lives in the package so the
     joint variant, the paper and the tests all share one implementation.
     """
     return solve_lambda_F(flood_age=flood_ybp, flood_secular_age=FLOOD_SECULAR,
-                          k_F=k_F)
+                          k_PF=k_PF)
 
 
 def main():
@@ -45,13 +45,13 @@ def main():
     young_ages = np.linspace(1, 6000, 800)
 
     for name, sc in SCENARIOS.items():
-        result = calibrate(sc['flood_ybp'], sc['k_F'])
+        result = calibrate(sc['flood_ybp'], sc['k_PF'])
         lambda_F, model = result.lambda_F, result.model
 
         secular = np.array([model.forward_age(t) for t in young_ages])
         ice_age_pred = model.forward_age(sc['ice_age_ybp'])
 
-        print(f"{name}: Flood {sc['flood_ybp']} YBP, k_F = {sc['k_F']}")
+        print(f"{name}: Flood {sc['flood_ybp']} YBP, k_PF = {sc['k_PF']}")
         print(f"  solved lambda_F = {lambda_F:.4g} "
               f"(log10 = {np.log10(lambda_F):.4f})")
         print(f"  Flood check: {model.forward_age(sc['flood_ybp']):.4g} yr "
@@ -61,7 +61,7 @@ def main():
               f"residual {100 * (ice_age_pred / ICE_AGE_SECULAR - 1):+.1f}%)")
 
         label = (f"{name}: Flood {sc['flood_ybp']} YBP, "
-                 f"$k_F$ = {sc['k_F']}, "
+                 f"$k_{{PF}}$ = {sc['k_PF']}, "
                  f"$\\lambda_F$ = {lambda_F:.3g}")
         ax.semilogy(young_ages, secular, color=sc['color'], linewidth=2,
                     label=label)

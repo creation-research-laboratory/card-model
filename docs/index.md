@@ -19,7 +19,7 @@ uncertainties.
 
 -   :material-school: **[Tutorials](tutorials/forward-inverse.md)**
 
-    Convert ages in both directions, then fit the model to two dated events.
+    Convert ages in both directions, then fit the model to three dated events.
 
 -   :material-console: **[Run configs and CLI](cli.md)**
 
@@ -67,8 +67,9 @@ use the models without a plotting stack.
 ```python
 from card import GeneralModel, FLOOD_AGE
 
-# The flood-only limit: no Creation-week acceleration, instantaneous Flood.
-model = GeneralModel.flood_only(lambda_F=3.2e6, k_F=6e-3)
+# The flood-only limit: no Creation-week acceleration, so the year-long
+# Flood is the only accelerated phase.
+model = GeneralModel.flood_only(lambda_F=3.2e6, k_PF=6e-3)
 
 # A rock formed at the Flood appears this old to a secular clock:
 print(f"{model.forward_age(FLOOD_AGE):.4g} years")
@@ -78,27 +79,39 @@ print(f"{model.inverse_age(65e6):.0f} years before present")
 ```
 
 ```text
-5.333e+08 years
-4049 years before present
+5.365e+08 years
+4048 years before present
 ```
 
 Fitting that model to dated events is the subject of
-[tutorial 2](tutorials/fitting.md); the short version is that two matched date
-pairs determine both parameters exactly:
+[tutorial 2](tutorials/fitting.md). The short version: the Flood carries three
+unknown rates — a peak \(\lambda_F\), a relaxation \(k_F\) *during* the Flood
+year and a relaxation \(k_{PF}\) *after* it — so three matched date pairs
+determine all three exactly. The Flood is one year long, and its two ends are
+two of those anchors:
 
 ```python
-from card import solve_flood_only, FLOOD_AGE, ICE_AGE_END_AGE
+from card import solve_flood_rate
 
-result = solve_flood_only(
-    flood_age=FLOOD_AGE,            flood_secular_age=541e6,
-    second_age=ICE_AGE_END_AGE,     second_secular_age=11.7e3,
+result = solve_flood_rate(
+    pre_flood_secular_age=541e6,    # Flood onset, 4400 YBP
+    post_flood_secular_age=66e6,    # Flood end,   4399 YBP
+    ice_age_secular_age=11.5e3,     # Ice Age end, 2556 YBP
 )
-print(f"lambda_F = {result.lambda_F:,.0f}, k_F = {result.k_F:.4g}")
+print(f"lambda_F = {result.lambda_F:.4g}")
+print(f"k_F      = {result.k_F:.4g} / year   (during the Flood)")
+print(f"k_PF     = {result.k_PF:.4g} / year  (after it)")
 ```
 
 ```text
-lambda_F = 3,223,698, k_F = 0.005959
+lambda_F = 4.543e+09
+k_F      = 9.564 / year   (during the Flood)
+k_PF     = 0.004833 / year  (after it)
 ```
+
+Every residual lands at machine precision. Two pairs still work when \(k_F\) is
+supplied rather than solved — that is `solve_flood_only`, whose `k_F=0` default
+is the old constant-rate Flood.
 
 ## Ages and dates
 

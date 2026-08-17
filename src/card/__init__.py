@@ -6,9 +6,9 @@ true (young-earth) ages and apparent (secular) ages, with MCMC fitting of model
 parameters to age constraints.
 
     >>> from card import GeneralModel, FLOOD_AGE
-    >>> model = GeneralModel.flood_only(lambda_F=3.2e6, k_F=6e-3)
+    >>> model = GeneralModel.flood_only(lambda_F=3.2e6, k_PF=6e-3)
     >>> round(model.forward_age(FLOOD_AGE))
-    533337567
+    536537566
 
 Layout::
 
@@ -46,6 +46,8 @@ _EXPORTS = {
     "ACCEPTABLE_ERROR": "card.constants",
     "AGE_OF_EARTH": "card.constants",
     "FLOOD_AGE": "card.constants",
+    "FLOOD_DURATION": "card.constants",
+    "FLOOD_END_AGE": "card.constants",
     "FLOOD_END_DATE": "card.constants",
     "FLOOD_START_AGE": "card.constants",
     "FLOOD_START_DATE": "card.constants",
@@ -76,6 +78,7 @@ _EXPORTS = {
     "to_json_schema": "card.parameters",
     # deterministic calibration
     "CalibrationResult": "card.calibrate",
+    "solve_flood_rate": "card.calibrate",
     "solve_flood_only": "card.calibrate",
     "solve_lambda_F": "card.calibrate",
     # plotting (matplotlib)
@@ -118,6 +121,7 @@ def __dir__():
 if TYPE_CHECKING:  # pragma: no cover
     from .calibrate import (
         CalibrationResult,
+        solve_flood_rate,
         solve_flood_only,
         solve_lambda_F,
     )
@@ -138,6 +142,8 @@ if TYPE_CHECKING:  # pragma: no cover
         ACCEPTABLE_ERROR,
         AGE_OF_EARTH,
         FLOOD_AGE,
+        FLOOD_DURATION,
+        FLOOD_END_AGE,
         FLOOD_END_DATE,
         FLOOD_START_AGE,
         FLOOD_START_DATE,

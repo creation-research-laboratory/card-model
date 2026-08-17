@@ -5,21 +5,40 @@
 CARD does not model the decay of any particular isotope. It models the
 **decay rate itself** as a function of time, normalized by the rate measured
 today, on the assumption that every isotope is affected in the same proportion.
-The rate is piecewise: constant during each accelerated period, relaxing
-exponentially back toward the background rate after it.
+The rate is piecewise: constant during the Creation week, then relaxing
+exponentially toward the background rate in each of the three periods that
+follow, each with its own relaxation constant.
 
 \[
 \lambda(t) = \begin{cases}
 \lambda_c & 0 < t \le t_c \\
 \left(\lambda_c - \lambda_{bg}\right) e^{-k_c (t - t_c)} + \lambda_{bg} & t_c < t \le t_{F} \\
-\lambda_F & t_{F} < t \le t_{F2} \\
-\left(\lambda_F - \lambda_{bg}\right) e^{-k_F (t - t_{F2})} + \lambda_{bg} & t_{F2} < t
+\left(\lambda_F - \lambda_{bg}\right) e^{-k_F (t - t_{F})} + \lambda_{bg} & t_{F} < t \le t_{F2} \\
+\left(\lambda_{F2} - \lambda_{bg}\right) e^{-k_{PF} (t - t_{F2})} + \lambda_{bg} & t_{F2} < t
 \end{cases}
 \]
 
-Here \(t\) is a **DATE** — years after Day 1 of Creation. The exponentials are
-anchored at the end of each accelerated period, so \(\lambda\) is at its peak
-when the period ends and decays from there.
+Here \(t\) is a **DATE** — years after Day 1 of Creation. Each exponential is
+anchored at the *start* of its own period: \(\lambda\) jumps to \(\lambda_F\)
+at the Flood's onset and decays from there.
+
+\(\lambda_{F2}\) is not a free parameter. It is the rate the Flood has
+relaxed to by its end,
+
+\[
+\lambda_{F2} = \left(\lambda_F - \lambda_{bg}\right) e^{-k_F (t_{F2} - t_F)}
+             + \lambda_{bg},
+\]
+
+which is exactly what makes \(\lambda\) continuous at \(t_{F2}\): the
+post-Flood exponential starts from wherever the in-Flood one finished. So
+letting the rate fall across the Flood costs **one** new parameter,
+\(k_F\), not two. \(\lambda\) still steps *up* at \(t_F\) — the Flood's
+onset is the one genuine discontinuity in the model.
+
+Setting \(k_F = 0\) recovers a Flood that holds \(\lambda\) at
+\(\lambda_F\) for its whole length, so this is a strict generalization of
+the constant-rate Flood rather than a replacement for it.
 
 ## The parameters
 
@@ -29,10 +48,24 @@ when the period ends and decays from there.
 | `lambda_F` | \(\lambda_F\) | — | Decay rate during the Flood, as a multiple of background |
 | `lambda_bg` | \(\lambda_{bg}\) | — | Background rate; **always 1** by normalization, and not fittable |
 | `k_c` | \(k_c\) | 1/year | Post-Creation relaxation constant |
-| `k_F` | \(k_F\) | 1/year | Post-Flood relaxation constant |
+| `k_F` | \(k_F\) | 1/year | **In**-Flood relaxation constant, over \([t_F, t_{F2}]\) |
+| `k_PF` | \(k_{PF}\) | 1/year | Post-Flood relaxation constant |
 | `t_c` | \(t_c\) | DATE | When the Creation week ends |
 | `t_F` | \(t_F\) | DATE | When the Flood starts |
-| `t_F2` | \(t_{F2}\) | DATE | When the Flood ends |
+
+Two more quantities are **derived**, and so appear nowhere in the fitter, the
+sliders or the JSON schema:
+
+| Name | Symbol | Derived from | Meaning |
+| --- | --- | --- | --- |
+| `t_F2` | \(t_{F2}\) | \(t_F + 1\) | When the Flood ends — the Flood is a year long |
+| `lambda_F2` | \(\lambda_{F2}\) | continuity at \(t_{F2}\) | Rate at the Flood's end |
+
+The Flood's length is a *chronology* assumption rather than something to infer
+from age constraints, so it is set by
+[`Chronology.flood_duration`](api/chronology.md) and `t_F2` follows from it.
+It remains settable — including \(t_{F2} = t_F\), the instantaneous limit —
+but nothing fits it.
 
 Each parameter is declared exactly once, as a
 [`ParamSpec`](api/parameters.md) on its dataclass field, carrying its symbol,
@@ -45,8 +78,9 @@ always usable:
 
 - every \(\lambda \ge 1\) — rates are multiples of the background rate, and the
   model describes decay that is *accelerated*, never slower than today's;
-- \(k_c, k_F \ge 0\) — the minus sign is already in \(e^{-k\,\Delta t}\), so a
-  positive \(k\) is what decays and \(k = 0\) is the no-relaxation limit;
+- \(k_c, k_F, k_{PF} \ge 0\) — the minus sign is already in
+  \(e^{-k\,\Delta t}\), so a positive \(k\) is what decays and \(k = 0\)
+  is the no-relaxation limit;
 - dates ordered \(t_c \le t_F \le t_{F2}\), with \(t_F = t_{F2}\) the
   instantaneous-Flood limit;
 - a warning past a two-year Flood, and `lambda_bg != 1` rescaled to 1 rather
@@ -84,25 +118,35 @@ quadrature, and the inverse is a bracketed `brentq` solve on
 
 ### The flood-only limit
 
-Setting \(\lambda_c = \lambda_{bg}\) (no Creation-week acceleration) and
-\(t_F = t_{F2}\) (an instantaneous Flood) leaves two parameters, and the
-integral collapses to a form worth knowing by heart. Writing
-\(R = (\lambda_F - \lambda_{bg})/\lambda_{bg}\), \(A_{ya}\) for the young age
-of the rock and \(A_F\) for the age of the Flood — both **AGEs**, years before
-present:
+Setting \(\lambda_c = \lambda_{bg}\) — no Creation-week acceleration —
+leaves the Flood as the only accelerated phase, and the integral collapses to a
+form worth knowing by heart. Write \(A_{ya}\) for the young age of the rock,
+\(A_F\) and \(A_{F2}\) for the AGEs of the Flood's onset and end (all
+**AGEs**, years before present), \(n = A_F - A_{F2}\) for its length, and
+\(R_2 = (\lambda_{F2} - \lambda_{bg})/\lambda_{bg}\).
+
+For rock formed at or after the Flood's end, only the post-Flood relaxation
+contributes above background:
 
 \[
-A_{sec} = A_{ya} + \frac{R}{k_F} e^{-k_F A_F}\left(e^{k_F A_{ya}} - 1\right),
-\qquad A_{ya} \le A_F .
+A_{sec} = A_{ya} + \frac{R_2}{k_{PF}} e^{-k_{PF} A_{F2}}
+          \left(e^{k_{PF} A_{ya}} - 1\right),
+\qquad A_{ya} \le A_{F2} .
 \]
 
-For rock that predates the Flood the bracket saturates at
-\(1 - e^{-k_F A_F}\): everything older than the Flood picks up the same fixed
-excess of apparent age, which is why the model cannot distinguish
-Precambrian ages from one another.
+Rock formed *during* the Flood picks up the in-Flood integral on top of that.
+At the onset — the oldest event the model can date — the extra term is
+
+\[
+\frac{\lambda_F - \lambda_{bg}}{k_F}\left(1 - e^{-k_F n}\right) + n
+\;\xrightarrow[k_F \to 0]{}\; \lambda_F\, n ,
+\]
+
+and everything that predates the Flood carries that same fixed excess, which is
+why the model cannot distinguish Precambrian ages from one another.
 
 Note that the age of the Earth does not appear. What matters is how long ago
-the Flood was, because that is where the exponential is anchored.
+the Flood was, because that is where the exponentials are anchored.
 
 ## Time conventions
 

@@ -3,9 +3,19 @@ Root finding, without scipy.
 
 `brentq` here is a line-by-line port of the algorithm in scipy's
 ``Zeros/brentq.c`` — the same Brent's method, the same convergence test, the
-same iteration order — so it returns bit-identical results for the solves this
-package performs.  ``tests/test_solvers.py`` asserts that equality against
-scipy directly, so the claim is checked rather than asserted.
+same iteration order.  ``tests/test_solvers.py`` checks it against scipy
+directly rather than taking that on trust.
+
+It returns *bit-identical* results for smooth objectives, and that is what the
+test asserts there.  It is not identical in every case, and cannot be: the C
+compiler is free to contract ``a*b + c`` in the interpolation step into a
+fused multiply-add (clang does so by default on arm64), which rounds once
+where Python rounds twice.  Where that changes an iterate it moves it by an
+ULP or two, and the returned roots then differ by far less than the caller's
+own `xtol` — 7e-13 against a requested 1e-10 in the one case this package has
+found, an inverse-age solve whose objective is quantized near the root.  The
+guarantee to rely on is the one brentq actually makes: a root bracketed to
+within `xtol`.
 
 WHY THIS EXISTS.  `models.py` and `calibrate.py` need exactly one thing from
 scipy: a bracketed 1-D root solve.  Importing scipy to get it costs 13.4 MB in

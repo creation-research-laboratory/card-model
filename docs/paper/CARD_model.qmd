@@ -1,5 +1,5 @@
 ---
-title: "CARD: A General Calibrated Model for Accelerated Radiometric Decay"
+title: "CARD: A General Framework for deriving a Calibrated Model for Accelerated Radiometric Decay"
 format: 
     html: 
         code-fold: true
@@ -7,12 +7,13 @@ format:
 ---
 
 # Abstract
-We present a general model for accelerated radiometric decay that can be used to estimate the equivalent young-earth ages of rocks and geologic horizons given a secular age.
-The model is based on specifying a time-dependent decay rate $\lambda(t)$ as a piecewise function that defines how the rate of radiometric decay evolves through time, with parameters that can be specified or solved for given appropriate data. 
-The model assumes two possible periods of accelerated decay, one during the Creation week and one during the Flood, with the decay rate decaying back to the background rate after each period.
-Following the initial acceleration, $\lambda(t)$ decays back to the background decay rate $\lambda_{bg}$ as an exponential function of time, with decay constant $k_c$ and $k_F$ for the post-Creation week and post-Flood periods, respectively.
-By specifying pairs of matched dates (young-earth and secular), it is possible to calibrate the model to estimate the model parameters, which then allows it to be used for age estimation.
-Using this approach, we can build a numerical solver for calculating a young-earth age given a secular age, and vice versa.
+We present a general framework for deriving a calibrated model for accelerated radiometric decay that can be used to estimate the equivalent young-earth ages of rocks and geologic horizons given a secular age.
+The idea is based on specifying a time-dependent decay rate $\lambda(t)$ as a piecewise function that defines how the rate of radiometric decay evolves through time, with parameters that can be specified or solved for given appropriate data. 
+We divide history into three periods: the Creation week up to the Flood, the year-long Flood, and the post-Flood period. 
+Accelerated decay may occur during the Creation week and during the Flood, with an exponential decay of $\lambda(t)$ to return to the background rate $\lambda_{bg}$ in each period.
+Each time period may have its own decay constant.
+By specifying pairs of matched dates (corresponding young-earth and secular ages), it is possible to calibrate parameters to define an age model that relates secular ages to young-earth ages.
+Using this approach, we can calculate young-earth ages for various geological processes given their secular age, and vice versa.
 In this paper, we derive the general model and provide examples of calibrated age relationships based on various hypothesized matched date pairs. 
 The predictions from these example models can then be used to calculate various parameters of relevance to young-earth creation studies, for example, the rates of sediment flux and mountain building during the Flood, the timing of the end of the Flood with regards to the geologic period, and the point at which the accelerated decay rates return to the background rate.
 The framework we propose is very flexible and can be used to explore the implications of accelerated decay for various creation issues. 
@@ -65,70 +66,100 @@ The basic model is as follows:
 $$
 \lambda(t) = \begin{cases}
 \lambda_c &  0 < t < t_c \\
-\left(\lambda_c - \lambda_{bg}\right) e^{-k_c (t - t_c)} + \lambda_{bg} & t_c < t \leq t_{F} \\
-\lambda_F & t_{F} < t < t_{F2} \\
-\left(\lambda_F - \lambda_{bg}\right) e^{-k_F (t - t_{F2})} + \lambda_{bg} & t_{F2} < t \\
+\left(\lambda_c - \lambda_{bg}\right) e^{-k_c (t - t_c)} + \lambda_{bg} & t_c < t < t_{F} \\
+\left(\lambda_F - \lambda_{bg}\right) e^{-k_F (t - t_{F})} + \lambda_{bg} & t_{F} \le t \le t_{F2} \\
+\left(\lambda_{F2} - \lambda_{bg}\right) e^{-k_{PF} (t - t_{F2})} + \lambda_{bg} & t_{F2} < t \\
 \end{cases}
 $$ {#eq-general-model}
 
-where $t$ is the time in years after Day 1 of creation, denoted as $t_0$. 
-We can plot the general mathematical model represented in @eq-general-model using Python: 
+where $t$ is the time in years after Day 1 of creation, denoted as $t_0$.
+Each of the three relaxing regions is written in the same form — an excess over the background rate that decays exponentially, plus the background rate itself — so that $\lambda(t)$ approaches $\lambda_{bg}$ from above in every period and can never fall below it, however fast or however long it decays.
+
+We require $\lambda(t)$ to be **continuous at the end of the Flood**: the rate at which the Flood finishes is the rate from which the post-Flood relaxation begins.
+That is what fixes $\lambda_{F2}$,
+$$
+\lambda_{F2} = \left(\lambda_F - \lambda_{bg}\right) e^{-k_F (t_{F2} - t_{F})} + \lambda_{bg},
+$$ {#eq-flood-continuity}
+so $\lambda_{F2}$ is not an independent quantity but a consequence of $\lambda_F$, $k_F$ and the length of the Flood.
+Letting the decay rate fall across the Flood therefore costs a single new degree of freedom, $k_F$, rather than two.
+Note that $\lambda(t)$ is *not* required to be continuous at $t_{F}$: the onset of the Flood is a step up in the decay rate, and is the only genuine discontinuity in the model.
+Setting $k_F = 0$ recovers a Flood that holds $\lambda$ at $\lambda_F$ throughout, which is the constant-rate Flood of the simpler model, so nothing available before is lost.
+
+We further take the Flood to be a single year, $t_{F2} = t_{F} + 1$: the Flood's *duration* is an assumption of the framework, not a quantity we solve for.
+
+We can plot the general mathematical model represented in @eq-general-model using Python:
 
 ```{python}
 #| label: fig-general-model
 #| fig-cap: "Schematic diagram of the general model showing model behavior. "
 # The curve is the package's own lambda_func, drawn by the package's own
 # plotting function — the same code `examples/plot_general_model.py` calls — so
-# this figure cannot drift from the model the solver integrates.  A one-year
-# Flood is used here purely so that the third region is visible; the flood-only
-# limit sets t_F2 == t_F.
+# this figure cannot drift from the model the solver integrates.  t_F2 is left
+# unset: the package derives it as t_F + 1, the year-long Flood, and so does
+# every other figure and solve in this paper.
 schematic = GeneralModelParams(
     lambda_c=1e3,
     lambda_F=1e5,
     lambda_bg=1.0,
     k_c=1e-1,
-    k_F=1e-2,
+    k_F=1.0,      # the rate falls across the Flood year
+    k_PF=1e-2,
     t_c=1,
     t_F=FLOOD_START_DATE,
-    t_F2=FLOOD_START_DATE + 1,
 )
 
+print(f"lambda at the Flood's end: {schematic.lambda_F2:,.0f} x background")
 plot_lambda_history(schematic, out_file=None, show=True)
 ```
 
-@fig-general-model shows schematically how @eq-general-model would look for a particular set of choices for the parameters. 
-This model has a total of 7 parameters that can either be specified or solved for, given appropriate data.
+@fig-general-model shows schematically how @eq-general-model would look for a particular set of choices for the parameters.
+Counting $\lambda_{bg}$, which normalization fixes at 1, and $t_{F2}$ and $\lambda_{F2}$, which the two assumptions above derive rather than fit, the model has **six** parameters that can be specified or solved for given appropriate data.
 
 - $\lambda_{bg}$: the background decay rate, what is measured today. To make things simpler, we normalize $\lambda(t)$ by $\lambda_{bg}$, so that $\lambda_{bg} = 1$ and all other decay rates are expressed as a ratio to the background decay rate. This works because of our assumption that all isotopes are affected percentage-wise the same, so that the ratio of decay rates for any isotope to the background decay rate is the same for all isotopes.
-- $t_c$: Day 7 of Creation Week, an unknown number of years *after* Day 1 of Creation. Throughout this paper a symbol written $t$ counts years after Creation (a *date*) and a symbol written $\tau$ or $A$ counts years before present (an *age*); the two run in opposite directions and are related by $t = A_E - \tau$, where $A_E$ is the age of the Earth, which is numerically also the date of the present. @eq-general-model can be re-written using this to put everything in terms of years before present if desired.
-- $t_{F}$: the start time of accelerated decay during the Flood
-- $t_{F2}$: the end time of accelerated decay during the Flood
-- $\lambda_c$: the decay rate ($\lambda(t)$) _during_ the creation week, which equal to or greater than the background
-- $\lambda_F$: the decay rate ($\lambda(t)$) _during_ the Flood, which is equal to or greater than the background
-- $k_c$: the decay constant for the decay rate of $\lambda(t)$ following the Creation week and prior to the Flood, during the post-creation period
-- $k_F$: the decay constant for the decay rate of $\lambda(t)$ following the Flood, during the post-Flood period
+- $t_c$: Day 7 of Creation Week. Throughout this paper a symbol written $t$ counts years after Creation (a *date*) and a symbol written $\tau$ or $A$ counts years before present (an *age*); the two run in opposite directions and are related by $t = A_E - \tau$, where $A_E$ is the age of the Earth, which is numerically also the date of the present. @eq-general-model can be re-written using this to put everything in terms of years before present if desired.
+- $t_{F}$: the start time of accelerated decay during the Flood.
+- $\lambda_c$: the decay rate ($\lambda(t)$) _during_ the creation week, which equal to or greater than the background.
+- $\lambda_F$: the initial decay rate ($\lambda(t)$) at the start of the Flood, which is equal to or greater than the background.
+- $k_c$: the exponential decay constant of $\lambda(t)$ following the Creation week and prior to the Flood, during the post-creation period.
+- $k_F$: the exponential decay constant of $\lambda(t)$ during the year-long Flood.
+- $k_{PF}$: the exponential decay constant of $\lambda(t)$ following the Flood, during the post-Flood period.
 
-There are other models that would be more general extensions of this model, for example, we could have a ramp-up of accelerated decay rates or non-constant decay rates during the Creation week or the Flood, but this model is a good starting point for understanding the general behavior of the system and how it can be used to make predictions and test hypotheses.
+The remaining two symbols are determined rather than chosen:
 
-From this general model various simplifications can be derived. 
-For example, one simplification is to assume that $t_{F} = t_{F2}$ (i.e., peak accelerated decay is instantaneous and $\lambda(t)$ immediately starts to decay back to $\lambda_{bg}$), and that $\lambda_c = \lambda_{bg}$, which would imply no acceleration of decay during the Creation week. 
-In this scenario, $\lambda(t)$ is simply the background rate until the start of the Flood, at which time it jumps up instantaneously and then decays back to the background rate over some period of time.
-Under this assumption, and writing the result in terms of the age $\tau$ (years before present) rather than the date $t$, @eq-general-model becomes:
+- $t_{F2}$: the end time of accelerated decay during the Flood, equal to $t_{F} + 1$.
+- $\lambda_{F2}$: the decay rate ($\lambda(t)$) at the end of the Flood, given by @eq-flood-continuity. It equals $\lambda_F$ when $k_F = 0$ and is smaller otherwise.
+
+We note that the model can be re-written in terms of the age $\tau$ (years before present) rather than the date $t$. 
+In that case @eq-general-model becomes:
 $$
 \lambda(\tau) = \begin{cases}
-\left(\lambda_F - \lambda_{bg}\right) e^{-k_F (A_F - \tau)} + \lambda_{bg} & \tau \le A_{F} \\
+\left(\lambda_F - \lambda_{bg}\right) e^{-k_{PF} (A_{F2} - \tau)} + \lambda_{bg} & \tau \le A_{F2} \\
+\lambda_F & A_{F2} < \tau \le A_{F} \\
 \lambda_{bg} &  \tau > A_F \\
 \end{cases}
 $$ {#eq-flood-only-model}
 
-where $A_F = A_E - t_F$ is the age of the Flood, i.e. the date $t_F$ expressed in years before present. Note that the exponential is anchored at the Flood: $\lambda$ is at its peak when $\tau = A_F$ and has relaxed back toward $\lambda_{bg}$ by the present ($\tau = 0$).
+where $A_F = A_E - t_F$ and $A_{F2} = A_E - t_{F2} = A_F - 1$ are the ages of the Flood's onset and end, i.e. the dates $t_F$ and $t_{F2}$ expressed in years before present.
+Note that the exponential is anchored at the *end* of the Flood: $\lambda$ is at its peak throughout the Flood year and has relaxed back toward $\lambda_{bg}$ by the present ($\tau = 0$).
 
+There are other models that would be more general extensions of this model, for example, we could have a ramp-up of accelerated decay rates or non-constant decay rates during the Creation week or the Flood, but this model is a good starting point for understanding the general behavior of the system and how it can be used to make predictions and test hypotheses. 
+In addition, we try to minimize the number of free parameters that would require addtional data to be able to constrain. 
+The current model can be calibrated using only two or three matched date pairs (depending on what behavior is assumed during the Flood year). 
 
-Now consider the differential equation for radiometric decay, which is given by:
+## The Flood-Only Model
+
+From the general model even simpler versions can be derived.
+The simplification we will develop at length below is to consider accelerated decay that occured only during and following the Flood; this is termed the ``**flood-only**'' case and mathematically corresponds to setting $\lambda_c = \lambda_{bg}$. 
+This implies no acceleration of decay during the Creation week, and in this scenario $\lambda(t)$ is simply the background rate until the start of the Flood.
+This will be the primary model that we work with in this paper. 
+Other possibile simplifications including setting $k_F = 0$ — a Flood that holds its peak rate for the whole year — then $\lambda_{F2} = \lambda_F$ by @eq-flood-continuity and only the post-Flood relaxation is left to describe. 
+Another is that $k_f = k_{PF}$, so that the decay rate falls at the same rate during and after the Flood, which is a single-parameter model for the Flood's decay behavior.
+
+Consider the differential equation for radiometric decay, which is given by:
 $$
 \frac{dN}{dt} = -\lambda(t) N
 $$ {#eq-decay-rate-differential}
-Note that here we have switched to $t$ again to denote that this is forward time. 
+Note that this is forward time (i.e., time after creation). 
 This can be solved to give the number of atoms remaining as a function of time:
 $$
 N(t) = N_0 e^{-\int_{t_f}^{t_p} \lambda(t') dt'}
@@ -166,22 +197,30 @@ Flipping the limits of integration (note that the two negative signs cancel) giv
 $$
 \begin{aligned}
 A_{sec} & = \int_{t_f}^{t_p} \frac{\lambda(t')}{\lambda_{bg}} dt'\\
-& = \int_{t_f}^{t_{p}} dt' + \left(\frac{\lambda_F - \lambda_{bg}}{\lambda_{bg}}\right) \int_{t_{limit}}^{t_{p}}  e^{-k_F (t' - t_F)} dt' \\
-& = A_{ya} + R \int_{t_{limit}}^{t_{p}}  e^{-k_F (t' - t_F)} dt' \\
-& = A_{ya} + \frac{R}{k_F} \left(e^{-k_F (t_{limit} - t_F)} - e^{-k_F (t_{p} - t_F)}  \right) \\
-& = A_{ya} + \frac{R}{k_F} \left(e^{-k_F (A_F - A_{ya})} - e^{-k_F A_F}  \right) \\
-& = A_{ya} + \frac{R}{k_F} e^{-k_F A_F} \left(e^{k_F A_{ya}} - 1  \right) \\
+& = \int_{t_f}^{t_{p}} dt' + \left(\frac{\lambda_F - \lambda_{bg}}{\lambda_{bg}}\right) \int_{t_{limit}}^{t_{p}}  e^{-k_{PF} (t' - t_{F2})} dt' \\
+& = A_{ya} + R \int_{t_{limit}}^{t_{p}}  e^{-k_{PF} (t' - t_{F2})} dt' \\
+& = A_{ya} + \frac{R}{k_{PF}} \left(e^{-k_{PF} (t_{limit} - t_{F2})} - e^{-k_{PF} (t_{p} - t_{F2})}  \right) \\
+& = A_{ya} + \frac{R}{k_{PF}} \left(e^{-k_{PF} (A_{F2} - A_{ya})} - e^{-k_{PF} A_{F2}}  \right) \\
+& = A_{ya} + \frac{R}{k_{PF}} e^{-k_{PF} A_{F2}} \left(e^{k_{PF} A_{ya}} - 1  \right) \\
 \end{aligned}
 $$ {#eq-integral-flood-only-1}
-where $t_{limit} = t_F$ if $t_f \le t_F$ and $t_{limit} = t_f$ if $t_{f} > t_F$, and $A_{ya} = t_p - t_f$ is the young age of the rock.
-$R = (\lambda_F - \lambda_{bg})/ \lambda_{bg}$ is the excess of the Flood decay rate $\lambda_F$ over the background decay rate, normalized by the background rate.
-The last two lines convert the dates to ages using $t_p - t_F = A_F$ and $t_{limit} - t_F = A_F - A_{ya}$, and so hold for rock formed at or after the Flood, i.e. $A_{ya} \le A_F$.
-For rock that predates the Flood ($A_{ya} \ge A_F$) we have $t_{limit} = t_F$ instead, the bracket collapses to the constant $1 - e^{-k_F A_F}$, and every such rock therefore carries the same fixed excess of apparent age.
+where $t_{limit} = t_{F2}$ if $t_f \le t_{F2}$ and $t_{limit} = t_f$ if $t_{f} > t_{F2}$, and $A_{ya} = t_p - t_f$ is the young age of the rock.
+$R = (\lambda_F - \lambda_{bg})/ \lambda_{bg}$ is the excess of the Flood decay rate $\lambda_F$ over the background decay rate, normalized by the background rate; with $k_F = 0$ this is also the excess at the Flood's end, since $\lambda_{F2} = \lambda_F$.
+The last two lines convert the dates to ages using $t_p - t_{F2} = A_{F2}$ and $t_{limit} - t_{F2} = A_{F2} - A_{ya}$, and so hold for rock formed at or after the *end* of the Flood, i.e. $A_{ya} \le A_{F2}$.
+
+Rock formed during the Flood itself picks up the Flood year on top of this.
+At the onset — the oldest event this model can date — the additional term is the integral of $\lambda$ across $[t_F, t_{F2}]$, which for a Flood of length $n$ is
+$$
+\frac{\lambda_F - \lambda_{bg}}{k_F}\left(1 - e^{-k_F n}\right) + n \; \xrightarrow[k_F \to 0]{} \; \lambda_F\, n ,
+$$ {#eq-integral-in-flood}
+using @eq-flood-continuity to write the in-Flood exponential in terms of its value at the onset.
+For rock that predates the Flood ($A_{ya} \ge A_F$) the bracket in @eq-integral-flood-only-1 collapses to the constant $1 - e^{-k_{PF} A_{F2}}$ and @eq-integral-in-flood contributes in full, so every such rock carries the same fixed excess of apparent age.
 Note that the age of the Earth $A_E$ does not appear: the accelerated decay is anchored at the Flood, so what matters is how long ago the Flood was, not how long ago Creation was.
 <!-- If $t_{ya} < t_F$, then we simply integrate to $t_{ya}$ instead of $t_F$ in the first integral. -->
 
-Using @eq-integral-flood-only-1, we can test several hypotheses. 
-For example, given two pairs of ages known in both the secular and young-age models, we can calculate the decay constant $k_F$ and decay rate ratio $R$. 
+Using @eq-integral-flood-only-1, we can test several hypotheses.
+For example, given two pairs of ages known in both the secular and young-age models, we can calculate the decay constant $k_{PF}$ and decay rate ratio $R$.
+Two pairs cannot also determine $k_F$ — three unknowns need three equations — so in this example we hold $k_F = 0$ and return to the three-pair case afterwards.
 As an example, let us consider the start of the Flood.
 Assume the Flood begins at the Precambrian-Cambrian boundary, an event dated on the secular time-scale to be ~540 Ma.
 Take the end of the Ice Age as another data point, conventionally dated to be around 11.7 ka.
@@ -200,41 +239,44 @@ print(f"Ice Age ends       A_IA = {ICE_AGE_END_AGE:,.0f} YBP  (secular {ICE_AGE_
 
 Writing $A_F$ and $A_{IA}$ for these two young ages and $A_{sec,F}$ and $A_{sec,IA}$ for their secular counterparts, substituting into @eq-integral-flood-only-1 gives:
 $$
-A_{sec,F} - A_F = \frac{R}{k_F} \left(1 - e^{-k_F A_F}\right)
+A_{sec,F} - A_F = \frac{R}{k_{PF}} \left(1 - e^{-k_{PF} A_{F2}}\right) + R\,n
 $$ {#eq-flood-constraint}
 
 and
 $$
-A_{sec,IA} - A_{IA} = \frac{R}{k_F} e^{-k_F A_F} \left(e^{k_F A_{IA}} - 1\right)
+A_{sec,IA} - A_{IA} = \frac{R}{k_{PF}} e^{-k_{PF} A_{F2}} \left(e^{k_{PF} A_{IA}} - 1\right)
 $$ {#eq-iceAge-constraint}
 
-The Flood itself is the oldest event the model can date this way, so @eq-flood-constraint is the $A_{ya} = A_F$ endpoint of @eq-integral-flood-only-1 and its bracket is the constant offset noted above.
-Dividing @eq-flood-constraint by @eq-iceAge-constraint eliminates $R$ and leaves a single equation in $k_F$:
+The Flood's onset is the oldest event the model can date this way, so @eq-flood-constraint is the $A_{ya} = A_F$ endpoint of @eq-integral-flood-only-1: its first term is the saturated post-Flood offset and its second is @eq-integral-in-flood at $k_F = 0$, the Flood year contributing $\lambda_F n$ of apparent age, of which $R\,n$ is in excess of background.
+Dividing @eq-flood-constraint by @eq-iceAge-constraint eliminates $R$ and leaves a single equation in $k_{PF}$:
 $$
-\frac{A_{sec,F} - A_F}{A_{sec,IA} - A_{IA}} = \frac{e^{k_F A_F} - 1}{e^{k_F A_{IA}} - 1}
+\frac{A_{sec,F} - A_F}{A_{sec,IA} - A_{IA}} = \frac{e^{k_{PF} A_{F2}} - 1 + k_{PF} n\, e^{k_{PF} A_{F2}}}{e^{k_{PF} A_{IA}} - 1}
 $$ {#eq-constraint-ratio}
 
-@eq-constraint-ratio has no closed-form solution for $k_F$, but its right-hand side is monotonically increasing in $k_F$ — from $A_F / A_{IA}$ in the limit $k_F \to 0$ to arbitrarily large values as $k_F$ grows — so the root is unique and is found immediately by bisection; $R$ then follows from either constraint.
-Rather than approximate this by hand, we solve the two constraints directly against the model, which avoids relying on the large-$k_F$ approximations that @eq-constraint-ratio would otherwise invite:
+@eq-constraint-ratio has no closed-form solution for $k_{PF}$, but its right-hand side is monotonically increasing in $k_{PF}$ — from $(A_{F2} + n) / A_{IA}$ in the limit $k_{PF} \to 0$ to arbitrarily large values as $k_{PF}$ grows — so the root is unique and is found immediately by bisection; $R$ then follows from either constraint.
+The Flood year matters here at the percent level rather than the leading order: with $\lambda_F \sim 3\times10^6$ it contributes about $3\times10^6$ apparent years to a target of $5.4\times10^8$.
+Rather than approximate any of this by hand, we solve the two constraints directly against the model:
 
 ```{python}
 #| label: calibration
-#| code-summary: "Solve the two constraints for lambda_F and k_F"
-# card.calibrate does the solve: for any candidate k_F the Flood constraint
+#| code-summary: "Solve the two constraints for lambda_F and k_PF"
+# card.calibrate does the solve: for any candidate k_PF the Flood constraint
 # pins lambda_F by a monotone 1-D root, which reduces the system to a single
-# bracketed equation in k_F.  No initial guess is involved, so the result does
-# not depend on starting the solver in the right place.
+# bracketed equation in k_PF.  No initial guess is involved, so the result does
+# not depend on starting the solver in the right place.  k_F stays at its
+# default of 0 -- two pairs cannot determine three rates.
 from card import solve_flood_only
 
 result = solve_flood_only(
     flood_age=FLOOD_AGE,           second_age=ICE_AGE_END_AGE,
     flood_secular_age=FLOOD_SECULAR, second_secular_age=ICE_AGE_SECULAR,
 )
-lambda_F, k_F, calibrated = result.lambda_F, result.k_F, result.model
+lambda_F, k_PF, calibrated = result.lambda_F, result.k_PF, result.model
 R = lambda_F - 1
 
 print(f"lambda_F = {lambda_F:,.0f} x background   (R = {R:,.0f})")
-print(f"k_F      = {k_F:.4g} / year")
+print(f"k_PF     = {k_PF:.4g} / year")
+print(f"k_F      = {result.k_F:g} / year  (held fixed)")
 print()
 print(f"check  Flood   {FLOOD_AGE:,.0f} YBP -> "
       f"{calibrated.forward_age(FLOOD_AGE):.4g} yr  (target {FLOOD_SECULAR:.4g})")
@@ -250,23 +292,67 @@ The closed form derived above and the package's own evaluation are independent s
 ```{python}
 #| label: check-closed-form
 #| code-summary: "Check @eq-integral-flood-only-1 against the package"
-def closed_form(A_ya, lambda_F, k_F, A_F=FLOOD_AGE):
-    """@eq-integral-flood-only-1, written out directly."""
+def closed_form(A_ya, lambda_F, k_PF, A_F=FLOOD_AGE, n=1.0):
+    """@eq-integral-flood-only-1 plus @eq-integral-in-flood, written out directly."""
     R = lambda_F - 1                       # lambda_bg == 1 by normalization
-    excess = min(A_ya, A_F)                # pre-Flood rock shares one offset
-    return A_ya + (R / k_F) * np.exp(-k_F * A_F) * (np.exp(k_F * excess) - 1)
+    A_F2 = A_F - n                         # AGE of the Flood's end
+    post = min(A_ya, A_F2)                 # the post-Flood relaxation saturates
+    total = A_ya + (R / k_PF) * np.exp(-k_PF * A_F2) * (np.exp(k_PF * post) - 1)
+    # Anything at or older than the Flood's end also carries the Flood year,
+    # which at k_F = 0 contributes R * (the part of the year it spans).
+    total += R * min(max(A_ya - A_F2, 0.0), n)
+    return total
 
 for A_ya in (1000.0, ICE_AGE_END_AGE, FLOOD_AGE, AGE_OF_EARTH):
-    algebra = closed_form(A_ya, lambda_F, k_F)
+    algebra = closed_form(A_ya, lambda_F, k_PF)
     package = calibrated.forward_age(A_ya)
     print(f"A_ya = {A_ya:7,.0f} YBP:  equation {algebra:14.6g}   "
           f"model {package:14.6g}   relative difference "
           f"{abs(algebra / package - 1):.1e}")
 ```
 
-It is important to note that this derivation made several assumptions about the timing and dates of the beginning of the Flood and the Ice Age in the rock record, which could be debated. 
-Other comparative dates for these events could easily be substituted for the ones used here, and the resulting parameters would be slightly different. 
-The point is that this is a completely generalizable model for which, given any constraints or assumptions about the timing of these events, we can derive the equivalent decay rates within a young-age framework. 
+## Three matched pairs: solving for the in-Flood relaxation
+
+The two-pair solve above held $k_F$ at zero because two equations cannot determine three unknowns.
+A third matched pair makes the system determined, and what it buys is precisely the new degree of freedom: how fast the decay rate falls *during* the Flood.
+
+The natural third pair is a horizon at the Flood's end.
+Taking the Flood to span the whole Phanerozoic sedimentary record, its onset is the Precambrian-Cambrian boundary and its end is some later boundary — here the K/Pg, at ~66 Ma — with the end of the Ice Age as before.
+The three constraints then separate cleanly:
+
+1. The post-Flood contact and the Ice Age both lie at or after $t_{F2}$, where only $\lambda_{F2}$ and $k_{PF}$ enter. These two pairs are exactly the system already solved above, and they pin those two parameters.
+2. The pre-Flood contact differs from the post-Flood contact by the in-Flood integral alone, @eq-integral-in-flood. With $\lambda_{F2}$ known, @eq-flood-continuity writes $\lambda_F$ in terms of $k_F$, and @eq-integral-in-flood becomes one increasing function of $k_F$ — from $\lambda_{F2} n$ at $k_F = 0$ upward without bound.
+
+So the third equation is a single bracketed root in $k_F$, and $\lambda_F$ follows from continuity.
+No step requires an initial guess:
+
+```{python}
+#| label: three-pair
+#| code-summary: "Solve three matched pairs for lambda_F, k_F and k_PF"
+from card import solve_flood_rate
+
+KPG_SECULAR = 66e6   # K/Pg boundary: the Flood's end, secular age (years)
+
+three = solve_flood_rate(
+    pre_flood_secular_age=FLOOD_SECULAR,
+    post_flood_secular_age=KPG_SECULAR,
+    ice_age_secular_age=ICE_AGE_SECULAR,
+)
+
+print(f"lambda_F  = {three.lambda_F:.4g} x background   (at the Flood's onset)")
+print(f"lambda_F2 = {three.lambda_F2:.4g} x background   (at its end)")
+print(f"k_F       = {three.k_F:.4g} / year   (during the Flood)")
+print(f"k_PF      = {three.k_PF:.4g} / year   (after it)")
+print(f"largest relative residual: {three.max_abs_residual:.1e}")
+```
+
+All three pairs are honored to machine precision.
+The solved $k_F$ is large — the decay rate falls by more than four orders of magnitude within the Flood year — which is what asking a single year to carry the whole Phanerozoic requires.
+That is a substantive prediction of the framework rather than an artifact of it, and it is exactly the kind of statement the extra parameter was introduced to make testable.
+
+It is important to note that this derivation made several assumptions about the timing and dates of the beginning of the Flood and the Ice Age in the rock record, which could be debated.
+Other comparative dates for these events could easily be substituted for the ones used here, and the resulting parameters would be slightly different.
+The point is that this is a completely generalizable model for which, given any constraints or assumptions about the timing of these events, we can derive the equivalent decay rates within a young-age framework.
 
 With this framework, we now can not only make predictions, but test those predictions against observations. 
 

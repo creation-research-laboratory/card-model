@@ -6,7 +6,7 @@ run them in order.
 
 ## Build a model
 
-The full model takes seven parameters, which travel together in a validated
+The full model takes eight parameters, which travel together in a validated
 `GeneralModelParams`:
 
 ```python
@@ -17,30 +17,48 @@ params = GeneralModelParams(
     lambda_F=1e5,               # Flood rate, x background
     lambda_bg=1.0,              # background: always 1 by normalization
     k_c=1e-1,                   # post-Creation relaxation, 1/year
-    k_F=1e-2,                   # post-Flood relaxation, 1/year
+    k_F=0.0,                    # in-Flood relaxation, 1/year (0 = constant)
+    k_PF=1e-2,                  # post-Flood relaxation, 1/year
     t_c=1.0,                    # DATE the Creation week ends
     t_F=FLOOD_START_DATE,       # DATE the Flood starts  (1656)
-    t_F2=FLOOD_START_DATE + 1,  # DATE the Flood ends    (a one-year Flood)
 )
 model = GeneralModel(params)
 ```
 
-Most work uses the **flood-only limit** — no Creation-week acceleration, an
-instantaneous Flood — which has a factory of its own and only two free numbers:
+`t_F2` is absent because it is derived: the Flood runs for a year, so it is
+`t_F + 1`. So is `lambda_F2`, the rate at the Flood's end, which continuity
+pins to whatever `k_F` has brought `lambda_F` down to by then — here `k_F` is
+0, so the rate never falls and `lambda_F2` is just `lambda_F`:
 
 ```python
-model = GeneralModel.flood_only(lambda_F=3.2e6, k_F=6e-3)
+print(params.t_F2, params.lambda_F2)
 ```
+
+```text
+
+1657.0 100000.0
+```
+
+Most work uses the **flood-only limit** — no Creation-week acceleration, so
+the Flood is the only accelerated phase — which has a factory of its own:
+
+```python
+model = GeneralModel.flood_only(lambda_F=3.2e6, k_PF=6e-3)
+```
+
+That leaves the rate constant across the Flood year (`k_F` defaults to 0);
+pass `k_F=` to let it relax across the Flood as well.
 
 `GeneralModelParams.defaults()` is a third route, filling in each parameter's
 declared default and applying any overrides you name:
 
 ```python
-defaults = GeneralModelParams.defaults(lambda_F=5e5, k_F=8e-3)
+defaults = GeneralModelParams.defaults(lambda_F=5e5, k_PF=8e-3)
 print(defaults.lambda_c, defaults.t_F)
 ```
 
 ```text
+
 1.0 1656.0
 ```
 
@@ -57,10 +75,11 @@ for age in (0.0, 1000.0, ICE_AGE_END_AGE, FLOOD_AGE):
 ```
 
 ```text
+
       0 YBP ->              0 secular years
   1,000 YBP ->          1,001 secular years
-  2,556 YBP ->         10,911 secular years
-  4,400 YBP ->    533,337,567 secular years
+  2,556 YBP ->         10,962 secular years
+  4,400 YBP ->    536,537,566 secular years
 ```
 
 Two things are visible in those numbers. Recent rock is barely affected: the
@@ -76,7 +95,8 @@ print(f"{model.max_secular_age():,.0f} years")
 ```
 
 ```text
-533,339,223 years
+
+536,539,222 years
 ```
 
 Everything formed before the Flood lands within 0.001% of that value, because
@@ -96,9 +116,10 @@ for secular in (65e6, 250e6, 500e6):
 ```
 
 ```text
-  65,000,000 secular years ->  4,049 YBP
- 250,000,000 secular years ->  4,274 YBP
- 500,000,000 secular years ->  4,389 YBP
+
+  65,000,000 secular years ->  4,048 YBP
+ 250,000,000 secular years ->  4,273 YBP
+ 500,000,000 secular years ->  4,388 YBP
 ```
 
 The round trip is exact to numerical precision, which the test suite pins
@@ -110,6 +131,7 @@ print(f"{model.forward_age(young):,.1f}")
 ```
 
 ```text
+
 65,000,000.0
 ```
 
@@ -125,7 +147,8 @@ except ValueError as error:
 ```
 
 ```text
-secular_age (1e+12) exceeds the maximum this model can produce (5.33339e+08, for a rock formed on Day 1 of Creation).  No true age exists in [0, 6056].
+
+secular_age (1e+12) exceeds the maximum this model can produce (5.36539e+08, for a rock formed on Day 1 of Creation).  No true age exists in [0, 6056].
 ```
 
 The same applies to an age before Creation (`forward_age(7000)`), a negative
@@ -134,12 +157,13 @@ construction, so an invalid model cannot be built in the first place:
 
 ```python
 try:
-    GeneralModel.flood_only(lambda_F=0.5, k_F=1e-2)
+    GeneralModel.flood_only(lambda_F=0.5, k_PF=1e-2)
 except ValueError as error:
     print(error)
 ```
 
 ```text
+
 lambda_F (0.5) must be >= 1.  Decay rates are normalized to the background rate, so a value below 1 would mean decay slower than the present day, which the model does not describe.
 ```
 
@@ -152,16 +176,18 @@ chronology, and use that chronology's own conversions to get the ages:
 from card import Chronology
 
 alt = Chronology(age_of_earth=6600.0, flood_start_date=1600.0,
-                 flood_end_date=1600.0, ice_age_end_date=3600.0)
-alt_model = GeneralModel.flood_only(lambda_F=3.2e6, k_F=6e-3,
-                                    t_F=alt.flood_start_date)
+                 flood_end_date=1601.0, ice_age_end_date=3600.0)
+alt_model = GeneralModel.flood_only(lambda_F=3.2e6, k_PF=6e-3,
+                                    t_F=alt.flood_start_date,
+                                    t_F2=alt.flood_end_date)
 
 print(f"Flood at {alt.flood_start_age:,.0f} YBP -> "
       f"{alt_model.forward_age(alt.flood_start_age, alt.present_date):,.0f}")
 ```
 
 ```text
-Flood at 5,000 YBP -> 533,338,167
+
+Flood at 5,000 YBP -> 536,538,166
 ```
 
 ## Plot it
@@ -173,7 +199,7 @@ you own when you have one and manage their own when you do not:
 from card import plot_age_comparison, plot_lambda_history
 
 plot_lambda_history(model, out_file="lambda_history.png")
-plot_age_comparison(lambda_F=3.2e6, k_F=6e-3, out_file="age_comparison.png")
+plot_age_comparison(lambda_F=3.2e6, k_PF=6e-3, out_file="age_comparison.png")
 ```
 
 `plot_lambda_history` plots \(\lambda\) against a **DATE**; the age-curve

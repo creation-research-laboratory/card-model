@@ -52,7 +52,7 @@ def test_ice_age_constants_have_the_expected_orientation():
 def test_flood_constants_have_the_expected_orientation():
     assert FLOOD_START_DATE == 1656
     assert FLOOD_AGE == 4400
-    assert FLOOD_END_DATE == FLOOD_START_DATE  # instantaneous Flood by default
+    assert FLOOD_END_DATE == FLOOD_START_DATE + 1  # a year-long Flood
 
 
 def test_present_date_equals_age_of_earth():

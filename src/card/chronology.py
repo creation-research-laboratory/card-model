@@ -47,16 +47,18 @@ class Chronology:
             Numerically this is also the present's DATE, since dates are
             measured from Day 1 — `present_date` exposes that reading.
         flood_start_date: DATE at which the Flood begins.
-        flood_end_date: DATE at which the Flood ends.  Equal to
-            flood_start_date for an instantaneous Flood, which is the limit
-            the flood-only model uses.
+        flood_end_date: DATE at which the Flood ends.  One year after
+            flood_start_date by default — the year-long Flood the model is
+            written around.  Setting it equal to flood_start_date recovers the
+            instantaneous-Flood limit, which is a degenerate case the model
+            still accepts but no longer assumes.
         ice_age_end_date: DATE at which the Ice Age ends.
     """
 
     # Default values
     age_of_earth: float = 6056.0
     flood_start_date: float = 1656.0
-    flood_end_date: float = 1656.0
+    flood_end_date: float = 1657.0
     ice_age_end_date: float = 3500.0
 
     def __post_init__(self):
@@ -111,6 +113,18 @@ class Chronology:
         return self.date_to_age(self.flood_end_date)
 
     @property
+    def flood_duration(self) -> float:
+        """
+        Length of the Flood in true years — one, unless configured otherwise.
+
+        This is what fixes the model's `t_F2`, which is no longer a free
+        parameter: the Flood's length is a chronology assumption, so changing
+        it here changes it everywhere rather than requiring a model parameter
+        to be pinned by hand at each call site.
+        """
+        return self.flood_end_date - self.flood_start_date
+
+    @property
     def ice_age_end_age(self) -> float:
         """AGE (YBP) at which the Ice Age ends."""
         return self.date_to_age(self.ice_age_end_date)
@@ -146,9 +160,9 @@ class Chronology:
             return cls.from_dict(json.load(handle))
 
 
-# The chronology used when a caller does not supply one.  Matches the values
-# the package has used all along (Earth 6056 years old, instantaneous Flood
-# 1656 years after Creation, Ice Age ending 3500 years after Creation).
+# The chronology used when a caller does not supply one: Earth 6056 years old,
+# the Flood running from 1656 to 1657 years after Creation, Ice Age ending 3500
+# years after Creation.
 DEFAULT_CHRONOLOGY = Chronology()
 
 
