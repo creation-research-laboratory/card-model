@@ -9,7 +9,9 @@ Self-contained: own `package.json`, own lockfile, own CI workflow, so
 
 **Status: Phase 4**, on the three-exponential model the authors landed in
 PR #12. The app shell and all three charts are built; free parameters are
-Phase 5. See `../frontend_plan.md` for the phased plan and
+Phase 5. Known gaps are tracked in [OPEN_ITEMS.md](OPEN_ITEMS.md) — two of them
+(the provisional Septuagint chronology and the unverified ICS boundaries) block
+publication, and neither is catchable by any test here. See `../frontend_plan.md` for the phased plan and
 [`spike/README.md`](spike/README.md) for the Phase 2 measurements that shaped
 the architecture.
 
