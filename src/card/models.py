@@ -152,11 +152,19 @@ class GeneralModelParams:
     lambda_c: float = field(metadata={SPEC_KEY: ParamSpec(
         symbol=r"\lambda_c", unit="", log_scale=True,
         description="Decay rate during the Creation week, as a multiple of background.",
-        default=1.0, minimum=1.0, maximum=1e9)})
+        default=1.0, minimum=1.0, maximum=1e11)})
     lambda_F: float = field(metadata={SPEC_KEY: ParamSpec(
         symbol=r"\lambda_F", unit="", log_scale=True,
         description="Decay rate during the Flood, as a multiple of background.",
-        default=1e5, minimum=1.0, maximum=1e9)})
+        # 1e11, not the 1e9 this carried before the in-Flood relaxation existed.
+        # Splitting k_F from k_PF moved the solved peak up by three orders of
+        # magnitude: the shipped run config's own prior sits at 10^9.7, its
+        # documented posterior median at 4.53e9, and the web presets reach
+        # 7.4e9 -- all above the old bound. A slider built from it could not
+        # show the answer the package itself publishes. lambda_c gets the same
+        # ceiling: it is the same physical quantity, and a narrower range for it
+        # would be an asymmetry with nothing behind it.
+        default=1e5, minimum=1.0, maximum=1e11)})
     lambda_bg: float = field(metadata={SPEC_KEY: ParamSpec(
         symbol=r"\lambda_{bg}", unit="", log_scale=False,
         description="Background decay rate; always normalized to 1.",
@@ -172,7 +180,11 @@ class GeneralModelParams:
     k_F: float = field(metadata={SPEC_KEY: ParamSpec(
         symbol="k_F", unit="1/year", log_scale=False,
         description="In-Flood relaxation constant, over [t_F, t_F2]; 0 holds the rate constant across the Flood.",
-        default=0.0, minimum=0.0, maximum=10.0)})
+        # 50, not 10: an N/Q post-Flood contact solves to 13.8, and the shipped
+        # run config's prior of mean 9.6 with sigma 5 puts plausible draws well
+        # past 10.  Like the lambdas, this bound is a slider range rather than a
+        # validity limit — nothing numerical reads it.
+        default=0.0, minimum=0.0, maximum=50.0)})
     k_PF: float = field(metadata={SPEC_KEY: ParamSpec(
         symbol="k_{PF}", unit="1/year", log_scale=True,
         description="Post-Flood relaxation constant; larger means faster return to background.",
