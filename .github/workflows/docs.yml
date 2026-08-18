@@ -29,10 +29,17 @@ jobs:
           python-version: "3.12"
           cache: pip
 
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
       - name: Install the package and the docs extra
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[docs]"
+          # `build` is for the wheel the browser app runs; see below.
+          python -m pip install -e ".[docs]" build
 
       - name: Generate the gallery figures
         # The figures are derived artifacts, not committed (*.png is
@@ -45,6 +52,37 @@ jobs:
         # --strict turns mkdocs and mkdocstrings warnings (a broken link, an
         # undocumented parameter) into a failed build.
         run: mkdocs build --strict
+
+      # ---------------------------------------------------------------- app
+      # GitHub Pages allows one site per repo and this workflow owns it, so
+      # the browser app is mounted inside the docs site rather than deployed
+      # separately. When `web/` splits into its own repository these four
+      # steps are deleted and nothing else changes.
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Build the wheel and vendor the Pyodide runtime
+        # The wheel is built from this checkout, never installed from PyPI, so
+        # the model running in the browser is the model in `src/` at the commit
+        # that deployed it. Pyodide is vendored for the same reason: no CDN at
+        # runtime, and a build reproducible from the lockfile.
+        working-directory: web
+        run: |
+          npm run wheel
+          npm run vendor
+          npm run precomputed
+
+      - name: Build the app
+        working-directory: web
+        env:
+          # Pages serves the docs at /card-model/, so the app lives one level
+          # under it. Vite needs this at build time to rewrite asset URLs.
+          VITE_BASE: /card-model/app/
+        run: npm run build
+
+      - name: Mount the app at /app/
+        run: cp -r web/dist site/app
 
       - name: Upload the site
         uses: actions/upload-pages-artifact@v5
