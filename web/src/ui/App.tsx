@@ -17,6 +17,7 @@ import { AgeConverter } from "./AgeConverter.js";
 import { CalibrationReadout } from "./CalibrationReadout.js";
 import { CsvDownload } from "./CsvDownload.js";
 import { ParameterPanel } from "./ParameterPanel.js";
+import { Logo } from "./Logo.js";
 import { PowerUserToggle } from "./PowerUserToggle.js";
 import { PresetPicker } from "./PresetPicker.js";
 import { SeriesTable } from "./SeriesTable.js";
@@ -225,7 +226,12 @@ function AppBody({ data }: Props) {
     <div className="app">
       <header className="app-header">
         <div className="app-title">
-          <h1>CARD — accelerated radiometric decay</h1>
+          <h1>
+            <Logo />
+            <span className="wordmark">
+              CARD<span className="wordmark-tail">ulator</span>
+            </span>
+          </h1>
           <PowerUserToggle />
         </div>
         {powerUser ? null : (

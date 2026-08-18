@@ -1,8 +1,11 @@
-# CARD web front end
+# CARDulator
 
-A static browser app for the CARD model. It runs the **real `card` Python
+The web front end for the CARD model. It runs the **real `card` Python
 package** under Pyodide rather than reimplementing the model in TypeScript, so
 there is exactly one implementation of the numerics and it is the tested one.
+
+The name is the front end's, not the model's: `card` stays `card` on PyPI and
+in every import. Only this app is CARDulator.
 
 Self-contained: own `package.json`, own lockfile, own CI workflow, so
 `git subtree split --prefix=web` extracts it into its own repository later.
