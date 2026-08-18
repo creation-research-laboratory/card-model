@@ -7,11 +7,12 @@ there is exactly one implementation of the numerics and it is the tested one.
 Self-contained: own `package.json`, own lockfile, own CI workflow, so
 `git subtree split --prefix=web` extracts it into its own repository later.
 
-**Status: Phase 4**, on the three-exponential model the authors landed in
-PR #12. The app shell and all three charts are built; free parameters are
-Phase 5. Known gaps are tracked in [OPEN_ITEMS.md](OPEN_ITEMS.md) — two of them
-(the provisional Septuagint chronology and the unverified ICS boundaries) block
-publication, and neither is catchable by any test here. See `../frontend_plan.md` for the phased plan and
+**Status: Phase 7**, on the three-exponential model the authors landed in
+PR #12. Charts, free parameters, the age converter, the CSV export and the
+deploy are built. Known gaps are tracked in [OPEN_ITEMS.md](OPEN_ITEMS.md) —
+two of them (the provisional Septuagint chronology and the unverified ICS
+boundaries) block publication, and neither is catchable by any test here. See
+`../frontend_plan.md` for the phased plan and
 [`spike/README.md`](spike/README.md) for the Phase 2 measurements that shaped
 the architecture.
 
@@ -29,6 +30,10 @@ npm test          # fast unit tests
 npm run test:live # boots a real Pyodide interpreter (~2 s)
 npm run dev       # the app at http://localhost:8423
 ```
+
+`npm run build` produces the static bundle. The deploy sets `VITE_BASE`, since
+the app is mounted inside the docs site rather than at a domain root — see
+[Deployment](#deployment).
 
 `/harness.html` on the same server is a **developer harness** kept from Phase 3.
 The headless tests use `DirectTransport` in Node, so it is still the only thing
@@ -193,6 +198,80 @@ zero difference.
 > the data so the UI can say so, and they are on the pre-publication checklist
 > in `../frontend_plan.md`.
 
+## Changing the parameters
+
+The controls are generated from the package, not written here. `ParameterPanel`
+renders whatever names `to_json_schema(GeneralModelParams)` returns and reads
+each control's range, unit, scale and tooltip from the `ParamSpec` on the
+dataclass field — so adding a parameter to `GeneralModelParams` makes a control
+appear with no change to the front end. Two consequences worth knowing:
+`lambda_bg` is skipped because its spec has `minimum == maximum`, and `k_F` is
+linear where the other rates are logarithmic because its spec says so.
+
+Moving a control is what boots Pyodide: the precomputed layer only holds the
+presets, so anything else needs the real model. The panel warns before that
+5.8 MB download rather than freezing on it.
+
+When the model rejects a combination, its own words are shown. Every slider is
+clamped to its own spec, so no single parameter can leave its range — but
+nothing about a per-parameter bound catches a rule *between* parameters, and
+`GeneralModelParams` explains `t_c <= t_F <= t_F2` better than a generic
+"invalid input" could.
+
+## Converting an age
+
+Type a published radiometric age and get the young-earth date, or the reverse.
+Both directions are `forward_age`/`inverse_age` on the calibration in force. One
+field is authoritative and the other derived — holding them as peers made every
+answer schedule another conversion. Out-of-domain input shows the package's own
+prose, which names the oldest apparent age the model can produce and why.
+
+## Downloading the series
+
+`card.series.to_csv` writes the file, inside Pyodide — the same function behind
+`card series`, so a download here and a local CLI run are **byte-identical** for
+the same model, grid and timestamp. A live test asserts that against a real CLI
+run rather than assuming it.
+
+The grid is log-spaced, because a linear one over six thousand years spends
+almost every point on the flat tail and none inside the Flood year where λ falls
+four orders of magnitude. The breakpoints are unioned in so the jump at `t_F` is
+a step, and so are the constraint ages, so the calibration's anchors are exact
+rows.
+
+Every file opens with a provenance header carrying the chronology, every
+parameter and each constraint's residual. That is not decoration: readers can
+move the parameters, so most downloads describe a model that exists nowhere
+else. `#` lines are comments to pandas and R, but not to Excel.
+
+## Power-user mode
+
+A checkbox in the header strips the explanatory prose and tightens the spacing,
+remembered in `localStorage`. It hides *explanation* only — warnings, errors,
+units and the `≈` marking on interpolated values are shown in every mode, and
+the per-parameter descriptions are visually hidden rather than removed so
+`aria-describedby` still resolves.
+
+## Deployment
+
+GitHub Pages allows one site per repo and `docs.yml` owns it, so the app is
+built into the docs site at **`/card-model/app/`** rather than deployed
+separately. Four steps at the end of that workflow install the web
+dependencies, build the wheel and vendor Pyodide, build with
+`VITE_BASE=/card-model/app/`, and copy `web/dist` to `site/app`. When `web/`
+splits into its own repository those steps are deleted and nothing else
+changes.
+
+`web.yml` runs on PRs touching `web/**` or `src/card/**`: typecheck, unit tests,
+a build, and the live suite against a real Pyodide interpreter and a wheel built
+from the checkout. It never deploys.
+
+Two things are vendored rather than fetched at runtime. **Pyodide** is copied
+from the npm package at build time — no CDN outage, no `script-src` exception,
+a build reproducible from the lockfile. And the **`card` wheel is built from
+this checkout**, never installed from PyPI, so the model running in the browser
+is the model in `src/` at the commit that deployed it.
+
 ## Layout
 
 | | |
@@ -203,6 +282,8 @@ zero difference.
 | `tools/vendor-pyodide.mjs` | copies the runtime out of `node_modules` |
 | `src/model/` | `ModelSource` and its two implementations |
 | `src/worker/` | Pyodide runtime, transports, and `bridge.py` |
+| `src/charts/` | the three figures, plus the breakpoint markers |
+| `src/ui/` | the shell, the panels, and the persisted preferences |
 | `public/precomputed.json` | generated, **committed** — deployed content |
 | `spike/` | the Phase 2 go/no-go measurements |
 

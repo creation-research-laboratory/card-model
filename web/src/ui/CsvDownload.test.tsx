@@ -47,7 +47,12 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => {
+afterEach(async () => {
+  // The component revokes its blob URL on a zero-delay timer, so a click in
+  // one test can still have a callback in flight when the next test replaces
+  // `revoked` — and it then lands in the new array. Draining here keeps each
+  // test's recording its own.
+  await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
   act(() => root.unmount());
   container.remove();
   vi.restoreAllMocks();

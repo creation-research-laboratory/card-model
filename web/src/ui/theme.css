@@ -358,7 +358,11 @@ dl.readout.stacked dd { padding-left: .1rem; }
 
 .app-title {
   display: flex; align-items: baseline; justify-content: space-between;
-  gap: 1rem; flex-wrap: wrap;
+  gap: .35rem 1rem; flex-wrap: wrap;
+  /* Narrow enough and the heading wraps, dropping the toggle onto its own
+     row directly above the intro — where it reads as the paragraph's first
+     line. The margin below separates them once that happens. */
+  margin-bottom: .5rem;
 }
 
 .power-toggle {
