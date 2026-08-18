@@ -29,9 +29,56 @@ import {
 } from "./types.js";
 
 /** Shape of `public/precomputed.json`, as written by generate_precomputed.py. */
+/**
+ * The arrays a preset's charts plot, fetched separately from the index.
+ *
+ * Split out because seventy presets carry 3.8 MB of curve between them and the
+ * index is awaited before the first paint.
+ */
+export interface PresetBody {
+  series: { true_age: number[]; secular_age: number[] };
+  lambda_history: { date: number[]; lambda: number[] };
+  geologic_column: Array<{
+    name: string; rank: string;
+    base_secular_age: number; top_secular_age: number;
+    in_range: boolean;
+    base_true_age?: number; top_true_age?: number;
+    duration_true?: number; acceleration?: number | null;
+  }>;
+}
+
+export type BodyLoader = (key: string) => Promise<PresetBody>;
+
+/** `masoretic:kpg:default` -> `presets/masoretic-kpg-default.json`. */
+export function bodyFileName(key: string): string {
+  return `${key.replace(/:/g, "-")}.json`;
+}
+
+/** Fetches from the same base the index came from. */
+export function defaultBodyLoader(base = "./"): BodyLoader {
+  return async (key) => {
+    const url = `${base}presets/${bodyFileName(key)}`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(
+        `could not load ${url}: ${response.status} ${response.statusText}`,
+      );
+    }
+    return (await response.json()) as PresetBody;
+  };
+}
+
 export interface PrecomputedData {
   generator: { card_version: string; series_points: number; lambda_points: number };
-  defaults: { chronology: string; boundary: string; mode: string };
+  defaults: { chronology: string; boundary: string; mode: string; ice_age: string };
+  ice_age_offsets: {
+    default: string;
+    /** Per-chronology, because each one's own Ice Age date differs. */
+    options: Record<string, {
+      label: string;
+      years_after_flood: Record<string, number>;
+    }>;
+  };
   chronologies: Record<string, {
     label: string;
     provisional: boolean;
@@ -86,24 +133,47 @@ export interface PrecomputedData {
      * continuity rather than free — see `GeneralModelParams.lambda_F2`.
      */
     lambda_F2: number;
-    series: { true_age: number[]; secular_age: number[] };
-    lambda_history: { date: number[]; lambda: number[] };
-    geologic_column: Array<{
-      name: string; rank: string;
-      base_secular_age: number; top_secular_age: number;
-      in_range: boolean;
-      base_true_age?: number; top_true_age?: number;
-      duration_true?: number; acceleration?: number | null;
-    }>;
+    /** Which Ice Age offset this was solved for; see `ice_age_offsets`. */
+    ice_age: string;
   }>;
-  ics: { version: string; url: string; reviewed: boolean };
+  ics: { version: string; url: string; reviewed: boolean;
+    units: Array<{ name: string; rank: string; base_secular_age: number }>;
+  };
 }
 
 export class PrecomputedSource implements ModelSource {
   readonly kind: SourceKind = "precomputed";
   readonly exact = false;
 
-  constructor(private readonly data: PrecomputedData) {}
+  /** Arrays fetched per preset, keyed by preset key. */
+  private readonly bodies = new Map<string, PresetBody>();
+
+  /**
+   * @param data   the index: every preset's metadata, no curves.
+   * @param loadBody fetches one preset's arrays. Injectable because Node tests
+   *   have no `fetch` for local files, and because the deploy serves the app
+   *   from a sub-path.
+   */
+  constructor(
+    private readonly data: PrecomputedData,
+    private readonly loadBody: BodyLoader = defaultBodyLoader(),
+  ) {}
+
+  /**
+   * Fetch and cache one preset's arrays.
+   *
+   * Seventy presets carry 3.8 MB of curve between them. Shipping them in the
+   * index would put that in front of the first paint, which is the one thing
+   * this layer exists to avoid — so a preset's curves arrive when it is
+   * chosen, ~20 kB gzipped, and are kept for the rest of the session.
+   */
+  private async body(key: string): Promise<PresetBody> {
+    const cached = this.bodies.get(key);
+    if (cached) return cached;
+    const loaded = await this.loadBody(key);
+    this.bodies.set(key, loaded);
+    return loaded;
+  }
 
   /** Load from a URL. ~57 kB gzipped, so this is a fetch rather than a download. */
   static async load(url = "./precomputed.json"): Promise<PrecomputedSource> {
@@ -173,6 +243,11 @@ export class PrecomputedSource implements ModelSource {
         `"${request.mode}".`,
       );
     }
+
+    // Everything downstream (series, lambdaHistory, geologicColumn, the two
+    // age conversions) reads the arrays synchronously from the cache, so they
+    // are fetched here, once, before any of them can be called.
+    await this.body(key);
 
     const chron = this.data.chronologies[preset.chronology];
     const chronology: Chronology = {
@@ -288,7 +363,15 @@ export class PrecomputedSource implements ModelSource {
         "this source.",
       );
     }
-    return preset;
+    const body = this.bodies.get(key);
+    if (!body) {
+      // Only reachable by hand-building a Calibration; `calibrate()` always
+      // loads the body first. Named rather than left as `undefined.series`.
+      throw new UnsupportedRequestError(
+        `Preset "${key}" has no curves loaded. Call calibrate() first.`,
+      );
+    }
+    return { ...preset, ...body };
   }
 
   /**

@@ -18,28 +18,92 @@
     "been checked against the published chart by a geologist. They are on the",
     "pre-publication checklist in frontend_plan.md."
   ],
-
   "source": {
     "name": "ICS International Chronostratigraphic Chart",
     "version": "v2023/09",
     "url": "https://stratigraphy.org/chart",
     "reviewed": false
   },
-
   "units": [
-    { "name": "Holocene",      "rank": "epoch",  "base_secular_age": 11700 },
-    { "name": "Pleistocene",   "rank": "epoch",  "base_secular_age": 2580000 },
-    { "name": "Pliocene",      "rank": "epoch",  "base_secular_age": 5333000 },
-    { "name": "Miocene",       "rank": "epoch",  "base_secular_age": 23030000 },
-    { "name": "Paleogene",     "rank": "period", "base_secular_age": 66000000 },
-    { "name": "Cretaceous",    "rank": "period", "base_secular_age": 145000000 },
-    { "name": "Jurassic",      "rank": "period", "base_secular_age": 201400000 },
-    { "name": "Triassic",      "rank": "period", "base_secular_age": 251902000 },
-    { "name": "Permian",       "rank": "period", "base_secular_age": 298900000 },
-    { "name": "Carboniferous", "rank": "period", "base_secular_age": 358900000 },
-    { "name": "Devonian",      "rank": "period", "base_secular_age": 419200000 },
-    { "name": "Silurian",      "rank": "period", "base_secular_age": 443800000 },
-    { "name": "Ordovician",    "rank": "period", "base_secular_age": 486850000 },
-    { "name": "Cambrian",      "rank": "period", "base_secular_age": 538800000 }
+    {
+      "name": "Holocene",
+      "rank": "epoch",
+      "base_secular_age": 11700
+    },
+    {
+      "name": "Pleistocene",
+      "rank": "epoch",
+      "base_secular_age": 2580000
+    },
+    {
+      "name": "Pliocene",
+      "rank": "epoch",
+      "base_secular_age": 5333000
+    },
+    {
+      "name": "Miocene",
+      "rank": "epoch",
+      "base_secular_age": 23030000
+    },
+    {
+      "name": "Oligocene",
+      "rank": "epoch",
+      "base_secular_age": 33900000
+    },
+    {
+      "name": "Eocene",
+      "rank": "epoch",
+      "base_secular_age": 56000000
+    },
+    {
+      "name": "Paleocene",
+      "rank": "epoch",
+      "base_secular_age": 66000000
+    },
+    {
+      "name": "Cretaceous",
+      "rank": "period",
+      "base_secular_age": 145000000
+    },
+    {
+      "name": "Jurassic",
+      "rank": "period",
+      "base_secular_age": 201400000
+    },
+    {
+      "name": "Triassic",
+      "rank": "period",
+      "base_secular_age": 251902000
+    },
+    {
+      "name": "Permian",
+      "rank": "period",
+      "base_secular_age": 298900000
+    },
+    {
+      "name": "Carboniferous",
+      "rank": "period",
+      "base_secular_age": 358900000
+    },
+    {
+      "name": "Devonian",
+      "rank": "period",
+      "base_secular_age": 419200000
+    },
+    {
+      "name": "Silurian",
+      "rank": "period",
+      "base_secular_age": 443800000
+    },
+    {
+      "name": "Ordovician",
+      "rank": "period",
+      "base_secular_age": 486850000
+    },
+    {
+      "name": "Cambrian",
+      "rank": "period",
+      "base_secular_age": 538800000
+    }
   ]
 }

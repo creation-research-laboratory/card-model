@@ -56,12 +56,13 @@ const manager = new ModelSourceManager({
         chronologies: data.chronologies,
         boundaries: data.boundaries,
         calibration: data.calibration,
+            iceAgeOffsets: data.ice_age_offsets.options,
     floodDurationYears: data.flood_duration_years,
         // Every preset carries the same unit list, including the ones it
         // cannot reach, so any one of them is a complete catalogue.
-        geologicUnits: Object.values(data.presets)[0].geologic_column.map((u) => ({
-          name: u.name, rank: u.rank, baseSecularAge: u.base_secular_age,
-        })),
+        geologicUnits: data.ics.units.map((u) => ({
+              name: u.name, rank: u.rank, baseSecularAge: u.base_secular_age,
+            })),
       },
     );
   },
@@ -74,7 +75,8 @@ addEventListener("pagehide", () => void manager.dispose());
 let request: CalibrationRequest = {
   chronology: data.defaults.chronology,
   boundary: data.defaults.boundary,
-  mode: data.defaults.mode,
+  iceAge: "default",
+    mode: data.defaults.mode,
 };
 
 // ------------------------------------------------------------------- controls
@@ -192,7 +194,8 @@ $("bootNow").addEventListener("click", () => {
 $("compare").addEventListener("click", async () => {
   const live = await manager.ensureLive();
   const preRequest: CalibrationRequest = {
-    chronology: chronSelect.value, boundary: boundSelect.value, mode: "flood_only",
+    chronology: chronSelect.value, boundary: boundSelect.value, iceAge: "default",
+    mode: "flood_only",
   };
   const liveCal = await live.calibrate(preRequest);
   const preCal = await precomputed.calibrate(preRequest);

@@ -10,6 +10,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ModelSourceManager } from "./ModelSourceManager.js";
 import { PrecomputedSource, type PrecomputedData } from "./PrecomputedSource.js";
+import { diskBodyLoader } from "./testData.js";
 import type { PyodideSource } from "./PyodideSource.js";
 import type { CalibrationRequest } from "./types.js";
 
@@ -19,7 +20,7 @@ const data = JSON.parse(
 ) as PrecomputedData;
 
 const presetRequest: CalibrationRequest = {
-  chronology: "masoretic", boundary: "kpg", mode: "flood_only",
+  chronology: "masoretic", boundary: "kpg", iceAge: "default", mode: "flood_only",
 };
 const customRequest: CalibrationRequest = {
   ...presetRequest, overrides: { lambda_F: 5e5 },
@@ -43,7 +44,7 @@ function makeManager(opts: {
 } = {}) {
   const createLive = opts.createLive ?? vi.fn(async () => fakeLive());
   const manager = new ModelSourceManager({
-    precomputed: new PrecomputedSource(data),
+    precomputed: new PrecomputedSource(data, diskBodyLoader),
     createLive,
     idleBootDelayMs: opts.idleBootDelayMs ?? null,
   });

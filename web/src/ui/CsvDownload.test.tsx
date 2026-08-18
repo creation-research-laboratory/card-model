@@ -24,7 +24,7 @@ let revoked: string[];
 
 const calibration = {
   request: { chronology: "masoretic", boundary: "kpg", mode: "flood_only" },
-  presetKey: "masoretic:kpg",
+  presetKey: "masoretic:kpg:default",
 } as unknown as Calibration;
 
 beforeEach(() => {

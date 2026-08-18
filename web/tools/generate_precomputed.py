@@ -24,7 +24,7 @@ import json
 import math
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, Optional, List
 
 HERE = Path(__file__).resolve().parent
 WEB = HERE.parent
@@ -48,6 +48,8 @@ from card.parameters import (  # noqa: E402
 PRESETS_PATH = WEB / "presets" / "presets.json"
 ICS_PATH = WEB / "data" / "ics-units.json"
 OUTPUT_PATH = WEB / "public" / "precomputed.json"
+#: One file per preset, holding only the arrays the charts plot.
+PRESET_DIR = WEB / "public" / "presets"
 
 # Enough significant digits that rounding is far below the interpolation error
 # the grid itself carries, while keeping the file small.
@@ -76,19 +78,26 @@ def _relaxation_span(model: GeneralModel) -> float:
     Flood year, k_PF ~0.005/yr for millennia after.  A hardcoded window would be
     far too wide for one and far too narrow for the other.
 
-    KNOWN LIMITATION: this reads `k_F` only, so it sizes the window to the fast
-    in-Flood drop (a few years) and not to the post-Flood tail (millennia).
-    That is why the age grid's worst interpolation error sits at 0.77% rather
-    than the 0.27% a single-rate curve managed.  Sizing it from both rates would
-    tighten that; it is deliberately left alone here rather than changed as a
-    side effect of a wording pass.
+    Sized from **both** rates, taking whichever needs the wider window.
+
+    This used to read `k_F` alone, which covered the fast in-Flood drop and
+    missed the post-Flood tail; the age grid's worst interpolation error sat at
+    0.77% because of it.  That was tolerable while the presets were four curves
+    of similar shape.  Adding the Ice Age offsets made it not: a 350-year offset
+    forces k_PF an order of magnitude higher than the default, the tail it has
+    to resolve is correspondingly shorter and steeper, and the worst error
+    reached 4.2% -- against a UI that promises about 1%.
     """
-    k = getattr(model, "k_F", 0.0)
-    excess = getattr(model, "lambda_F", 1.0) - 1.0
-    if k <= 0.0 or excess <= 0.0:
-        return float("inf")
-    # Where the excess has fallen to a millionth of background, with margin.
-    return 1.5 * math.log(excess * 1e6) / k
+    spans = []
+    for rate_attr, amplitude in (("k_F", "lambda_F"), ("k_PF", "lambda_F2")):
+        k = getattr(model, rate_attr, 0.0) or getattr(model.params, rate_attr, 0.0)
+        excess = (getattr(model, amplitude, None)
+                  or getattr(model.params, amplitude, 1.0)) - 1.0
+        if k > 0.0 and excess > 0.0:
+            # Where the excess has fallen to a millionth of background, with
+            # margin.
+            spans.append(1.5 * math.log(excess * 1e6) / k)
+    return max(spans) if spans else float("inf")
 
 
 def _true_age_grid(chronology: Chronology, model: GeneralModel,
@@ -337,6 +346,8 @@ def build(presets: Dict[str, Any]) -> Dict[str, Any]:
     # Kept so the schemas can be built against the same objects the presets
     # were solved with, rather than reconstructed from the emitted dicts.
     built_chronologies: Dict[str, Chronology] = {}
+    ice_offsets = presets["ice_age_offsets"]
+    out_offsets: Dict[str, Any] = {}
 
     for chron_key, chron_spec in chronologies.items():
         # t_F == t_F2: the acceleration is instantaneous and relaxes as a
@@ -361,86 +372,108 @@ def build(presets: Dict[str, Any]) -> Dict[str, Any]:
             "ice_age_end_age": chronology.ice_age_end_age,
         }
 
-        for bound_key, bound_spec in boundaries.items():
-            # Three matched pairs: the Flood's onset at the pre-Flood contact,
-            # its end one year later at the selected post-Flood contact, and
-            # the end of the Ice Age well into the relaxation.  All three AGEs
-            # come from the chronology -- solve_flood_rate reads them there, so
-            # passing anything else would silently solve a different problem.
-            flood_age = chronology.flood_start_age
-            second_age = chronology.flood_end_age
-            ice_age = chronology.ice_age_end_age
+        # Each Ice Age offset is a *different chronology*: solve_flood_rate
+        # reads the Ice Age AGE from the chronology it is handed, so moving the
+        # date means handing it another one rather than passing a stray number.
+        own_offset = chronology.ice_age_end_date - chronology.flood_end_date
+        offset_specs = [("default", own_offset, "chronology default")]
+        offset_specs += [(f"y{int(n)}", float(n), None)
+                         for n in ice_offsets["years_after_flood"]]
 
-            result = solve_flood_rate(
-                pre_flood_secular_age=float(calib["flood_start"]["secular_age"]),
-                post_flood_secular_age=float(bound_spec["secular_age"]),
-                ice_age_secular_age=float(calib["ice_age_end"]["secular_age"]),
-                chronology=chronology,
-            )
-            model = result.model
-            present = chronology.present_date
+        for offset_key, offset_years, offset_note in offset_specs:
+          ice_chronology = Chronology(
+              age_of_earth=chronology.age_of_earth,
+              flood_start_date=chronology.flood_start_date,
+              flood_end_date=chronology.flood_end_date,
+              ice_age_end_date=chronology.flood_end_date + offset_years,
+          )
+          out_offsets.setdefault(offset_key, {
+              "label": (f"{offset_years:,.0f} yr after the Flood"
+                        + (f" ({offset_note})" if offset_note else "")),
+              "years_after_flood": {},
+          })["years_after_flood"][chron_key] = offset_years
 
-            # The grid is already at output precision, so evaluate the model at
-            # exactly the values that get written.  Rounding the input and the
-            # output independently would store a pair that the model never
-            # actually produced.
-            grid = _true_age_grid(chronology, model,
-                                  [flood_age, second_age, ice_age], points)
-            secular = [model.forward_age(age, present) for age in grid]
-            lambda_grid = _lambda_grid(chronology, model, lambda_points)
+          for bound_key, bound_spec in boundaries.items():
+              # Three matched pairs: the Flood's onset at the pre-Flood contact,
+              # its end one year later at the selected post-Flood contact, and
+              # the end of the Ice Age well into the relaxation.  All three AGEs
+              # come from the chronology -- solve_flood_rate reads them there, so
+              # passing anything else would silently solve a different problem.
+              flood_age = ice_chronology.flood_start_age
+              second_age = ice_chronology.flood_end_age
+              ice_age = ice_chronology.ice_age_end_age
 
-            out_presets[f"{chron_key}:{bound_key}"] = {
-                "chronology": chron_key,
-                "boundary": bound_key,
-                "label": f"{chron_spec['label']} — Flood ends at {bound_spec['label']}",
-                "mode": "flood_only",
-                "params": {
-                    "lambda_c": model.lambda_c, "lambda_F": _round(model.lambda_F),
-                    "lambda_bg": model.lambda_bg,
-                    "k_c": model.k_c, "k_F": _round(model.k_F),
-                    "k_PF": _round(model.k_PF),
-                    "t_c": model.t_c, "t_F": model.t_F, "t_F2": model.t_F2,
-                },
-                "residuals": [_round(r) for r in result.residuals],
-                "max_abs_residual": _round(result.max_abs_residual),
-                "max_secular_age": _round(model.max_secular_age(present)),
-                "constraints": [
-                    {"label": f"Flood begins — {calib['flood_start']['label']}",
-                     "true_age": flood_age,
-                     "secular_age": float(calib["flood_start"]["secular_age"]),
-                     "uncertainty": float(calib["flood_start"]["uncertainty"])},
-                    {"label": f"Flood ends — {bound_spec['label']}",
-                     "true_age": second_age,
-                     "secular_age": float(bound_spec["secular_age"]),
-                     "uncertainty": float(bound_spec["uncertainty"])},
-                    # The third pair.  It was a prediction while one k had to
-                    # serve both phases; k_PF is what makes it an anchor, and
-                    # `residuals` has always carried three entries, so omitting
-                    # it here left the list and the residuals disagreeing.
-                    {"label": calib["ice_age_end"]["label"],
-                     "true_age": ice_age,
-                     "secular_age": float(calib["ice_age_end"]["secular_age"]),
-                     "uncertainty": float(calib["ice_age_end"]["uncertainty"])},
-                ],
-                # The handover value: what the in-Flood exponential has fallen
-                # to by t_F2, and therefore where the post-Flood one starts.
-                # Not a free parameter -- continuity pins it -- but worth
-                # emitting, because it is the number that shows how much of the
-                # drop happens inside the Flood year.
-                "lambda_F2": _round(model.params.lambda_F2),
-                "series": {
-                    "true_age": grid,  # already rounded, already deduplicated
-                    "secular_age": [_round(s, SERIES_SIGFIGS) for s in secular],
-                },
-                # lambda(t) against DATE — the one curve whose x axis is a DATE
-                # rather than an AGE, and the one that genuinely steps.
-                "lambda_history": {
-                    "date": lambda_grid,
-                    "lambda": [_round(model.lambda_func(d), SERIES_SIGFIGS)
-                               for d in lambda_grid],
-                },
-                "geologic_column": _geologic_column(model, chronology, units),
-            }
+              result = solve_flood_rate(
+                  pre_flood_secular_age=float(calib["flood_start"]["secular_age"]),
+                  post_flood_secular_age=float(bound_spec["secular_age"]),
+                  ice_age_secular_age=float(calib["ice_age_end"]["secular_age"]),
+                  chronology=ice_chronology,
+              )
+              model = result.model
+              present = ice_chronology.present_date
+
+              # The grid is already at output precision, so evaluate the model at
+              # exactly the values that get written.  Rounding the input and the
+              # output independently would store a pair that the model never
+              # actually produced.
+              grid = _true_age_grid(ice_chronology, model,
+                                    [flood_age, second_age, ice_age], points)
+              secular = [model.forward_age(age, present) for age in grid]
+              lambda_grid = _lambda_grid(ice_chronology, model, lambda_points)
+
+              out_presets[f"{chron_key}:{bound_key}:{offset_key}"] = {
+                  "chronology": chron_key,
+                  "boundary": bound_key,
+                    "ice_age": offset_key,
+                  "label": f"{chron_spec['label']} — Flood ends at {bound_spec['label']}",
+                  "mode": "flood_only",
+                  "params": {
+                      "lambda_c": model.lambda_c, "lambda_F": _round(model.lambda_F),
+                      "lambda_bg": model.lambda_bg,
+                      "k_c": model.k_c, "k_F": _round(model.k_F),
+                      "k_PF": _round(model.k_PF),
+                      "t_c": model.t_c, "t_F": model.t_F, "t_F2": model.t_F2,
+                  },
+                  "residuals": [_round(r) for r in result.residuals],
+                  "max_abs_residual": _round(result.max_abs_residual),
+                  "max_secular_age": _round(model.max_secular_age(present)),
+                  "constraints": [
+                      {"label": f"Flood begins — {calib['flood_start']['label']}",
+                       "true_age": flood_age,
+                       "secular_age": float(calib["flood_start"]["secular_age"]),
+                       "uncertainty": float(calib["flood_start"]["uncertainty"])},
+                      {"label": f"Flood ends — {bound_spec['label']}",
+                       "true_age": second_age,
+                       "secular_age": float(bound_spec["secular_age"]),
+                       "uncertainty": float(bound_spec["uncertainty"])},
+                      # The third pair.  It was a prediction while one k had to
+                      # serve both phases; k_PF is what makes it an anchor, and
+                      # `residuals` has always carried three entries, so omitting
+                      # it here left the list and the residuals disagreeing.
+                      {"label": calib["ice_age_end"]["label"],
+                       "true_age": ice_age,
+                       "secular_age": float(calib["ice_age_end"]["secular_age"]),
+                       "uncertainty": float(calib["ice_age_end"]["uncertainty"])},
+                  ],
+                  # The handover value: what the in-Flood exponential has fallen
+                  # to by t_F2, and therefore where the post-Flood one starts.
+                  # Not a free parameter -- continuity pins it -- but worth
+                  # emitting, because it is the number that shows how much of the
+                  # drop happens inside the Flood year.
+                  "lambda_F2": _round(model.params.lambda_F2),
+                  "series": {
+                      "true_age": grid,  # already rounded, already deduplicated
+                      "secular_age": [_round(s, SERIES_SIGFIGS) for s in secular],
+                  },
+                  # lambda(t) against DATE — the one curve whose x axis is a DATE
+                  # rather than an AGE, and the one that genuinely steps.
+                  "lambda_history": {
+                      "date": lambda_grid,
+                      "lambda": [_round(model.lambda_func(d), SERIES_SIGFIGS)
+                                 for d in lambda_grid],
+                  },
+                  "geologic_column": _geologic_column(model, ice_chronology, units),
+              }
 
     return {
         "$comment": (
@@ -458,7 +491,7 @@ def build(presets: Dict[str, Any]) -> Dict[str, Any]:
             "series_points": points,
             "lambda_points": lambda_points,
         },
-        "defaults": presets["defaults"],
+        "defaults": {**presets["defaults"], "ice_age": ice_offsets["default"]},
         "boundaries": {k: {"label": v["label"],
                            "secular_age": float(v["secular_age"]),
                            "uncertainty": float(v["uncertainty"])}
@@ -474,14 +507,113 @@ def build(presets: Dict[str, Any]) -> Dict[str, Any]:
                   "uncertainty": float(spec["uncertainty"])}
             for key, spec in calib.items()
         },
+        "ice_age_offsets": {
+            "default": ice_offsets["default"],
+            "options": out_offsets,
+        },
         "flood_duration_years": flood_years,
         "ics": {"version": ics["source"]["version"],
                 "url": ics["source"]["url"],
-                "reviewed": bool(ics["source"].get("reviewed", False))},
+                "reviewed": bool(ics["source"].get("reviewed", False)),
+                # The unit list is the same for every preset -- it is the ICS
+                # chart, not a result -- so it belongs here rather than being
+                # dug out of whichever preset's column happens to be loaded.
+                "units": [{"name": u["name"], "rank": u["rank"],
+                           "base_secular_age": float(u["base_secular_age"])}
+                          for u in units]},
         "chronologies": out_chronologies,
         "modes": _mode_schemas(presets, built_chronologies),
         "presets": out_presets,
     }
+
+
+#: What the charts plot, and the only part that is large. Everything else --
+#: params, constraints, residuals, labels -- stays in the index, because
+#: `supports()` and the preset picker need it before anything is chosen.
+BODY_KEYS = ("series", "lambda_history", "geologic_column")
+
+
+def _body_stem(key: str) -> str:
+    """`masoretic:kpg:default` -> `masoretic-kpg-default`, safe in a URL."""
+    return key.replace(":", "-")
+
+
+def _body_path(key: str):
+    return PRESET_DIR / f"{_body_stem(key)}.json"
+
+
+def _body_text(body: Dict[str, Any]) -> str:
+    return json.dumps(body, separators=(",", ":")) + "\n"
+
+
+def _same(a: Any, b: Any, path: str = "") -> Optional[str]:
+    """
+    Structural comparison with a relative tolerance on numbers.
+
+    `--check` used to compare bytes. That held while the payload was four
+    presets; at seventy it is ~43,000 solver-derived floats, and the last
+    significant digit of `exp` and `log` is not identical across libm
+    implementations -- CI is Linux/x64 on Python 3.12, a developer machine is
+    likely neither. One flipped digit failed the check with nothing actually
+    stale.
+
+    So numbers compare to 1e-9 relative: far looser than the ninth significant
+    figure they are stored at, and far tighter than any real change to the
+    model, a constraint or a preset. Everything else -- keys, ordering, strings,
+    which presets exist -- still compares exactly, because that is what
+    staleness actually looks like.
+
+    The absolute floor is not optional. Residuals sit at ~1e-14, where a
+    relative comparison is meaningless: -4.585e-14 and -4.630e-14 are both
+    zero to any purpose, and differ by 1% relative. That is precisely what
+    failed CI on the first attempt at this. A broken solve produces residuals
+    many orders of magnitude larger, so 1e-12 absolute still catches one.
+    """
+    if isinstance(a, dict) and isinstance(b, dict):
+        if list(a) != list(b):
+            return f"{path}: keys differ"
+        for k in a:
+            found = _same(a[k], b[k], f"{path}.{k}")
+            if found:
+                return found
+        return None
+    if isinstance(a, list) and isinstance(b, list):
+        if len(a) != len(b):
+            return f"{path}: length {len(a)} vs {len(b)}"
+        for i, (x, y) in enumerate(zip(a, b)):
+            found = _same(x, y, f"{path}[{i}]")
+            if found:
+                return found
+        return None
+    if isinstance(a, bool) or isinstance(b, bool):
+        return None if a is b else f"{path}: {a!r} vs {b!r}"
+    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+        if a == b:
+            return None
+        if math.isclose(a, b, rel_tol=1e-9, abs_tol=1e-12):
+            return None
+        return f"{path}: {a!r} vs {b!r}"
+    return None if a == b else f"{path}: {a!r} vs {b!r}"
+
+
+def _split(payload: Dict[str, Any]):
+    """
+    Separate the index from the per-preset arrays.
+
+    Seventy presets carry 3.8 MB of curve between them, and `main.tsx` awaits
+    this file before the first paint -- shipping it whole would trade the very
+    thing the precomputed layer exists to provide. The index keeps every
+    preset's metadata so the picker and `supports()` still work offline, and
+    the arrays are fetched when a preset is actually chosen.
+    """
+    bodies: Dict[str, Any] = {}
+    index = dict(payload)
+    index["presets"] = {}
+    for key, preset in payload["presets"].items():
+        bodies[key] = {k: preset[k] for k in BODY_KEYS}
+        index["presets"][key] = {k: v for k, v in preset.items()
+                                 if k not in BODY_KEYS}
+    return index, bodies
 
 
 def main() -> int:
@@ -492,26 +624,62 @@ def main() -> int:
 
     presets = json.loads(PRESETS_PATH.read_text())
     payload = build(presets)
-    text = json.dumps(payload, separators=(",", ":")) + "\n"
+    index, bodies = _split(payload)
+    text = json.dumps(index, separators=(",", ":")) + "\n"
 
     if args.check:
         if not OUTPUT_PATH.exists():
             print(f"{OUTPUT_PATH} does not exist; run this script.", file=sys.stderr)
             return 1
-        if OUTPUT_PATH.read_text() != text:
-            print(f"{OUTPUT_PATH} is stale; re-run "
+        drift = _same(json.loads(OUTPUT_PATH.read_text()), index)
+        if drift:
+            print(f"{OUTPUT_PATH} is stale ({drift}); re-run "
                   "`python web/tools/generate_precomputed.py`.", file=sys.stderr)
             return 1
-        print(f"{OUTPUT_PATH.relative_to(REPO)} is up to date.")
+        stale = []
+        for k, body in bodies.items():
+            if not _body_path(k).exists():
+                stale.append(f"{k} (missing)")
+                continue
+            drift = _same(json.loads(_body_path(k).read_text()), body)
+            if drift:
+                stale.append(f"{k} ({drift})")
+        if stale:
+            print(f"{len(stale)} preset file(s) stale, e.g. {stale[0]}; re-run "
+                  "`python web/tools/generate_precomputed.py`.", file=sys.stderr)
+            return 1
+        orphans = sorted(f.name for f in PRESET_DIR.glob("*.json")
+                         if f.stem not in {_body_stem(k) for k in bodies})
+        if orphans:
+            print(f"stale preset file(s) with no preset: {', '.join(orphans)}",
+                  file=sys.stderr)
+            return 1
+        print(f"{OUTPUT_PATH.relative_to(REPO)} and {len(bodies)} preset "
+              "files are up to date.")
         return 0
 
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT_PATH.write_text(text)
 
+    # Rewritten from scratch, so a renamed or removed preset cannot leave a
+    # file behind that the index no longer lists.
+    if PRESET_DIR.exists():
+        for old_file in PRESET_DIR.glob("*.json"):
+            old_file.unlink()
+    PRESET_DIR.mkdir(parents=True, exist_ok=True)
+    body_bytes = 0
+    for key, body in bodies.items():
+        blob = _body_text(body)
+        _body_path(key).write_text(blob)
+        body_bytes += len(blob.encode())
+
     n_presets = len(payload["presets"])
     size_kb = len(text.encode()) / 1024
-    print(f"wrote {OUTPUT_PATH.relative_to(REPO)}: "
-          f"{n_presets} presets, {size_kb:.0f} kB (card {CARD_VERSION})")
+    print(f"wrote {OUTPUT_PATH.relative_to(REPO)}: index for {n_presets} "
+          f"presets, {size_kb:.0f} kB (card {CARD_VERSION})")
+    print(f"wrote {len(bodies)} files to {PRESET_DIR.relative_to(REPO)}/: "
+          f"{body_bytes/1024:.0f} kB total, "
+          f"{body_bytes/len(bodies)/1024:.0f} kB each")
     for key, preset in payload["presets"].items():
         print(f"  {key:24s} lambda_F={preset['params']['lambda_F']:<12.6g} "
               f"k_PF={preset['params']['k_PF']:<12.6g} "

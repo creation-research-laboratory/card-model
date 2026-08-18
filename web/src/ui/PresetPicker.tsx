@@ -20,11 +20,14 @@ interface Props {
   boundary: string;
   onChronology(key: string): void;
   onBoundary(key: string): void;
+  iceAge: string;
+  onIceAge(key: string): void;
   disabled?: boolean;
 }
 
 export function PresetPicker({
-  data, chronology, boundary, onChronology, onBoundary, disabled,
+  data, chronology, boundary, iceAge, onChronology, onBoundary, onIceAge,
+  disabled,
 }: Props) {
   const powerUser = usePowerUser();
   const chron = data.chronologies[chronology];
@@ -67,6 +70,32 @@ export function PresetPicker({
         </select>
       </label>
 
+      <label className="field">
+        <span>Ice Age ends (yr after the Flood)</span>
+        <select
+          value={iceAge}
+          disabled={disabled}
+          onChange={(e) => onIceAge(e.target.value)}
+        >
+          {/*
+            * Sorted by the offset this chronology gives, so the list reads in
+            * time order. Each chronology's own date is one of the options, and
+            * it is far later than the rest — 1,843 yr for Masoretic — so
+            * leaving it unsorted would drop it in the middle.
+            */}
+          {Object.entries(data.ice_age_offsets.options)
+            .sort((a, b) => a[1].years_after_flood[chronology]
+                          - b[1].years_after_flood[chronology])
+            .map(([key, o]) => (
+              <option key={key} value={key}>
+                {key === "default"
+                  ? `${o.years_after_flood[chronology].toLocaleString()} yr (chronology default)`
+                  : `${o.years_after_flood[chronology].toLocaleString()} yr`}
+              </option>
+            ))}
+        </select>
+      </label>
+
       {powerUser ? null : (
       <p style={{ fontSize: ".8rem", color: "var(--text-secondary)", margin: "0 0 .8rem" }}>
         For this calculation, the Flood <em>begins</em> at the {data.calibration.flood_start.label}{" "}
@@ -90,7 +119,12 @@ export function PresetPicker({
         </dd>
         <dt>{data.calibration.ice_age_end.label}</dt>
         <dd>
-          {formatAge(chron.ice_age_end_age)} BP → appears{" "}
+          {/* The chosen offset, not the chronology's own, which is only right
+              for the `default` option. */}
+          {formatAge(
+            chron.age_of_earth - chron.flood_end_date
+            - data.ice_age_offsets.options[iceAge].years_after_flood[chronology],
+          )} BP → appears{" "}
           {formatAge(data.calibration.ice_age_end.secular_age)}
         </dd>
         <dt>Age of the Earth</dt>

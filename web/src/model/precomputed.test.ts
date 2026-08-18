@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { PrecomputedSource, type PrecomputedData } from "./PrecomputedSource.js";
+import { diskBodyLoader, presetWithBody } from "./testData.js";
 import { interpolateLogLog } from "./interpolate.js";
 import { UnsupportedRequestError, type CalibrationRequest } from "./types.js";
 
@@ -20,18 +21,75 @@ const data = JSON.parse(
   readFileSync(join(WEB, "public", "precomputed.json"), "utf8"),
 ) as PrecomputedData;
 
-const source = new PrecomputedSource(data);
+const source = new PrecomputedSource(data, diskBodyLoader);
 const preset = (chronology: string, boundary: string): CalibrationRequest => ({
-  chronology, boundary, mode: "flood_only",
+  chronology, boundary, iceAge: "default", mode: "flood_only",
 });
 
 describe("generated data", () => {
-  it("carries all four presets", () => {
-    // Two chronologies x two post-Flood boundaries. The Flood's *start* is not
-    // a variable — it is always the pre-Flood contact.
-    expect(source.presetKeys.sort()).toEqual([
-      "masoretic:kpg", "masoretic:nq", "septuagint:kpg", "septuagint:nq",
-    ]);
+  it("carries the full cross-product of the three choices", () => {
+    // Chronology x post-Flood boundary x Ice Age offset. The Flood's *start*
+    // is not among them — it is always the pre-Flood contact.
+    const chronologies = Object.keys(data.chronologies);
+    const boundaries = Object.keys(data.boundaries);
+    const offsets = Object.keys(data.ice_age_offsets.options);
+    expect(source.presetKeys).toHaveLength(
+      chronologies.length * boundaries.length * offsets.length,
+    );
+    for (const c of chronologies) {
+      for (const b of boundaries) {
+        for (const o of offsets) {
+          expect(source.presetKeys).toContain(`${c}:${b}:${o}`);
+        }
+      }
+    }
+  });
+
+  it("gives every boundary a contact the column actually draws", () => {
+    // The reason the Paleogene is split into its epochs: a boundary the reader
+    // can select but the column has no bar edge for is a contact they cannot
+    // see. Every secular_age must be some unit's base.
+    const bases = new Set(data.ics.units.map((u) => u.base_secular_age));
+    for (const [key, b] of Object.entries(data.boundaries)) {
+      expect(bases.has(b.secular_age), `${key} has no matching unit base`)
+        .toBe(true);
+    }
+  });
+
+  it("offers every boundary the model author asked for", () => {
+    expect(Object.keys(data.boundaries).sort())
+      .toEqual(["eo", "kpg", "mp", "nq", "om", "pe", "pt"]);
+  });
+
+  it("offers each chronology's own Ice Age date plus the four offsets", () => {
+    const options = data.ice_age_offsets.options;
+    expect(Object.keys(options).sort())
+      .toEqual(["default", "y1000", "y350", "y500", "y700"]);
+    // `default` differs per chronology — it is whatever that chronology's own
+    // ice_age_end_date works out to — where the rest are the same everywhere.
+    expect(options.default.years_after_flood.masoretic).toBe(1843);
+    expect(options.default.years_after_flood.septuagint).toBe(1123);
+    expect(options.y350.years_after_flood.masoretic).toBe(350);
+    expect(options.y350.years_after_flood.septuagint).toBe(350);
+  });
+
+  it("gives each Ice Age offset its own calibration", () => {
+    // The third pair fixes k_PF, so moving the Ice Age date moves the whole
+    // post-Flood relaxation. Two offsets sharing a k_PF would mean the
+    // constraint was not being used.
+    const seen = new Set<number>();
+    for (const o of Object.keys(data.ice_age_offsets.options)) {
+      seen.add(data.presets[`masoretic:kpg:${o}`].params.k_PF);
+    }
+    expect(seen.size).toBe(Object.keys(data.ice_age_offsets.options).length);
+  });
+
+  it("relaxes faster when the Ice Age ends sooner", () => {
+    // Less true time to fall the same distance.
+    const k = (o: string) => data.presets[`masoretic:kpg:${o}`].params.k_PF;
+    expect(k("y350")).toBeGreaterThan(k("y500"));
+    expect(k("y500")).toBeGreaterThan(k("y700"));
+    expect(k("y700")).toBeGreaterThan(k("y1000"));
   });
 
   it("records which card version produced it", () => {
@@ -42,7 +100,7 @@ describe("generated data", () => {
     // These come from the real solver, not from interpolation, so they should
     // be at the noise floor. A regression here means the model moved.
     for (const key of source.presetKeys) {
-      expect(data.presets[key].max_abs_residual).toBeLessThan(1e-12);
+      expect(presetWithBody(key).max_abs_residual).toBeLessThan(1e-12);
     }
   });
 
@@ -67,7 +125,7 @@ describe("generated data", () => {
 
   it("calibrates on three pairs", async () => {
     for (const key of source.presetKeys) {
-      const p = data.presets[key];
+      const p = presetWithBody(key);
       expect(p.constraints).toHaveLength(3);
       expect(p.residuals).toHaveLength(3);
       const [onset, cease, ice] = p.constraints;
@@ -85,7 +143,7 @@ describe("generated data", () => {
     // job: the Flood year needs k ~ 10/yr while the millennia after it need
     // ~0.005/yr. If these ever converge, the model has collapsed back.
     for (const key of source.presetKeys) {
-      const { k_F, k_PF } = data.presets[key].params;
+      const { k_F, k_PF } = presetWithBody(key).params;
       expect(k_F).toBeGreaterThan(1);
       expect(k_PF).toBeLessThan(0.05);
       expect(k_F / k_PF).toBeGreaterThan(100);
@@ -97,7 +155,7 @@ describe("generated data", () => {
     // by t_F2, and the amplitude the post-Flood one starts from. That
     // continuity is what makes k_F one new degree of freedom, not two.
     for (const key of source.presetKeys) {
-      const p = data.presets[key];
+      const p = presetWithBody(key);
       const { lambda_F, k_F, t_F, t_F2 } = p.params;
       const expected = (lambda_F - 1) * Math.exp(-k_F * (t_F2 - t_F)) + 1;
       expect(Math.abs(p.lambda_F2 / expected - 1)).toBeLessThan(1e-6);
@@ -110,8 +168,8 @@ describe("generated data", () => {
   it("gives each post-Flood boundary its own calibration", async () => {
     // The boundary is an input, so K/Pg and N/Q must not share a curve.
     for (const chron of ["masoretic", "septuagint"]) {
-      const a = data.presets[`${chron}:kpg`].params;
-      const b = data.presets[`${chron}:nq`].params;
+      const a = presetWithBody(`${chron}:kpg:default`).params;
+      const b = presetWithBody(`${chron}:nq:default`).params;
       expect(a.lambda_F).not.toBe(b.lambda_F);
       // N/Q compresses more of the column into the Flood, so it needs a
       // fiercer in-Flood relaxation.
@@ -131,7 +189,7 @@ describe("series", () => {
     // a non-negative rate — and the table lookup depends on it, so a generator
     // change that broke it would silently corrupt every interpolation.
     for (const key of source.presetKeys) {
-      const { true_age, secular_age } = data.presets[key].series;
+      const { true_age, secular_age } = presetWithBody(key).series;
       for (let i = 1; i < true_age.length; i++) {
         expect(true_age[i]).toBeGreaterThan(true_age[i - 1]);
         expect(secular_age[i]).toBeGreaterThanOrEqual(secular_age[i - 1]);
@@ -143,7 +201,7 @@ describe("series", () => {
     // Otherwise the calibration anchors a chart draws would be interpolated
     // points that miss their own targets.
     for (const key of source.presetKeys) {
-      const p = data.presets[key];
+      const p = presetWithBody(key);
       for (const constraint of p.constraints) {
         expect(p.series.true_age).toContain(constraint.true_age);
       }
@@ -152,7 +210,7 @@ describe("series", () => {
 
   it("hits each constraint's target at its anchor row", async () => {
     for (const key of source.presetKeys) {
-      const p = data.presets[key];
+      const p = presetWithBody(key);
       const cal = await source.calibrate(preset(p.chronology, p.boundary));
       // cal.constraints is the camelCase view; p.constraints is the raw file.
       for (const constraint of cal.constraints) {
@@ -168,7 +226,7 @@ describe("series", () => {
     // grid has to supply is the vertex itself — without a point exactly at the
     // breakpoint, the two neighbours either side round the corner off.
     for (const key of source.presetKeys) {
-      const p = data.presets[key];
+      const p = presetWithBody(key);
       const chron = data.chronologies[p.chronology];
       // Both breakpoints now: the onset and the Flood's end.
       for (const date of [p.params.t_F, p.params.t_F2]) {
@@ -180,7 +238,7 @@ describe("series", () => {
   it("has no duplicate true-age rows", async () => {
     // A repeated x is a zero-width interval for the interpolator to land in.
     for (const key of source.presetKeys) {
-      const xs = data.presets[key].series.true_age;
+      const xs = presetWithBody(key).series.true_age;
       expect(new Set(xs).size).toBe(xs.length);
     }
   });
@@ -189,7 +247,7 @@ describe("series", () => {
 describe("lambda history", () => {
   it("is ascending in DATE and spans zero to the present", async () => {
     for (const key of source.presetKeys) {
-      const p = data.presets[key];
+      const p = presetWithBody(key);
       const chron = data.chronologies[p.chronology];
       const dates = p.lambda_history.date;
       expect(dates[0]).toBe(0);
@@ -206,7 +264,7 @@ describe("lambda history", () => {
     // rounding and would have drawn a diagonal; the generator now refuses to
     // emit that, and this checks the result from the other side.
     for (const key of source.presetKeys) {
-      const p = data.presets[key];
+      const p = presetWithBody(key);
       const { date, lambda } = p.lambda_history;
       const i = date.indexOf(p.params.t_F);
       expect(i).toBeGreaterThan(-1);
@@ -236,7 +294,7 @@ describe("lambda history", () => {
     // would encode one preset's physics and reject another's, so this measures
     // what actually matters: the fraction of the excursion still outstanding.
     for (const key of source.presetKeys) {
-      const p = data.presets[key];
+      const p = presetWithBody(key);
       const { lambda } = p.lambda_history;
       expect(lambda[0]).toBe(1);
 
@@ -250,7 +308,7 @@ describe("lambda history", () => {
   it("is returned as generated, without resampling", async () => {
     const cal = await source.calibrate(preset("masoretic", "kpg"));
     const history = await source.lambdaHistory(cal);
-    expect(history.date).toEqual(data.presets["masoretic:kpg"].lambda_history.date);
+    expect(history.date).toEqual(presetWithBody("masoretic:kpg:default").lambda_history.date);
     expect(history.floodStartDate).toBe(1656);
     // These samples came from the model, so they are exact — unlike a scalar
     // query at an arbitrary age, which interpolates.
@@ -261,8 +319,8 @@ describe("lambda history", () => {
 describe("geologic column", () => {
   it("carries every ICS unit, in range or not", async () => {
     for (const key of source.presetKeys) {
-      const col = data.presets[key].geologic_column;
-      expect(col.length).toBe(14);
+      const col = presetWithBody(key).geologic_column;
+      expect(col.length).toBe(data.ics.units.length);
       expect(col[0].name).toBe("Holocene");
       expect(col[col.length - 1].name).toBe("Cambrian");
     }
@@ -275,7 +333,7 @@ describe("geologic column", () => {
     // can still fall short, and an omitted row would make the column look
     // complete when it is not.
     for (const key of source.presetKeys) {
-      for (const unit of data.presets[key].geologic_column.filter((u) => !u.in_range)) {
+      for (const unit of presetWithBody(key).geologic_column.filter((u) => !u.in_range)) {
         expect(unit.duration_true).toBeUndefined();
         expect(unit.base_true_age).toBeUndefined();
       }
@@ -285,7 +343,7 @@ describe("geologic column", () => {
     // preset now reaches the whole column — the ceiling is 540 Ma regardless
     // of where the Flood ends.
     for (const key of source.presetKeys) {
-      expect(data.presets[key].geologic_column.every((u) => u.in_range)).toBe(true);
+      expect(presetWithBody(key).geologic_column.every((u) => u.in_range)).toBe(true);
     }
   });
 
@@ -293,7 +351,7 @@ describe("geologic column", () => {
     // Each unit's younger boundary is the previous unit's base, in both age
     // systems. A gap would mean lost time; an overlap, double-counted time.
     for (const key of source.presetKeys) {
-      const col = data.presets[key].geologic_column.filter((u) => u.in_range);
+      const col = presetWithBody(key).geologic_column.filter((u) => u.in_range);
       expect(col[0].top_true_age).toBe(0);
       for (let i = 1; i < col.length; i++) {
         expect(col[i].top_true_age).toBe(col[i - 1].base_true_age);
@@ -304,7 +362,7 @@ describe("geologic column", () => {
 
   it("gives every in-range unit a positive duration and acceleration", async () => {
     for (const key of source.presetKeys) {
-      for (const u of data.presets[key].geologic_column.filter((x) => x.in_range)) {
+      for (const u of presetWithBody(key).geologic_column.filter((x) => x.in_range)) {
         expect(u.duration_true!).toBeGreaterThan(0);
         expect(u.acceleration!).toBeGreaterThan(0);
         // Acceleration is secular years per young-earth year, so it must
@@ -322,7 +380,7 @@ describe("geologic column", () => {
     // the Cambrian. A plateau here would mean the acceleration had been
     // modelled as constant across the Flood, which is a different model.
     for (const key of source.presetKeys) {
-      const col = data.presets[key].geologic_column;
+      const col = presetWithBody(key).geologic_column;
       for (let i = 1; i < col.length; i++) {
         expect(col[i].acceleration!).toBeGreaterThan(col[i - 1].acceleration!);
       }
@@ -336,7 +394,7 @@ describe("geologic column", () => {
     const cal = await source.calibrate(preset("masoretic", "kpg"));
     const column = await source.geologicColumn(cal);
     expect(column.exact).toBe(true);
-    expect(column.units).toHaveLength(14);
+    expect(column.units).toHaveLength(data.ics.units.length);
   });
 });
 
@@ -347,7 +405,7 @@ describe("interpolation accuracy", () => {
     // against the live model in the live suite, which is the only place it can
     // honestly be measured.
     for (const key of source.presetKeys) {
-      const { true_age, secular_age } = data.presets[key].series;
+      const { true_age, secular_age } = presetWithBody(key).series;
       for (let i = 0; i < true_age.length; i += 37) {
         if (true_age[i] <= 0) continue;
         // Relative: these span 1 to 5.4e8, and an absolute tolerance that

@@ -83,24 +83,26 @@ correctly on whatever it is handed.
 
 ---
 
-## 4. The grid refinement window ignores the post-Flood tail
+## 4. The grid refinement window — fixed, and now load-bearing
 
-**Status:** accuracy, not correctness. Marked `KNOWN LIMITATION` in the code.
+**Status:** closed. Kept for the measurement history.
 
-`_relaxation_span()` in `web/tools/generate_precomputed.py` sizes the age grid's
-log-spaced refinement window from **`k_F` alone**. With two relaxation rates
-three orders of magnitude apart, that covers the fast in-Flood drop (a few
-years) and misses the millennia-long post-Flood tail.
+`_relaxation_span()` in `web/tools/generate_precomputed.py` used to size the age
+grid's log-spaced refinement window from **`k_F` alone**. With two relaxation
+rates three orders of magnitude apart that covered the fast in-Flood drop and
+missed the millennia-long post-Flood tail, and the precomputed layer's worst
+interpolation error sat at **0.77% forward / 0.86% inverse**.
 
-Measured cost: the precomputed layer's worst interpolation error is **0.77%
-forward / 0.86% inverse**, where the earlier single-rate curve managed 0.27%.
-Those figures are advertised in the UI, in `types.ts`, in `interpolate.ts`, and
-asserted in the live suite, so any fix has to move all four together.
+That was tolerable while the presets were four curves of similar shape. Adding
+the Ice Age offsets made it not: a 350-year offset forces `k_PF` an order of
+magnitude above the default, so the tail to resolve is shorter and steeper, and
+the worst error reached **4.2%** against a UI that promises about 1%. The live
+suite caught it rather than a reader.
 
-**To close:** size the window from both rates — something like
-`max(1.5·ln(λ_F)/k_F, 1.5·ln(λ_F2)/k_PF)` — re-measure, then update the four
-places above. Expect the payload to grow; it is ~60 kB gzipped now, against a
-~40 kB budget in the plan that has already been exceeded twice.
+The window is now sized from both rates, taking whichever needs the wider one.
+Worst forward error across all 70 presets is **0.98%** (at `septuagint:pt:y700`),
+so the "≈1%" the UI advertises still holds — but with less headroom than
+before. Another dimension of presets should be accompanied by re-measuring it.
 
 ---
 
@@ -150,6 +152,18 @@ Phase 2 brief, remains genuinely unmeasured.
   `precomputed.json`) and silently reverted ~20 tests. After any merge from
   main, confirm: `generate_precomputed.py --check` passes, the web test counts
   have not dropped, and the app renders.
+- **`--check` compares numbers with a tolerance, not bytes.** The payload is
+  ~43,000 solver-derived floats, and the last significant digit of `exp`/`log`
+  is not identical across libm implementations — CI is Linux/x64 on Python
+  3.12. Byte comparison held while there were four presets and failed at
+  seventy with nothing actually stale. Numbers now compare to 1e-9 relative;
+  keys, ordering, strings and which presets exist still compare exactly.
+  The absolute floor matters as much as the relative one: residuals sit at
+  ~1e-14, where -4.585e-14 and -4.630e-14 differ by 1% relative and are both
+  zero to any purpose. Verified by mutation: a 1e-12 nudge and the exact
+  residual CI disagreed on both pass, while a 0.01% drift in lambda_F, a
+  residual at 1e-6, a removed preset, a changed label and a 1% curve change
+  all fail.
 - **`web/spike/`** is Phase 2 measurement scaffolding. It still builds and is
   the only thing exercising the Worker path by hand, but nothing depends on it.
 - **The rejected-parameter panel cannot fire in the shipped UI.** It shows the

@@ -24,16 +24,17 @@ import { ParameterPanel, type ModeSchema } from "./ParameterPanel.js";
 import { PresetPicker } from "./PresetPicker.js";
 import { PreferencesProvider, STORAGE_KEY } from "./preferences.js";
 import { PrecomputedSource, type PrecomputedData } from "../model/PrecomputedSource.js";
+import { diskBodyLoader } from "../model/testData.js";
 import type { Calibration, GeneralParams } from "../model/types.js";
 
 const WEB = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 const data = JSON.parse(
   readFileSync(join(WEB, "public", "precomputed.json"), "utf8"),
 ) as PrecomputedData;
-const source = new PrecomputedSource(data);
+const source = new PrecomputedSource(data, diskBodyLoader);
 
 const FITTABLE = data.modes["$fittable"] as string[];
-const VALUES = data.presets["masoretic:kpg"].params as GeneralParams;
+const VALUES = data.presets["masoretic:kpg:default"].params as GeneralParams;
 const schema = (data.modes.flood_only as { by_chronology: Record<string, unknown> })
   .by_chronology.masoretic as ModeSchema;
 
@@ -47,7 +48,7 @@ beforeEach(async () => {
   document.body.appendChild(container);
   root = createRoot(container);
   calibration = await source.calibrate({
-    chronology: "masoretic", boundary: "kpg", mode: "flood_only",
+    chronology: "masoretic", boundary: "kpg", iceAge: "default", mode: "flood_only",
   });
 });
 
@@ -99,15 +100,17 @@ describe("it removes explanation", () => {
     const picker = (
       <PresetPicker
         data={data} chronology="masoretic" boundary="kpg"
-        onChronology={() => {}} onBoundary={() => {}}
+        iceAge="default"
+        onChronology={() => {}} onBoundary={() => {}} onIceAge={() => {}}
       />
     );
     mount(picker, false);
     expect(container.textContent).toMatch(/rate spikes there/);
     mount(picker, true);
     expect(container.textContent).not.toMatch(/rate spikes there/);
-    // The selects are the point of the panel and must survive.
-    expect(container.querySelectorAll("select")).toHaveLength(2);
+    // The selects are the point of the panel and must survive: chronology,
+    // post-Flood boundary, Ice Age.
+    expect(container.querySelectorAll("select")).toHaveLength(3);
   });
 });
 
@@ -136,7 +139,8 @@ describe("it never removes what the reader is owed", () => {
     const picker = (
       <PresetPicker
         data={data} chronology="septuagint" boundary="kpg"
-        onChronology={() => {}} onBoundary={() => {}}
+        iceAge="default"
+        onChronology={() => {}} onBoundary={() => {}} onIceAge={() => {}}
       />
     );
     mount(picker, true);
