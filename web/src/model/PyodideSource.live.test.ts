@@ -18,6 +18,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { PrecomputedSource, type PrecomputedData } from "./PrecomputedSource.js";
+import { diskBodyLoader, presetWithBody } from "./testData.js";
 import { PyodideSource } from "./PyodideSource.js";
 import { ModelError, type CalibrationRequest } from "./types.js";
 import { DirectTransport } from "../worker/transport.js";
@@ -29,9 +30,9 @@ const data = JSON.parse(
   readFileSync(join(WEB, "public", "precomputed.json"), "utf8"),
 ) as PrecomputedData;
 
-const preset = (chronology: string, boundary: string): CalibrationRequest => ({
-  chronology, boundary, mode: "flood_only",
-});
+const preset = (
+  chronology: string, boundary: string, iceAge = "default",
+): CalibrationRequest => ({ chronology, boundary, iceAge, mode: "flood_only" });
 
 let live: PyodideSource;
 let precomputed: PrecomputedSource;
@@ -84,12 +85,13 @@ beforeAll(async () => {
     chronologies: data.chronologies,
     boundaries: data.boundaries,
     calibration: data.calibration,
+            iceAgeOffsets: data.ice_age_offsets.options,
     floodDurationYears: data.flood_duration_years,
-    geologicUnits: Object.values(data.presets)[0].geologic_column.map((u) => ({
-      name: u.name, rank: u.rank, baseSecularAge: u.base_secular_age,
-    })),
+    geologicUnits: data.ics.units.map((u) => ({
+              name: u.name, rank: u.rank, baseSecularAge: u.base_secular_age,
+            })),
   });
-  precomputed = new PrecomputedSource(data);
+  precomputed = new PrecomputedSource(data, diskBodyLoader);
   await live.boot();
 });
 
@@ -122,8 +124,8 @@ describe("agreement with the Python package", () => {
 
   it("solves every preset to machine precision", async () => {
     for (const key of precomputed.presetKeys) {
-      const p = data.presets[key];
-      const cal = await live.calibrate(preset(p.chronology, p.boundary));
+      const p = presetWithBody(key);
+      const cal = await live.calibrate(preset(p.chronology, p.boundary, p.ice_age));
       expect(cal.maxAbsResidual).toBeLessThan(1e-12);
       // And agrees with what the generator wrote into the static file.
       expect(cal.params.lambda_F / p.params.lambda_F - 1).toBeCloseTo(0, 8);
@@ -149,8 +151,8 @@ describe("the precomputed layer is a faithful stand-in", () => {
     let worstInverse = 0;
 
     for (const key of precomputed.presetKeys) {
-      const p = data.presets[key];
-      const request = preset(p.chronology, p.boundary);
+      const p = presetWithBody(key);
+      const request = preset(p.chronology, p.boundary, p.ice_age);
       const liveCal = await live.calibrate(request);
       const preCal = await precomputed.calibrate(request);
       const xs = p.series.true_age;
@@ -173,9 +175,10 @@ describe("the precomputed layer is a faithful stand-in", () => {
     // rather than assumed. The inverse is the looser of the two because the
     // curve's knee just after the Flood is sharp, and inverting a sharp knee
     // is ill-conditioned.
-    // Measured on the shipped grid: 0.77% forward, 0.86% inverse. Both moved
-    // up when the in-Flood relaxation sharpened the curve, and both are what
-    // the UI's "≈" promises, so they are asserted rather than assumed.
+    // Measured on the shipped grid across all 70 presets: 0.98% forward, at
+    // septuagint:pt:y700. It was 0.77% before the Ice Age offsets, and 4.2%
+    // between adding them and sizing the refinement window from both
+    // relaxation rates — this assertion is what caught that.
     expect(worstForward).toBeLessThan(1.5e-2);
     expect(worstInverse).toBeLessThan(1.5e-2);
   });
@@ -185,8 +188,8 @@ describe("the precomputed layer is a faithful stand-in", () => {
     // the parameters and residuals, so those should match to the last digit
     // the file stores.
     for (const key of precomputed.presetKeys) {
-      const p = data.presets[key];
-      const request = preset(p.chronology, p.boundary);
+      const p = presetWithBody(key);
+      const request = preset(p.chronology, p.boundary, p.ice_age);
       const liveCal = await live.calibrate(request);
       const preCal = await precomputed.calibrate(request);
       expect(preCal.params.lambda_F / liveCal.params.lambda_F - 1).toBeCloseTo(0, 8);
@@ -258,8 +261,8 @@ describe("lambda history agrees between the two sources", () => {
 describe("geologic column agrees between the two sources", () => {
   it("matches the precomputed column unit for unit", async () => {
     for (const key of precomputed.presetKeys) {
-      const p = data.presets[key];
-      const request = preset(p.chronology, p.boundary);
+      const p = presetWithBody(key);
+      const request = preset(p.chronology, p.boundary, p.ice_age);
       const liveCol = await live.geologicColumn(await live.calibrate(request));
       const preCol = await precomputed.geologicColumn(
         await precomputed.calibrate(request));

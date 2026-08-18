@@ -35,6 +35,8 @@ export interface PresetCatalog {
    * request selects.
    */
   calibration: PrecomputedData["calibration"];
+  /** Ice Age offsets, so the live source can solve the one chosen. */
+  iceAgeOffsets?: PrecomputedData["ice_age_offsets"]["options"];
   /** True years between the two pairs — the Flood year. */
   floodDurationYears: number;
   /**
@@ -101,7 +103,7 @@ export class PyodideSource implements ModelSource {
   }
 
   async calibrate(request: CalibrationRequest): Promise<Calibration> {
-    const chronology = this.chronologyFor(request.chronology);
+    const chronology = this.chronologyForRequest(request);
     const boundary = this.catalog.boundaries[request.boundary];
     if (!boundary) {
       throw new UnsupportedRequestError(
@@ -266,6 +268,34 @@ export class PyodideSource implements ModelSource {
 
   async dispose(): Promise<void> {
     await this.transport.dispose();
+  }
+
+  /**
+   * The chronology a request implies, Ice Age offset included.
+   *
+   * The offset is not a display choice: `solve_flood_rate` reads the Ice Age
+   * AGE off the chronology it is handed, so honouring the reader's choice
+   * means handing it a different chronology. Without this the live source
+   * would quietly solve the catalogue's own date and disagree with the
+   * precomputed layer for every offset but `default`.
+   */
+  private chronologyForRequest(request: CalibrationRequest): Chronology {
+    const base = this.chronologyFor(request.chronology);
+    const option = this.catalog.iceAgeOffsets?.[request.iceAge];
+    if (option === undefined) {
+      throw new UnsupportedRequestError(
+        `Unknown Ice Age offset "${request.iceAge}". Known: ` +
+        `${Object.keys(this.catalog.iceAgeOffsets ?? {}).join(", ")}.`,
+      );
+    }
+    const years = option.years_after_flood[request.chronology];
+    if (years === undefined) {
+      throw new UnsupportedRequestError(
+        `Ice Age offset "${request.iceAge}" has no value for chronology ` +
+        `"${request.chronology}".`,
+      );
+    }
+    return { ...base, iceAgeEndDate: base.floodEndDate + years };
   }
 
   private chronologyFor(key: string): Chronology {

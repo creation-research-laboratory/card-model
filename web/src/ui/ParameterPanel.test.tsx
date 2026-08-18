@@ -29,7 +29,7 @@ const data = JSON.parse(
 ) as PrecomputedData;
 
 const FITTABLE = (data.modes["$fittable"] as string[]);
-const VALUES = data.presets["masoretic:kpg"].params as GeneralParams;
+const VALUES = data.presets["masoretic:kpg:default"].params as GeneralParams;
 
 function modeSchema(mode: string, chronology = "masoretic"): ModeSchema {
   const entry = data.modes[mode];

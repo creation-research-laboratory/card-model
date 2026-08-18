@@ -53,6 +53,8 @@ export interface Constraint {
 export interface CalibrationRequest {
   readonly chronology: ChronologyKey;
   readonly boundary: BoundaryKey;
+  /** Which Ice Age offset; a key into `ice_age_offsets.options`. */
+  readonly iceAge: string;
   readonly mode: ModeKey;
   /**
    * Free-parameter overrides. Any value here means the request is no longer a
@@ -173,6 +175,13 @@ export function hasOverrides(request: CalibrationRequest): boolean {
   return !!request.overrides && Object.keys(request.overrides).length > 0;
 }
 
+/**
+ * `masoretic:kpg:default`.
+ *
+ * The Ice Age offset is part of the key because it is part of the solve: the
+ * third matched pair fixes `k_PF`, so two requests differing only in that
+ * offset are different calibrations, not the same one relabelled.
+ */
 export function presetKeyFor(request: CalibrationRequest): string {
-  return `${request.chronology}:${request.boundary}`;
+  return `${request.chronology}:${request.boundary}:${request.iceAge}`;
 }

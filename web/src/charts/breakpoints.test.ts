@@ -17,6 +17,7 @@ import {
   DAYS_PER_YEAR, abbreviate, groupMarkers, lambdaF2, markersFor,
 } from "./breakpoints.js";
 import type { Calibration, GeneralParams } from "../model/types.js";
+import { bodyOf } from "../model/testData.js";
 
 const WEB = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 const data = JSON.parse(
@@ -30,6 +31,14 @@ interface RawChronology {
   ice_age_end_date: number;
   flood_start_age: number;
   ice_age_end_age: number;
+}
+
+/** The Ice Age DATE this preset was actually solved at. */
+function iceAgeDateFor(preset: { chronology: string; ice_age: string }): number {
+  const chron: RawChronology = data.chronologies[preset.chronology];
+  const offset =
+    data.ice_age_offsets.options[preset.ice_age].years_after_flood[preset.chronology];
+  return chron.flood_end_date + offset;
 }
 
 function calibrationFor(presetKey: string): Calibration {
@@ -47,7 +56,10 @@ function calibrationFor(presetKey: string): Calibration {
       ageOfEarth: chron.age_of_earth,
       floodStartDate: chron.flood_start_date,
       floodEndDate: chron.flood_end_date,
-      iceAgeEndDate: chron.ice_age_end_date,
+      // The preset's own, not the catalogue's: the Ice Age offset is a
+      // separate dimension now, so `chronologies[...].ice_age_end_date` is
+      // only right for the `default` offset.
+      iceAgeEndDate: iceAgeDateFor(preset),
     },
   } as Calibration;
 }
@@ -75,7 +87,7 @@ const anchor = (ms: ReturnType<typeof markersFor>) =>
   ms.find((m) => m.kind === "anchor")!;
 
 describe("what gets marked, and as what", () => {
-  const markers = markersFor(calibrationFor("masoretic:kpg"));
+  const markers = markersFor(calibrationFor("masoretic:kpg:default"));
   const byKey = Object.fromEntries(markers.map((m) => [m.key, m]));
 
   it("marks the two Flood breakpoints as rate changes", () => {
@@ -103,14 +115,14 @@ describe("what gets marked, and as what", () => {
     // The flood-only mode pins lambda_c to background and k_c to zero, so the
     // first two regions are both flat and t_c is a boundary where nothing
     // observable happens.
-    const p = data.presets["masoretic:kpg"].params;
+    const p = data.presets["masoretic:kpg:default"].params;
     expect(p.lambda_c).toBe(p.lambda_bg);
     expect(p.k_c).toBe(0);
     expect(byKey.t_c).toBeUndefined();
   });
 
   it("includes t_c once the Creation week is doing something", () => {
-    const base = calibrationFor("masoretic:kpg");
+    const base = calibrationFor("masoretic:kpg:default");
     const active = {
       ...base,
       params: { ...base.params, lambda_c: 1e6, k_c: 1e-2 },
@@ -133,7 +145,8 @@ describe("DATE and AGE are not confused", () => {
       );
       expect(byKey.t_F.trueAge).toBeCloseTo(chron.flood_start_age, 6);
       const ice = Object.values(byKey).find((m) => m.kind === "anchor")!;
-      expect(ice.trueAge).toBeCloseTo(chron.ice_age_end_age, 6);
+      expect(ice.trueAge)
+        .toBeCloseTo(chron.age_of_earth - iceAgeDateFor(preset), 6);
       // And the Flood ends one year *later*, so its AGE is one year smaller.
       expect(byKey.t_F.trueAge - byKey.t_F2.trueAge).toBeCloseTo(1, 6);
     });
@@ -144,7 +157,7 @@ describe("grouping follows the pixel scale, not a hardcoded pair", () => {
   // The full view draws breakpoints and anchors only — the Flood-day marks are
   // filtered out there, because the year holding them is 0.13 px wide — so the
   // grouping these assertions describe is the grouping of those.
-  const markers = markersFor(calibrationFor("masoretic:kpg"))
+  const markers = markersFor(calibrationFor("masoretic:kpg:default"))
     .filter((m) => m.kind !== "reference");
   // The real axis: 596 px of plot across ~4500 years, reversed.
   const realistic = (age: number) => 596 - (age / 4500) * 596;
@@ -179,7 +192,7 @@ describe("the Flood/post-Flood breakpoint names the boundary that was chosen", (
   // N/Q. A marker reading only "Flood ends" hid that.
   it("says K/Pg when the K/Pg boundary is selected", () => {
     const byKey = Object.fromEntries(
-      markersFor(calibrationFor("masoretic:kpg")).map((m) => [m.key, m]),
+      markersFor(calibrationFor("masoretic:kpg:default")).map((m) => [m.key, m]),
     );
     expect(byKey.t_F2.boundary).toBe("Cretaceous-Paleogene (K/Pg)");
     expect(byKey.t_F2.detail).toContain("Cretaceous-Paleogene (K/Pg)");
@@ -187,14 +200,14 @@ describe("the Flood/post-Flood breakpoint names the boundary that was chosen", (
 
   it("says N/Q when the N/Q boundary is selected", () => {
     const byKey = Object.fromEntries(
-      markersFor(calibrationFor("masoretic:nq")).map((m) => [m.key, m]),
+      markersFor(calibrationFor("masoretic:nq:default")).map((m) => [m.key, m]),
     );
     expect(byKey.t_F2.boundary).toBe("Neogene-Quaternary (N/Q)");
   });
 
   it("names the Flood onset as the Precambrian-Cambrian contact", () => {
     const byKey = Object.fromEntries(
-      markersFor(calibrationFor("masoretic:kpg")).map((m) => [m.key, m]),
+      markersFor(calibrationFor("masoretic:kpg:default")).map((m) => [m.key, m]),
     );
     expect(byKey.t_F.boundary).toBe("Precambrian-Cambrian");
   });
@@ -209,7 +222,7 @@ describe("the Flood/post-Flood breakpoint names the boundary that was chosen", (
   it("drops the contact name if a breakpoint is moved off it", () => {
     // Overriding t_F moves the Flood away from the Precambrian-Cambrian
     // contact, and the marker must stop claiming to sit on it.
-    const base = calibrationFor("masoretic:kpg");
+    const base = calibrationFor("masoretic:kpg:default");
     const moved = {
       ...base, params: { ...base.params, t_F: base.params.t_F - 300 },
     } as Calibration;
@@ -222,13 +235,14 @@ describe("the Flood/post-Flood breakpoint names the boundary that was chosen", (
     // The whole claim: the exponential changes exactly where the chosen
     // contact sits. For K/Pg that is the base of the Paleogene.
     for (const [preset, unit] of [
-      ["masoretic:kpg", "Paleogene"], ["masoretic:nq", "Pleistocene"],
+      ["masoretic:kpg:default", "Paleogene"], ["masoretic:nq:default", "Pleistocene"],
     ] as const) {
       const byKey = Object.fromEntries(
         markersFor(calibrationFor(preset)).map((m) => [m.key, m]),
       );
-      const base = data.presets[preset].geologic_column
-        .find((u: { name: string }) => u.name === unit).base_true_age;
+      // The column lives in the preset's own file now, not the index.
+      const base = bodyOf(preset).geologic_column
+        .find((u) => u.name === unit)!.base_true_age!;
       expect(byKey.t_F2.trueAge).toBeCloseTo(base, 6);
     }
   });
@@ -238,7 +252,7 @@ describe("a contact is claimed only while the model still puts it there", () => 
   // The constraint's trueAge is a *target* and never moves, so matching on it
   // alone claimed K/Pg forever. Raising lambda_F walks the real contact
   // hundreds of years off t_F2 while the constraint stays at 4399.
-  const solved = calibrationFor("masoretic:kpg");
+  const solved = calibrationFor("masoretic:kpg:default");
 
   it("names the contact while the fit holds", () => {
     const byKey = Object.fromEntries(markersFor(solved).map((m) => [m.key, m]));
@@ -283,7 +297,7 @@ describe("a contact is claimed only while the model still puts it there", () => 
 });
 
 describe("the Flood-day reference marks", () => {
-  const solved = calibrationFor("masoretic:kpg");
+  const solved = calibrationFor("masoretic:kpg:default");
   const byKey = Object.fromEntries(markersFor(solved).map((m) => [m.key, m]));
 
   it("places them by day count, not by eye", () => {

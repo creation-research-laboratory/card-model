@@ -61,10 +61,11 @@ function AppBody({ data }: Props) {
             chronologies: data.chronologies,
             boundaries: data.boundaries,
             calibration: data.calibration,
+            iceAgeOffsets: data.ice_age_offsets.options,
             floodDurationYears: data.flood_duration_years,
-            // Every preset carries the same unit list, including the units it
-            // cannot reach, so any one of them is a complete catalogue.
-            geologicUnits: Object.values(data.presets)[0].geologic_column.map((u) => ({
+            // The ICS chart, published once in the index: it is the same for
+            // every preset because it is an input, not a result.
+            geologicUnits: data.ics.units.map((u) => ({
               name: u.name, rank: u.rank, baseSecularAge: u.base_secular_age,
             })),
           },
@@ -78,11 +79,15 @@ function AppBody({ data }: Props) {
   // from the data rather than hardcoded, so adding a boundary to presets.json
   // is still a data-only change.
   const fullColumnBoundary = useMemo(() => {
-    for (const [key, preset] of Object.entries(data.presets)) {
-      if (preset.geologic_column.every((u) => u.in_range)) {
+    // A preset reaches every unit when the oldest apparent age it can produce
+    // covers the oldest unit base. Computed from `max_secular_age` rather than
+    // from a column, because the columns now live in the per-preset files and
+    // this has to be answerable before any of them is fetched.
+    const oldestUnit = Math.max(...data.ics.units.map((u) => u.base_secular_age));
+    for (const preset of Object.values(data.presets)) {
+      if (preset.max_secular_age >= oldestUnit) {
         return { key: preset.boundary, label: data.boundaries[preset.boundary].label };
       }
-      void key;
     }
     return null;
   }, [data]);
@@ -91,6 +96,7 @@ function AppBody({ data }: Props) {
   const [request, setRequest] = useState<CalibrationRequest>({
     chronology: data.defaults.chronology,
     boundary: data.defaults.boundary,
+    iceAge: data.defaults.ice_age,
     mode: data.defaults.mode,
   });
   const [calibration, setCalibration] = useState<Calibration | null>(null);
@@ -262,6 +268,8 @@ function AppBody({ data }: Props) {
             boundary={request.boundary}
             onChronology={(chronology) => changePreset({ chronology })}
             onBoundary={(boundary) => changePreset({ boundary })}
+            iceAge={request.iceAge}
+            onIceAge={(iceAge) => changePreset({ iceAge })}
           />
 
           {calibration ? (

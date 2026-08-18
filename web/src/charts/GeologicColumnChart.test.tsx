@@ -19,6 +19,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { GeologicColumnChart } from "./GeologicColumnChart.js";
 import { PrecomputedSource, type PrecomputedData } from "../model/PrecomputedSource.js";
+import { diskBodyLoader } from "../model/testData.js";
 import type { Calibration, GeologicColumn } from "../model/types.js";
 
 const WEB = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
@@ -26,7 +27,7 @@ const data = JSON.parse(
   readFileSync(join(WEB, "public", "precomputed.json"), "utf8"),
 ) as PrecomputedData;
 
-const source = new PrecomputedSource(data);
+const source = new PrecomputedSource(data, diskBodyLoader);
 
 let container: HTMLDivElement;
 let root: Root;
@@ -38,7 +39,7 @@ beforeEach(async () => {
   document.body.appendChild(container);
   root = createRoot(container);
   calibration = await source.calibrate({
-    chronology: "masoretic", boundary: "kpg", mode: "flood_only",
+    chronology: "masoretic", boundary: "kpg", iceAge: "default", mode: "flood_only",
   });
   column = await source.geologicColumn(calibration);
 });

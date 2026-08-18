@@ -83,24 +83,26 @@ correctly on whatever it is handed.
 
 ---
 
-## 4. The grid refinement window ignores the post-Flood tail
+## 4. The grid refinement window — fixed, and now load-bearing
 
-**Status:** accuracy, not correctness. Marked `KNOWN LIMITATION` in the code.
+**Status:** closed. Kept for the measurement history.
 
-`_relaxation_span()` in `web/tools/generate_precomputed.py` sizes the age grid's
-log-spaced refinement window from **`k_F` alone**. With two relaxation rates
-three orders of magnitude apart, that covers the fast in-Flood drop (a few
-years) and misses the millennia-long post-Flood tail.
+`_relaxation_span()` in `web/tools/generate_precomputed.py` used to size the age
+grid's log-spaced refinement window from **`k_F` alone**. With two relaxation
+rates three orders of magnitude apart that covered the fast in-Flood drop and
+missed the millennia-long post-Flood tail, and the precomputed layer's worst
+interpolation error sat at **0.77% forward / 0.86% inverse**.
 
-Measured cost: the precomputed layer's worst interpolation error is **0.77%
-forward / 0.86% inverse**, where the earlier single-rate curve managed 0.27%.
-Those figures are advertised in the UI, in `types.ts`, in `interpolate.ts`, and
-asserted in the live suite, so any fix has to move all four together.
+That was tolerable while the presets were four curves of similar shape. Adding
+the Ice Age offsets made it not: a 350-year offset forces `k_PF` an order of
+magnitude above the default, so the tail to resolve is shorter and steeper, and
+the worst error reached **4.2%** against a UI that promises about 1%. The live
+suite caught it rather than a reader.
 
-**To close:** size the window from both rates — something like
-`max(1.5·ln(λ_F)/k_F, 1.5·ln(λ_F2)/k_PF)` — re-measure, then update the four
-places above. Expect the payload to grow; it is ~60 kB gzipped now, against a
-~40 kB budget in the plan that has already been exceeded twice.
+The window is now sized from both rates, taking whichever needs the wider one.
+Worst forward error across all 70 presets is **0.98%** (at `septuagint:pt:y700`),
+so the "≈1%" the UI advertises still holds — but with less headroom than
+before. Another dimension of presets should be accompanied by re-measuring it.
 
 ---
 

@@ -122,11 +122,41 @@
   "flood_duration_years": 1.0,
   "$flood_duration_note": "True years between pairs 1 and 2 -- the Flood year. The chronology must give the Flood this length (flood_end_date = flood_start_date + this), because solve_flood_rate treats it as an input, never an unknown.",
   "post_flood_boundaries": {
+    "pt": {
+      "label": "Permian-Triassic (P-T)",
+      "note": "Post-Flood contact at 251.902 Ma (ICS; matches the Triassic base in data/ics-units.json).",
+      "secular_age": 251902000.0,
+      "uncertainty": 24000.0
+    },
     "kpg": {
       "label": "Cretaceous-Paleogene (K/Pg)",
       "note": "Post-Flood contact at 66.0 Ma (ICS), one year after onset.",
       "secular_age": 66000000.0,
       "uncertainty": 100000.0
+    },
+    "pe": {
+      "label": "Paleocene-Eocene (P-E)",
+      "note": "Post-Flood contact at 56.0 Ma (ICS). Epoch boundary inside the Paleogene, which data/ics-units.json carries as one period, so this age is not cross-checked there.",
+      "secular_age": 56000000.0,
+      "uncertainty": 100000.0
+    },
+    "eo": {
+      "label": "Eocene-Oligocene (E-O)",
+      "note": "Post-Flood contact at 33.9 Ma (ICS). Same caveat as P-E.",
+      "secular_age": 33900000.0,
+      "uncertainty": 100000.0
+    },
+    "om": {
+      "label": "Oligocene-Miocene (O-M)",
+      "note": "Post-Flood contact at 23.03 Ma (ICS; matches the Miocene base in data/ics-units.json).",
+      "secular_age": 23030000.0,
+      "uncertainty": 50000.0
+    },
+    "mp": {
+      "label": "Miocene-Pliocene (M-P)",
+      "note": "Post-Flood contact at 5.333 Ma (ICS; matches the Pliocene base in data/ics-units.json).",
+      "secular_age": 5333000.0,
+      "uncertainty": 10000.0
     },
     "nq": {
       "label": "Neogene-Quaternary (N/Q)",
@@ -134,5 +164,28 @@
       "secular_age": 2580000.0,
       "uncertainty": 10000.0
     }
+  },
+  "ice_age_offsets": {
+    "$note": [
+      "How long after the Flood's end the Ice Age ended, in true years.",
+      "",
+      "The third matched pair fixes k_PF, the post-Flood relaxation, so moving",
+      "this date moves the whole post-Flood curve. Expressed as an offset from",
+      "the Flood's end rather than as a DATE, because that is the quantity a",
+      "reader is actually reasoning about and it means the same thing in every",
+      "chronology.",
+      "",
+      "`default` is each chronology's own ice_age_end_date, kept so the shipped",
+      "calibration is unchanged: 1843 yr for Masoretic, 1123 for Septuagint.",
+      "Both are well outside the listed offsets, which is worth knowing before",
+      "reading across them."
+    ],
+    "default": "default",
+    "years_after_flood": [
+      350,
+      500,
+      700,
+      1000
+    ]
   }
 }
