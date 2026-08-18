@@ -68,6 +68,13 @@ jobs:
           bash tools/build_wheel.sh
           node tools/vendor-pyodide.mjs
 
+      - name: Build the app
+        # The deploy in docs.yml builds with a different `base`; this proves
+        # the bundle compiles at all, on every PR that touches it, rather than
+        # finding out at publish time.
+        working-directory: web
+        run: npm run build
+
       - name: Live tests (real Pyodide, real card wheel)
         working-directory: web
         run: npm run test:live
