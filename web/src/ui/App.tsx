@@ -16,8 +16,10 @@ import { LambdaHistoryChart, type LambdaZoom } from "../charts/LambdaHistoryChar
 import { AgeConverter } from "./AgeConverter.js";
 import { CalibrationReadout } from "./CalibrationReadout.js";
 import { ParameterPanel } from "./ParameterPanel.js";
+import { PowerUserToggle } from "./PowerUserToggle.js";
 import { PresetPicker } from "./PresetPicker.js";
 import { SeriesTable } from "./SeriesTable.js";
+import { PreferencesProvider, usePowerUser } from "./preferences.js";
 import { ModelSourceManager, type ManagerState } from "../model/ModelSourceManager.js";
 import { PrecomputedSource, type PrecomputedData } from "../model/PrecomputedSource.js";
 import { PyodideSource } from "../model/PyodideSource.js";
@@ -31,7 +33,16 @@ interface Props {
   data: PrecomputedData;
 }
 
-export function App({ data }: Props) {
+export function App(props: Props) {
+  return (
+    <PreferencesProvider>
+      <AppBody {...props} />
+    </PreferencesProvider>
+  );
+}
+
+function AppBody({ data }: Props) {
+  const powerUser = usePowerUser();
   const precomputed = useMemo(() => new PrecomputedSource(data), [data]);
 
   const manager = useMemo(
@@ -196,15 +207,20 @@ export function App({ data }: Props) {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>CARD — accelerated radiometric decay</h1>
-        <p>
-          Converting between young-earth ages and the apparent ages rock would
-          yield under a time-varying decay rate. The Flood begins at the
-          Precambrian–Cambrian contact and ends a year later at the boundary you
-          choose. The rate falls steeply across that year and far more slowly
-          for millennia after, so it takes three matched dates — those two
-          contacts and the end of the Ice Age — to fix the curve exactly.
-        </p>
+        <div className="app-title">
+          <h1>CARD — accelerated radiometric decay</h1>
+          <PowerUserToggle />
+        </div>
+        {powerUser ? null : (
+          <p>
+            Converting between young-earth ages and the apparent ages rock would
+            yield under a time-varying decay rate. The Flood begins at the
+            Precambrian–Cambrian contact and ends a year later at the boundary you
+            choose. The rate falls steeply across that year and far more slowly
+            for millennia after, so it takes three matched dates — those two
+            contacts and the end of the Ice Age — to fix the curve exactly.
+          </p>
+        )}
       </header>
 
       <div className="layout">
@@ -255,15 +271,17 @@ export function App({ data }: Props) {
 
           <section className="panel" aria-labelledby="source-heading">
             <h2 id="source-heading">Model source</h2>
-            <p style={{ margin: "0 0 .6rem", fontSize: ".84rem", color: "var(--text-secondary)" }}>
-              {sourceKind === "live" ? (
-                <>Running the <strong>card</strong> Python package in your
-                browser. Every value is computed, not interpolated.</>
-              ) : (
-                <>Reading precomputed results. The full model is a 5.8&nbsp;MB
-                download and is not fetched unless you ask for it.</>
-              )}
-            </p>
+            {powerUser ? null : (
+              <p style={{ margin: "0 0 .6rem", fontSize: ".84rem", color: "var(--text-secondary)" }}>
+                {sourceKind === "live" ? (
+                  <>Running the <strong>card</strong> Python package in your
+                  browser. Every value is computed, not interpolated.</>
+                ) : (
+                  <>Reading precomputed results. The full model is a 5.8&nbsp;MB
+                  download and is not fetched unless you ask for it.</>
+                )}
+              </p>
+            )}
             <span className={`badge ${sourceKind === "live" ? "live" : ""}`}>
               {sourceKind === "live" ? "live · exact" : "precomputed · ≈1%"}
             </span>

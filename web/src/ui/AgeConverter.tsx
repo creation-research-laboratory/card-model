@@ -19,6 +19,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { formatAge, significantFor } from "../charts/format.js";
+import { usePowerUser } from "./preferences.js";
 
 /** Which box the reader last typed in; the other is computed from it. */
 type Side = "true" | "apparent";
@@ -46,6 +47,7 @@ export function AgeConverter({
   forward, inverse, exact, initialApparent,
   disabled, debounceMs = 200,
 }: Props) {
+  const powerUser = usePowerUser();
   // One authoritative text and one derived, rather than two editable states.
   // Holding both as peers meant the effect depended on the derived value too,
   // so writing an answer re-triggered the conversion that produced it — a
@@ -146,9 +148,14 @@ export function AgeConverter({
         ) : busy ? (
           "converting…"
         ) : exact ? (
-          "Computed by the model."
+          // Shortened, not dropped: the element carries `aria-describedby`, and
+          // the precision caveat is a fact about the numbers rather than
+          // explanation, so it survives in every mode.
+          powerUser ? "exact" : "Computed by the model."
         ) : (
-          "Interpolated from precomputed points — good to about 1%."
+          powerUser
+            ? "interpolated, ≈1%"
+            : "Interpolated from precomputed points — good to about 1%."
         )}
       </p>
     </section>

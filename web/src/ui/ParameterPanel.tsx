@@ -21,6 +21,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { GeneralParams } from "../model/types.js";
 import { formatMultiplier, trim } from "../charts/format.js";
+import { usePowerUser } from "./preferences.js";
 
 /** One property of the JSON Schema the package emits. */
 export interface ParamProperty {
@@ -105,6 +106,7 @@ export function ParameterPanel({
   mode, fittable, values, overridden, onChange, onReset,
   willStartDownload, error, disabled, debounceMs = 100,
 }: Props) {
+  const powerUser = usePowerUser();
   // Only the names the package returned, and only those it considers free to
   // vary. Never a literal list.
   const names = useMemo(
@@ -146,7 +148,13 @@ export function ParameterPanel({
         </p>
       ) : null}
 
-      {willStartDownload ? (
+      {/*
+        * Not shown in power-user mode. The Model source panel already carries
+        * the same fact on the button that performs the download — "Load the
+        * full model (5.8 MB)" — so here it is duplication rather than a
+        * warning the reader would otherwise miss.
+        */}
+      {willStartDownload && !powerUser ? (
         <p className="notice" style={{ marginTop: 0 }}>
           Changing any of these needs the full model, a{" "}
           <strong>5.8&nbsp;MB download</strong>. It starts when you move a
@@ -190,7 +198,18 @@ export function ParameterPanel({
               aria-describedby={`d-${name}`}
               onChange={(e) => set(name, scale.fromSlider(Number(e.target.value)))}
             />
-            <p id={`d-${name}`} className="param-help">{prop.description}</p>
+            {/*
+              * Hidden, not removed. `aria-describedby` points here, and a
+              * reader who wants a denser view has not asked to be told less
+              * about what a parameter means — the label's `title` still shows
+              * it on hover, and assistive technology still reads it.
+              */}
+            <p
+              id={`d-${name}`}
+              className={powerUser ? "visually-hidden" : "param-help"}
+            >
+              {prop.description}
+            </p>
           </div>
         );
       })}

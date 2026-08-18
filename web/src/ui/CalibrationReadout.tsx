@@ -10,6 +10,7 @@ import type { Calibration } from "../model/types.js";
 import type { SourceKind } from "../model/ModelSource.js";
 import { formatAge, formatMultiplier, trim } from "../charts/format.js";
 import { lambdaF2 } from "../charts/breakpoints.js";
+import { usePowerUser } from "./preferences.js";
 
 interface Props {
   calibration: Calibration;
@@ -17,6 +18,7 @@ interface Props {
 }
 
 export function CalibrationReadout({ calibration, sourceKind }: Props) {
+  const powerUser = usePowerUser();
   // Derived from the parameters in hand, never looked up from the preset
   // table: `lambda_F2` is pinned by continuity at t_F2, so an overridden
   // lambda_F or k_F changes it, and a table lookup would keep reporting the
@@ -75,12 +77,18 @@ export function CalibrationReadout({ calibration, sourceKind }: Props) {
         </dd>
       </dl>
 
-      {sourceKind === "precomputed" ? (
+      {/*
+        * Not shown in power-user mode. The interpolation is still marked on
+        * every affected value by its own "≈", and the Model source panel's
+        * badge reads "precomputed · ≈1%", so the tolerance is on screen twice
+        * over without this paragraph.
+        */}
+      {sourceKind === "precomputed" && !powerUser ? (
         <p className="notice" style={{ marginTop: "1rem", marginBottom: 0 }}>
           Values marked <strong>≈</strong> are interpolated between precomputed
           points: good to about 0.8% converting a true age forwards, and about
-          0.9% converting an apparent age back. The parameters, residuals and the
-          plotted curves themselves are exact — the solver produced them
+          0.9% converting an apparent age back. The parameters, residuals and
+          the plotted curves themselves are exact — the solver produced them
           directly. Load the full model to make every value exact.
         </p>
       ) : null}

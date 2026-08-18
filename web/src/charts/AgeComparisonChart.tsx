@@ -26,6 +26,7 @@ import { scaleLinear, scaleLog } from "d3-scale";
 import { DEFAULT_MARGIN, linearTicks, logDecadeTicks, nearestIndex, polyline } from "./axes.js";
 import { formatAge, formatAgeTick, significantFor } from "./format.js";
 import type { Calibration, Series } from "../model/types.js";
+import { usePowerUser } from "../ui/preferences.js";
 
 /** Which quantity the vertical axis carries. */
 export type AgeOrientation = "apparent" | "true";
@@ -45,6 +46,7 @@ export function AgeComparisonChart({
   width = 720,
   height = 380,
 }: Props) {
+  const powerUser = usePowerUser();
   const wrapRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<{ index: number; left: number; top: number } | null>(null);
   const swapped = orientation === "true";
@@ -146,20 +148,22 @@ export function AgeComparisonChart({
     <figure className="chart">
       <figcaption>
         <h3>{swapped ? "True age vs. apparent age" : "Apparent age vs. true age"}</h3>
-        <p>
-          {swapped ? (
-            <>
-              What young-earth age a published radiometric age corresponds to
-              under this calibration. Apparent age is logarithmic; true age runs
-              downward, most recent at the top.
-            </>
-          ) : (
-            <>
-              How old rock of a given true age appears under this calibration.
-              Both axes logarithmic; ages are years before present.
-            </>
-          )}
-        </p>
+        {powerUser ? null : (
+  <p>
+            {swapped ? (
+              <>
+                What young-earth age a published radiometric age corresponds to
+                under this calibration. Apparent age is logarithmic; true age runs
+                downward, most recent at the top.
+              </>
+            ) : (
+              <>
+                How old rock of a given true age appears under this calibration.
+                Both axes logarithmic; ages are years before present.
+              </>
+            )}
+          </p>
+        )}
       </figcaption>
 
       <div className="chart-wrap" ref={wrapRef}>

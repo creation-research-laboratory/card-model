@@ -24,6 +24,7 @@ import { linearTicks } from "./axes.js";
 import { abbreviate, groupMarkers, markersFor, type Marker } from "./breakpoints.js";
 import { formatDuration, formatMultiplier, formatAge, trim } from "./format.js";
 import type { Calibration, GeologicColumn } from "../model/types.js";
+import { usePowerUser } from "../ui/preferences.js";
 
 /** Which stretch of time the axis covers. */
 export type ColumnZoom = "full" | "flood";
@@ -100,6 +101,7 @@ export function GeologicColumnChart({
   presentYear = new Date().getUTCFullYear(), width = 720,
   fullColumnBoundary = null, onSelectBoundary,
 }: Props) {
+  const powerUser = usePowerUser();
   const [hover, setHover] = useState<number | null>(null);
   const [openMarker, setOpenMarker] = useState<string | null>(null);
 
@@ -223,18 +225,20 @@ export function GeologicColumnChart({
     <figure className="chart">
       <figcaption>
         <h3>The geological column in young-earth time</h3>
-        <p>
-          Each unit&rsquo;s span, converted through this calibration. Time runs
-          right to left, most recent at the right. Labels give the duration and,
-          in brackets, how many secular years elapsed per young-earth year.{" "}
-          {zoom === "flood" ? (
-            <>Zoomed to the Flood year, where all but the youngest few units
-            fall — on the full axis they are thinner than a pixel.</>
-          ) : (
-            <>Most of the column is compressed into the Flood year, too narrow
-            to resolve here; the Flood view spreads it out.</>
-          )}
-        </p>
+        {powerUser ? null : (
+          <p>
+            Each unit&rsquo;s span, converted through this calibration. Time runs
+            right to left, most recent at the right. Labels give the duration and,
+            in brackets, how many secular years elapsed per young-earth year.{" "}
+            {zoom === "flood" ? (
+              <>Zoomed to the Flood year, where all but the youngest few units
+              fall — on the full axis they are thinner than a pixel.</>
+            ) : (
+              <>Most of the column is compressed into the Flood year, too narrow
+              to resolve here; the Flood view spreads it out.</>
+            )}
+          </p>
+        )}
         {onZoom ? (
           <div className="segmented" style={{ marginTop: ".5rem" }} role="group"
                aria-label="Column time range">
@@ -468,6 +472,23 @@ export function GeologicColumnChart({
             ))}
           </dl>
         ) : (
+          // Shortened, never dropped. Without a key the three line styles are
+          // indistinguishable, so this is the figure's legend rather than
+          // explanation — power-user mode trims the wording, not the keys.
+          powerUser ? (
+            <p>
+              <span className="marker-key rate" aria-hidden="true" /> rate change
+              {" · "}
+              <span className="marker-key anchor" aria-hidden="true" /> fitted
+              {zoom === "flood" ? (
+                <>
+                  {" · "}
+                  <span className="marker-key reference" aria-hidden="true" />{" "}
+                  Flood day
+                </>
+              ) : null}
+            </p>
+          ) : (
           <p>
             <span className="marker-key rate" aria-hidden="true" /> where λ or
             its relaxation constant changes ·{" "}
@@ -482,6 +503,7 @@ export function GeologicColumnChart({
             ) : null}
             . Hover any of them for detail.
           </p>
+          )
         )}
       </div>
 
