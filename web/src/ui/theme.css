@@ -89,7 +89,19 @@ body {
 }
 
 header.app-header { margin-bottom: 1.75rem; }
-header.app-header h1 { font-size: 1.35rem; margin: 0 0 .3rem; letter-spacing: -0.01em; }
+header.app-header h1 {
+  font-size: 1.35rem; margin: 0 0 .3rem; letter-spacing: -0.01em;
+  display: flex; align-items: center; gap: .5rem;
+}
+
+/* The mark takes the series colour rather than the text colour: it is the
+   model's own curve, and the charts draw that curve in the same blue. */
+.logo { color: var(--series-1); flex: none; }
+
+/* "CARD" is the package; "ulator" is what this front end adds. Weighting them
+   differently says so without a second line of explanation. */
+.wordmark { font-weight: 700; }
+.wordmark-tail { font-weight: 400; color: var(--text-secondary); }
 header.app-header p { margin: 0; color: var(--text-secondary); max-width: 62ch; }
 
 .layout {

@@ -69,7 +69,7 @@ export function PresetPicker({
 
       {powerUser ? null : (
       <p style={{ fontSize: ".8rem", color: "var(--text-secondary)", margin: "0 0 .8rem" }}>
-        The Flood <em>begins</em> at the {data.calibration.flood_start.label}{" "}
+        For this calculation, the Flood <em>begins</em> at the {data.calibration.flood_start.label}{" "}
         contact in every scenario, and the rate spikes there. This choice sets
         where it has fallen to a year later. A third date &mdash; the end of the
         Ice Age &mdash; fixes how slowly it relaxes over the millennia after.

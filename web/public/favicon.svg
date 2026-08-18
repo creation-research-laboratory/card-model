@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img"
+     aria-label="CARDulator">
+  <!--
+    The mark is a stylised lambda(t): flat at background, a hard jump at the
+    Flood, then an exponential relaxation.
+
+    Stylised deliberately. The real curve falls from 4.5e9 to 3.2e5 inside the
+    Flood year, which on a linear axis is a spike followed by nothing visible;
+    the decay rate here is chosen to read at 16px instead. It is a mark, not a
+    plot.
+
+    Colours are fixed rather than `currentColor`: a favicon has no CSS context,
+    and the plate is what guarantees contrast against a light or dark tab bar.
+    The banner version in `Logo.tsx` inherits the theme instead.
+  -->
+  <rect width="64" height="64" rx="14" fill="#2a78d6"/>
+  <path fill="#ffffff" fill-opacity="0.28"
+        d="M 10 48 L 24 48 L 24 14 L 25.23 18.49 L 26.46 22.38 L 27.69 25.76 L 28.92 28.7 L 30.15 31.25 L 31.38 33.46 L 32.62 35.38 L 33.85 37.04 L 35.08 38.49 L 36.31 39.74 L 37.54 40.83 L 38.77 41.78 L 40 42.6 L 41.23 43.31 L 42.46 43.93 L 43.69 44.47 L 44.92 44.93 L 46.15 45.34 L 47.38 45.69 L 48.62 46 L 49.85 46.26 L 51.08 46.49 L 52.31 46.69 L 53.54 46.86 L 54.77 47.01 L 56 47.14 L 56 48 Z"/>
+  <path fill="none" stroke="#ffffff" stroke-width="6"
+        stroke-linecap="round" stroke-linejoin="round"
+        d="M 10 48 L 24 48 L 24 14 L 25.23 18.49 L 26.46 22.38 L 27.69 25.76 L 28.92 28.7 L 30.15 31.25 L 31.38 33.46 L 32.62 35.38 L 33.85 37.04 L 35.08 38.49 L 36.31 39.74 L 37.54 40.83 L 38.77 41.78 L 40 42.6 L 41.23 43.31 L 42.46 43.93 L 43.69 44.47 L 44.92 44.93 L 46.15 45.34 L 47.38 45.69 L 48.62 46 L 49.85 46.26 L 51.08 46.49 L 52.31 46.69 L 53.54 46.86 L 54.77 47.01 L 56 47.14"/>
+</svg>
