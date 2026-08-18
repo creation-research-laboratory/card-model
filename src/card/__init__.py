@@ -79,6 +79,11 @@ _EXPORTS = {
     # deterministic calibration
     "CalibrationResult": "card.calibrate",
     "solve_flood_rate": "card.calibrate",
+    # series
+    "SeriesConstraint": "card.series",
+    "sample_ages": "card.series",
+    "series_rows": "card.series",
+    "to_csv": "card.series",
     "solve_flood_only": "card.calibrate",
     "solve_lambda_F": "card.calibrate",
     # plotting (matplotlib)
@@ -130,6 +135,12 @@ if TYPE_CHECKING:  # pragma: no cover
         Chronology,
         years_after_creation_to_years_before_present,
         years_before_present_to_years_after_creation,
+    )
+    from .series import (
+        SeriesConstraint,
+        sample_ages,
+        series_rows,
+        to_csv,
     )
     from .config import (
         Constraint,

@@ -106,6 +106,7 @@ nav:
       - card.constants: api/constants.md
       - card.parameters: api/parameters.md
       - card.calibrate: api/calibrate.md
+      - card.series: api/series.md
       - card.inference: api/inference.md
       - card.plotting: api/plotting.md
       - card.config: api/config.md

@@ -10,6 +10,7 @@ config rather than an edit to a script.
 card init myrun.yaml         # write a documented starter config
 card fit myrun.yaml          # run the MCMC, write chain + figures + summary
 card calibrate myrun.yaml    # solve the same constraints exactly
+card series myrun.yaml       # write the calibrated time series as CSV
 card schema                  # print the parameter spec as JSON Schema
 card --version
 ```
@@ -193,6 +194,49 @@ quietly change the posterior.
 `run_config.json` is written next to the chain. With chronology names resolved
 and command-line overrides folded in, it is the only complete record of what
 was actually run — worth keeping alongside any result you intend to cite.
+
+## The calibrated time series
+
+`card series` solves the config the same way `card calibrate` does, then writes
+the model sampled over a grid of true ages:
+
+```bash
+card series myrun.yaml -o series.csv     # 400 rows by default
+card series myrun.yaml -n 20000 > big.csv
+```
+
+The grid is log-spaced, because the structure is all at the recent end — a
+linear grid over six thousand years spends almost every point on the flat tail
+and none inside the Flood year, where λ falls by four orders of magnitude. The
+model's breakpoints are unioned in so the jump at `t_F` is a step rather than a
+diagonal, and so are the constraint ages, so the calibration's own anchors are
+exact rows rather than interpolations between neighbours.
+
+Every file opens with a provenance header:
+
+```text
+# CARD calibrated time series
+# generated: 2026-08-17T12:00:00Z   card 0.1.0
+# source: card series myrun.yaml
+# chronology: age_of_earth=6056.0 flood_start_date=1656.0 ...
+# parameters: lambda_c=1.0 k_c=0.0 t_c=1.0 lambda_F=... k_F=... k_PF=...
+# lambda_F2: 318926.84149306716 (pinned by continuity at t_F2, not an independent parameter)
+# constraint: Precambrian-Cambrian boundary: 4400.0 YBP -> 540000000.0 yr apparent (relative residual -8.9e-16)
+true_age_ybp,formation_date_yac,secular_age_yr,lambda_at_formation,acceleration_ratio
+```
+
+That header is not decoration. The web app lets a reader move the parameters,
+so most downloads describe a model that exists nowhere else, and a CSV without
+its chronology and parameters is an unreproducible number. `lambda_F2` is
+reported separately because continuity at `t_F2` pins it — feeding it back in
+as a parameter would not round-trip.
+
+`#` lines are comments to pandas (`comment='#'`) and R (`comment.char='#'`),
+but **not** to Excel, which shows them as rows.
+
+The web app's download button calls the same `card.series.to_csv`, so a file
+fetched from the site and one written here are byte-identical for the same
+model, grid and timestamp.
 
 ## Using configs from Python
 

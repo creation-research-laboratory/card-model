@@ -15,6 +15,7 @@ import { GeologicColumnChart, type ColumnZoom } from "../charts/GeologicColumnCh
 import { LambdaHistoryChart, type LambdaZoom } from "../charts/LambdaHistoryChart.js";
 import { AgeConverter } from "./AgeConverter.js";
 import { CalibrationReadout } from "./CalibrationReadout.js";
+import { CsvDownload } from "./CsvDownload.js";
 import { ParameterPanel } from "./ParameterPanel.js";
 import { PowerUserToggle } from "./PowerUserToggle.js";
 import { PresetPicker } from "./PresetPicker.js";
@@ -202,6 +203,22 @@ function AppBody({ data }: Props) {
     return manager.current.inverseAge(calibration, age);
   }, [manager, calibration, state.kind]);
 
+  // The CSV is written by Python, so it needs the live source. Unlike the
+  // converter — which is a read and must not trigger a boot on its own — a
+  // download is an explicit request, so booting here is what the reader asked
+  // for.
+  const downloadCsv = useCallback(async (points: number) => {
+    if (!calibration) throw new Error("no calibration yet");
+    const live = await manager.ensureLive();
+    const exact = await live.calibrate(effectiveRequest);
+    return live.csv(exact, {
+      points,
+      description: calibration.presetKey
+        ? `preset ${calibration.presetKey}`
+        : "custom parameters",
+    });
+  }, [manager, calibration, effectiveRequest]);
+
   const sourceKind = state.kind;
 
   return (
@@ -266,6 +283,14 @@ function AppBody({ data }: Props) {
               inverse={convertInverse}
               exact={calibration.exact}
               initialApparent={data.boundaries[request.boundary].secular_age}
+            />
+          ) : null}
+
+          {calibration ? (
+            <CsvDownload
+              calibration={calibration}
+              onDownload={downloadCsv}
+              willStartDownload={sourceKind !== "live"}
             />
           ) : null}
 

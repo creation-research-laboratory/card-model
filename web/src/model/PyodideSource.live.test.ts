@@ -12,6 +12,7 @@
 
 import { readFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -34,6 +35,37 @@ const preset = (chronology: string, boundary: string): CalibrationRequest => ({
 
 let live: PyodideSource;
 let precomputed: PrecomputedSource;
+
+/**
+ * An interpreter that can `import card`.
+ *
+ * Hardcoding `.venv/bin/python` passed locally and failed in CI with ENOENT:
+ * the workflow installs the package with `actions/setup-python` and
+ * `pip install -e .`, so `card` is importable from `python3` on PATH and there
+ * is no virtualenv at all. Probing rather than guessing covers both, and fails
+ * with something actionable instead of ENOENT when it covers neither.
+ */
+async function pythonWithCard(): Promise<string> {
+  const candidates = [
+    process.env.CARD_PYTHON,
+    join(WEB, "..", ".venv", "bin", "python"),
+    "python3",
+    "python",
+  ].filter((c): c is string => Boolean(c));
+
+  for (const bin of candidates) {
+    try {
+      execFileSync(bin, ["-c", "import card"], { stdio: "ignore" });
+      return bin;
+    } catch {
+      // Missing interpreter, or one without the package. Try the next.
+    }
+  }
+  throw new Error(
+    `no Python with \`card\` importable (tried ${candidates.join(", ")}). ` +
+    "Install it with `pip install -e .`, or set CARD_PYTHON.",
+  );
+}
 
 /** Relative agreement, with an absolute fallback for values at or near zero. */
 function closeEnough(a: number, b: number, tolerance = 1e-8): boolean {
@@ -351,6 +383,89 @@ describe("residuals describe the model on screen", () => {
       overrides: { lambda_c: 1e8, k_c: 1e-3 },
     });
     expect(cal.maxAbsResidual).toBeLessThan(1e-12);
+  });
+});
+
+describe("the CSV download", () => {
+  const STAMP = new Date("2026-08-17T12:00:00Z");
+
+  async function csvFor(boundary: string, points = 60) {
+    const cal = await live.calibrate(preset("masoretic", boundary));
+    return live.csv(cal, { points, generated: STAMP, description: "test" });
+  }
+
+  it("is byte-identical to what `card series` writes", async () => {
+    // The claim the whole module exists to support: one function behind the
+    // CLI and the download, so a file fetched from the site and one produced
+    // locally are the same bytes. Both sides are given the same timestamp,
+    // which is the only value in the file not derived from the model.
+    const cal = await live.calibrate(preset("masoretic", "kpg"));
+    const fromBrowser = await live.csv(cal, {
+      points: 60, generated: STAMP, description: "parity check",
+    });
+
+    const script = [
+      "import json, sys",
+      "from datetime import datetime, timezone",
+      "from card.chronology import Chronology",
+      "from card.models import GeneralModel, GeneralModelParams",
+      "from card.series import SeriesConstraint, to_csv",
+      "req = json.loads(sys.stdin.read())",
+      "c = req['chronology']",
+      "chron = Chronology(age_of_earth=c['ageOfEarth'],",
+      "                   flood_start_date=c['floodStartDate'],",
+      "                   flood_end_date=c['floodEndDate'],",
+      "                   ice_age_end_date=c['iceAgeEndDate'])",
+      "model = GeneralModel(GeneralModelParams.from_dict(req['params']))",
+      "cons = [SeriesConstraint(x['label'], x['trueAge'], x['secularAge'], x['residual'])",
+      "        for x in req['constraints']]",
+      "sys.stdout.write(to_csv(model, chron, points=60, constraints=cons,",
+      "    description='parity check',",
+      "    generated=datetime(2026, 8, 17, 12, 0, tzinfo=timezone.utc)))",
+    ].join("\n");
+
+    const fromPython = execFileSync(
+      await pythonWithCard(), ["-c", script],
+      {
+        encoding: "utf8",
+        input: JSON.stringify({
+          chronology: cal.chronology,
+          params: cal.params,
+          constraints: cal.constraints.map((x, i) => ({
+            label: x.label, trueAge: x.trueAge, secularAge: x.secularAge,
+            residual: cal.residuals[i],
+          })),
+        }),
+      },
+    );
+
+    expect(fromBrowser).toBe(fromPython);
+  });
+
+  it("puts every constraint on an exact row", async () => {
+    const text = await csvFor("kpg");
+    const cal = await live.calibrate(preset("masoretic", "kpg"));
+    const body = text.split("\n").filter((l) => l && !l.startsWith("#"));
+    const ages = body.slice(1).map((l) => Number(l.split(",")[0]));
+    for (const c of cal.constraints) expect(ages).toContain(c.trueAge);
+  });
+
+  it("carries enough provenance to rebuild the model", async () => {
+    // With free parameters most downloads describe a model that exists
+    // nowhere else, so a file without its chronology is an unreproducible
+    // number.
+    const text = await csvFor("kpg");
+    for (const field of ["age_of_earth", "lambda_F=", "k_F=", "k_PF=", "t_F2="]) {
+      expect(text).toContain(field);
+    }
+    expect(text).toMatch(/# constraint:.*residual/);
+  });
+
+  it("follows the boundary it was calibrated for", async () => {
+    const [kpg, nq] = await Promise.all([csvFor("kpg"), csvFor("nq")]);
+    expect(kpg).not.toBe(nq);
+    expect(kpg).toContain("66000000.0 yr apparent");
+    expect(nq).toContain("2580000.0 yr apparent");
   });
 });
 
