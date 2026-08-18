@@ -158,8 +158,12 @@ Phase 2 brief, remains genuinely unmeasured.
   3.12. Byte comparison held while there were four presets and failed at
   seventy with nothing actually stale. Numbers now compare to 1e-9 relative;
   keys, ordering, strings and which presets exist still compare exactly.
-  Verified by mutation: a 1e-12 nudge passes, a 0.01% drift, a removed preset,
-  a changed label and a 1% curve change all fail.
+  The absolute floor matters as much as the relative one: residuals sit at
+  ~1e-14, where -4.585e-14 and -4.630e-14 differ by 1% relative and are both
+  zero to any purpose. Verified by mutation: a 1e-12 nudge and the exact
+  residual CI disagreed on both pass, while a 0.01% drift in lambda_F, a
+  residual at 1e-6, a removed preset, a changed label and a 1% curve change
+  all fail.
 - **`web/spike/`** is Phase 2 measurement scaffolding. It still builds and is
   the only thing exercising the Worker path by hand, but nothing depends on it.
 - **The rejected-parameter panel cannot fire in the shipped UI.** It shows the

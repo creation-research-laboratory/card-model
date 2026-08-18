@@ -562,6 +562,12 @@ def _same(a: Any, b: Any, path: str = "") -> Optional[str]:
     model, a constraint or a preset. Everything else -- keys, ordering, strings,
     which presets exist -- still compares exactly, because that is what
     staleness actually looks like.
+
+    The absolute floor is not optional. Residuals sit at ~1e-14, where a
+    relative comparison is meaningless: -4.585e-14 and -4.630e-14 are both
+    zero to any purpose, and differ by 1% relative. That is precisely what
+    failed CI on the first attempt at this. A broken solve produces residuals
+    many orders of magnitude larger, so 1e-12 absolute still catches one.
     """
     if isinstance(a, dict) and isinstance(b, dict):
         if list(a) != list(b):
@@ -584,8 +590,7 @@ def _same(a: Any, b: Any, path: str = "") -> Optional[str]:
     if isinstance(a, (int, float)) and isinstance(b, (int, float)):
         if a == b:
             return None
-        scale = max(abs(a), abs(b))
-        if scale > 0 and abs(a - b) / scale < 1e-9:
+        if math.isclose(a, b, rel_tol=1e-9, abs_tol=1e-12):
             return None
         return f"{path}: {a!r} vs {b!r}"
     return None if a == b else f"{path}: {a!r} vs {b!r}"
