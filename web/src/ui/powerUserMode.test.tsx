@@ -203,3 +203,70 @@ describe("the choice survives a reload", () => {
     expect(document.documentElement.dataset.power).toBe("off");
   });
 });
+
+describe("preset help belongs to the control it describes", () => {
+  const picker = (chronology = "masoretic") => (
+    <PresetPicker
+      data={data} chronology={chronology} boundary="kpg" iceAge="default"
+      onChronology={() => {}} onBoundary={() => {}} onIceAge={() => {}}
+    />
+  );
+
+  /** The help each select points at, via aria-describedby. */
+  const helpFor = (id: string) => {
+    const select = container.querySelector<HTMLSelectElement>(`#${id}`)!;
+    const described = select.getAttribute("aria-describedby")!;
+    return container.querySelector(`#${described}`)!;
+  };
+
+  it("gives every select its own description", () => {
+    // The defect this fixes: one paragraph sat under the *last* select and
+    // said "this choice", meaning the one two controls above it.
+    mount(picker(), false);
+    for (const id of ["preset-chronology", "preset-boundary", "preset-ice-age"]) {
+      expect(helpFor(id).textContent).toBeTruthy();
+    }
+  });
+
+  it("describes the boundary select in terms of the boundary", () => {
+    mount(picker(), false);
+    const text = helpFor("preset-boundary").textContent ?? "";
+    expect(text).toMatch(/ends/);
+    expect(text).not.toMatch(/Ice Age/);
+  });
+
+  it("describes the Ice Age select in terms of the Ice Age", () => {
+    mount(picker(), false);
+    const text = helpFor("preset-ice-age").textContent ?? "";
+    expect(text).toMatch(/relaxes|millennia/);
+    // And no longer explains the control above it.
+    expect(text).not.toMatch(/a year later|fallen to/);
+  });
+
+  it("puts each help after the select it describes", () => {
+    // Position is the whole complaint: text before its control reads as
+    // belonging to the previous one.
+    mount(picker(), false);
+    for (const id of ["preset-chronology", "preset-boundary", "preset-ice-age"]) {
+      const select = container.querySelector(`#${id}`)!;
+      const help = helpFor(id);
+      expect(select.compareDocumentPosition(help))
+        .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    }
+  });
+
+  it("hides all of it in power-user mode, without breaking the association", () => {
+    mount(picker(), true);
+    expect(container.querySelector(".field-help")).toBeNull();
+    // Still described, still readable by assistive technology.
+    for (const id of ["preset-chronology", "preset-boundary", "preset-ice-age"]) {
+      expect(helpFor(id).className).toBe("visually-hidden");
+      expect(helpFor(id).textContent).toBeTruthy();
+    }
+  });
+
+  it("keeps the provisional warning in power-user mode", () => {
+    mount(picker("septuagint"), true);
+    expect(container.textContent).toMatch(/Provisional values/i);
+  });
+});

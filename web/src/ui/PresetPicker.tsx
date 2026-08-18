@@ -32,13 +32,44 @@ export function PresetPicker({
   const powerUser = usePowerUser();
   const chron = data.chronologies[chronology];
 
+  /**
+   * Help for one control, directly beneath it.
+   *
+   * Hidden rather than removed in power-user mode: each select points at its
+   * help with `aria-describedby`, so dropping the node would strip the
+   * description from the accessibility tree rather than merely from view —
+   * the same bargain `ParameterPanel` makes with its parameter descriptions.
+   */
+  const help = (id: string, body: React.ReactNode) => (
+    <p id={id} className={powerUser ? "visually-hidden" : "field-help"}>
+      {body}
+    </p>
+  );
+
   return (
     <section className="panel" aria-labelledby="preset-heading">
       <h2 id="preset-heading">Preset</h2>
 
+      {/*
+        * The one fact that is not about any single control: it is true in
+        * every scenario, so it frames the panel rather than sitting under the
+        * last select — which is where it used to be, describing the two
+        * controls above it as "this choice".
+        */}
+      {powerUser ? null : (
+        <p className="field-help" style={{ margin: "-.25rem 0 .8rem" }}>
+          The Flood <em>begins</em> at the{" "}
+          {data.calibration.flood_start.label} contact in every scenario, and
+          the decay rate spikes there. These three choices fix what happens
+          next.
+        </p>
+      )}
+
       <label className="field">
         <span>Chronology</span>
         <select
+          id="preset-chronology"
+          aria-describedby="preset-chronology-help"
           value={chronology}
           disabled={disabled}
           onChange={(e) => onChronology(e.target.value)}
@@ -48,6 +79,8 @@ export function PresetPicker({
           ))}
         </select>
       </label>
+      {help("preset-chronology-help",
+        <>Sets the Flood&rsquo;s dates and the age of the Earth.</>)}
 
       {chron?.provisional ? (
         <p className="notice" style={{ marginTop: "-.4rem" }}>
@@ -60,6 +93,8 @@ export function PresetPicker({
       <label className="field">
         <span>Post-Flood boundary (1 yr after onset)</span>
         <select
+          id="preset-boundary"
+          aria-describedby="preset-boundary-help"
           value={boundary}
           disabled={disabled}
           onChange={(e) => onBoundary(e.target.value)}
@@ -69,10 +104,15 @@ export function PresetPicker({
           ))}
         </select>
       </label>
+      {help("preset-boundary-help",
+        <>Which contact the Flood <em>ends</em> at, a year after it began — so
+        this is how far the rate has fallen inside that year.</>)}
 
       <label className="field">
         <span>Ice Age ends (yr after the Flood)</span>
         <select
+          id="preset-ice-age"
+          aria-describedby="preset-ice-age-help"
           value={iceAge}
           disabled={disabled}
           onChange={(e) => onIceAge(e.target.value)}
@@ -96,14 +136,9 @@ export function PresetPicker({
         </select>
       </label>
 
-      {powerUser ? null : (
-      <p style={{ fontSize: ".8rem", color: "var(--text-secondary)", margin: "0 0 .8rem" }}>
-        For this calculation, the Flood <em>begins</em> at the {data.calibration.flood_start.label}{" "}
-        contact in every scenario, and the rate spikes there. This choice sets
-        where it has fallen to a year later. A third date &mdash; the end of the
-        Ice Age &mdash; fixes how slowly it relaxes over the millennia after.
-      </p>
-      )}
+      {help("preset-ice-age-help",
+        <>The third matched date. It fixes how slowly the rate relaxes over the
+        millennia after the Flood.</>)}
 
       <h2 style={{ marginTop: "1.1rem" }}>Calibrated on</h2>
       <dl className="readout stacked">

@@ -399,3 +399,12 @@ dl.readout.stacked dd { padding-left: .1rem; }
    a 14px slider thumb is hard to place accurately on a log axis spanning
    eleven decades. */
 :root[data-power="on"] input[type="range"] { height: 1.5rem; }
+
+/* Help for a single control, directly beneath it. Tighter to its select than
+   `label.field`'s own margin, so the pairing reads as one unit. */
+.field-help {
+  margin: -.6rem 0 .8rem;
+  font-size: .8rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
