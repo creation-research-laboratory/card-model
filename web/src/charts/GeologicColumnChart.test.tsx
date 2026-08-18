@@ -48,15 +48,29 @@ afterEach(() => {
   container.remove();
 });
 
-function render() {
+function render(props: Partial<Parameters<typeof GeologicColumnChart>[0]> = {}) {
   act(() => {
     root.render(
       <StrictMode>
-        <GeologicColumnChart column={column} calibration={calibration} />
+        <GeologicColumnChart
+          column={column} calibration={calibration} {...props}
+        />
       </StrictMode>,
     );
   });
 }
+
+/** Row labels that drew a real bar, in chart order. */
+const barred = () =>
+  [...container.querySelectorAll<SVGGElement>("svg g > g")]
+    .filter((g) => g.querySelector('rect[fill*="series"]'))
+    .map((g) => g.querySelector("text")?.textContent ?? "");
+
+/** Row labels replaced by a note instead of a bar, with the note. */
+const noted = () =>
+  [...container.querySelectorAll<SVGGElement>("svg g > g")]
+    .filter((g) => !g.querySelector("rect") && g.querySelectorAll("text").length === 2)
+    .map((g) => [...g.querySelectorAll("text")].map((t) => t.textContent).join(": "));
 
 /** The marker groups, which are the only `<g>` carrying a help cursor. */
 const markerGroups = () =>
@@ -168,5 +182,71 @@ describe("the detail strip", () => {
       flood.dispatchEvent(new PointerEvent("pointerout", { bubbles: true }));
     });
     expect(detail()).toMatch(/where λ or its relaxation constant changes/);
+  });
+});
+
+describe("the Flood-year view", () => {
+  it("spreads out the units the full axis cannot resolve", () => {
+    // For the K/Pg calibration everything from the Cambrian to the Cretaceous
+    // sits between t_F2 and t_F — one year in six thousand. On the full axis
+    // those bars are sub-pixel and floored to the 2px minimum, so they carry
+    // no width information at all; the Flood view is what makes them readable.
+    render({ zoom: "full" });
+    const wideInFull = [...container.querySelectorAll<SVGRectElement>('rect[fill*="series"]')]
+      .filter((r) => Number(r.getAttribute("width")) > 3).length;
+
+    render({ zoom: "flood" });
+    const wideInFlood = [...container.querySelectorAll<SVGRectElement>('rect[fill*="series"]')]
+      .filter((r) => Number(r.getAttribute("width")) > 3).length;
+
+    expect(wideInFlood).toBeGreaterThan(wideInFull);
+  });
+
+  it("says where a unit went instead of drawing it at the frame edge", () => {
+    // Clamping alone would collapse a post-Flood unit to zero width against
+    // the right edge, then widen it to the 2px minimum — a mark exactly where
+    // the unit is not.
+    render({ zoom: "flood" });
+    const notes = noted().join(" ");
+    expect(notes).toContain("Holocene: after the Flood year");
+    expect(barred()).not.toContain("Holocene");
+  });
+
+  it("keeps the Flood's own units drawn", () => {
+    render({ zoom: "flood" });
+    for (const unit of ["Cambrian", "Jurassic", "Cretaceous"]) {
+      expect(barred()).toContain(unit);
+    }
+  });
+
+  it("separates t_F and t_F2 once the axis can resolve a year", () => {
+    // In the full view they collapse into one band; here there is room for
+    // two, so the K/Pg handover finally gets a mark of its own.
+    render({ zoom: "full" });
+    expect(markerGroups()).toHaveLength(2);       // Flood band + Ice Age
+
+    render({ zoom: "flood" });
+    const labels = markerGroups().map(labelOf);
+    expect(labels).toContain("Flood begins");
+    expect(labels).toContain("Flood ends");
+    // And the Ice Age is millennia away, so it is off this axis entirely.
+    expect(labels.join(" ")).not.toContain("Ice Age");
+  });
+
+  it("labels the axis finely enough to tell 4399 from 4400", () => {
+    // "4.4 kyr" is the same string for both ends of the Flood year, which
+    // would make the zoomed axis meaningless.
+    render({ zoom: "flood" });
+    const ticks = [...container.querySelectorAll("text")]
+      .map((t) => t.textContent ?? "")
+      .filter((t) => /^43\d\d(\.\d+)?$/.test(t));
+    expect(new Set(ticks).size).toBeGreaterThan(1);
+  });
+
+  it("offers the toggle only when it can be acted on", () => {
+    render({ zoom: "full", onZoom: () => {} });
+    expect(container.textContent).toContain("The Flood year");
+    render({ zoom: "full" });
+    expect(container.textContent).not.toContain("The Flood year");
   });
 });

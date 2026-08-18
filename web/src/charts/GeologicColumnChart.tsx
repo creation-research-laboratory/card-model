@@ -22,12 +22,17 @@ import { scaleLinear } from "d3-scale";
 
 import { linearTicks } from "./axes.js";
 import { abbreviate, groupMarkers, markersFor, type Marker } from "./breakpoints.js";
-import { formatDuration, formatMultiplier, formatAge } from "./format.js";
+import { formatDuration, formatMultiplier, formatAge, trim } from "./format.js";
 import type { Calibration, GeologicColumn } from "../model/types.js";
+
+/** Which stretch of time the axis covers. */
+export type ColumnZoom = "full" | "flood";
 
 interface Props {
   column: GeologicColumn;
   calibration: Calibration;
+  zoom?: ColumnZoom;
+  onZoom?(zoom: ColumnZoom): void;
   /** Year the "present" refers to, for the calendar-date axis. */
   presentYear?: number;
   width?: number;
@@ -84,7 +89,8 @@ function labelForGroup(markers: readonly Marker[]): {
 }
 
 export function GeologicColumnChart({
-  column, calibration, presentYear = new Date().getUTCFullYear(), width = 720,
+  column, calibration, zoom = "full", onZoom,
+  presentYear = new Date().getUTCFullYear(), width = 720,
   fullColumnBoundary = null, onSelectBoundary,
 }: Props) {
   const [hover, setHover] = useState<number | null>(null);
@@ -95,32 +101,48 @@ export function GeologicColumnChart({
   const innerH = rows.length * ROW_HEIGHT;
   const height = innerH + MARGIN.top + MARGIN.bottom;
 
-  const { x, ticks, oldest } = useMemo(() => {
-    const oldestTrue = Math.max(
-      ...rows.filter((u) => u.inRange).map((u) => u.baseTrueAge ?? 0),
-      1,
-    );
-    // Round out to a whole thousand so the axis reads in familiar steps, and
-    // never past the age of the Earth for this chronology.
-    const limit = Math.min(
-      calibration.chronology.ageOfEarth,
-      Math.ceil(oldestTrue / 500) * 500,
-    );
+  const { x, ticks, domain } = useMemo(() => {
+    const { ageOfEarth } = calibration.chronology;
+    const floodStart = ageOfEarth - calibration.params.t_F;
+    const floodEnd = ageOfEarth - calibration.params.t_F2;
+
+    let lo: number;
+    let hi: number;
+    if (zoom === "flood") {
+      // The Flood year, which is where all but a handful of the units live.
+      // For the K/Pg calibration every unit from the Cambrian to the
+      // Cretaceous sits between t_F2 and t_F — one year out of six thousand,
+      // sub-pixel on the full axis, and the whole reason for this view.
+      const span = Math.max(floodStart - floodEnd, 1e-6);
+      lo = floodEnd - span * 0.05;
+      hi = floodStart + span * 0.05;
+    } else {
+      const oldestTrue = Math.max(
+        ...rows.filter((u) => u.inRange).map((u) => u.baseTrueAge ?? 0),
+        1,
+      );
+      // Round out to a whole thousand so the axis reads in familiar steps, and
+      // never past the age of the Earth for this chronology.
+      lo = 0;
+      hi = Math.min(ageOfEarth, Math.ceil(oldestTrue / 500) * 500);
+    }
+
     return {
-      oldest: limit,
+      domain: [lo, hi] as const,
       // Reversed range: true age decreases left to right, so the present is on
-      // the right and the deep past on the left.
-      x: scaleLinear().domain([0, limit]).range([innerW, 0]),
-      ticks: linearTicks(0, limit, 6),
+      // the right and the deep past on the left. Clamped so a bar reaching
+      // outside the zoom is cut at the frame rather than drawn beyond it.
+      x: scaleLinear().domain([lo, hi]).range([innerW, 0]).clamp(true),
+      ticks: linearTicks(lo, hi, zoom === "flood" ? 4 : 6),
     };
-  }, [rows, calibration, innerW]);
+  }, [rows, calibration, innerW, zoom]);
 
   // Only the markers this axis actually reaches — the same test the bars get.
   const groups = useMemo(() => {
     const visible = markersFor(calibration)
-      .filter((m) => m.trueAge >= 0 && m.trueAge <= oldest);
+      .filter((m) => m.trueAge >= domain[0] && m.trueAge <= domain[1]);
     return groupMarkers(visible, x);
-  }, [calibration, oldest, x]);
+  }, [calibration, domain, x]);
 
   const openDetail = useMemo(() => {
     const group = groups.find(
@@ -148,8 +170,30 @@ export function GeologicColumnChart({
         <p>
           Each unit&rsquo;s span, converted through this calibration. Time runs
           right to left, most recent at the right. Labels give the duration and,
-          in brackets, how many secular years elapsed per young-earth year.
+          in brackets, how many secular years elapsed per young-earth year.{" "}
+          {zoom === "flood" ? (
+            <>Zoomed to the Flood year, where all but the youngest few units
+            fall — on the full axis they are thinner than a pixel.</>
+          ) : (
+            <>Most of the column is compressed into the Flood year, too narrow
+            to resolve here; the Flood view spreads it out.</>
+          )}
         </p>
+        {onZoom ? (
+          <div className="segmented" style={{ marginTop: ".5rem" }} role="group"
+               aria-label="Column time range">
+            <button type="button" aria-pressed={zoom === "full"}
+                    className={zoom === "full" ? "on" : ""}
+                    onClick={() => onZoom("full")}>
+              Full timeline
+            </button>
+            <button type="button" aria-pressed={zoom === "flood"}
+                    className={zoom === "flood" ? "on" : ""}
+                    onClick={() => onZoom("flood")}>
+              The Flood year
+            </button>
+          </div>
+        ) : null}
       </figcaption>
 
       <div className="chart-wrap">
@@ -164,10 +208,12 @@ export function GeologicColumnChart({
           }
         >
           <g transform={`translate(${MARGIN.left},${MARGIN.top})`}>
-            <text className="axis-title" x={innerW} y={-32} textAnchor="end"
-                  fill="var(--text-muted)">
-              Calendar date
-            </text>
+            {zoom === "flood" ? null : (
+              <text className="axis-title" x={innerW} y={-32} textAnchor="end"
+                    fill="var(--text-muted)">
+                Calendar date
+              </text>
+            )}
 
             {ticks.map((t) => {
               // The end ticks sit on the plot edges, and a centred label there
@@ -179,14 +225,20 @@ export function GeologicColumnChart({
                 <g key={t} transform={`translate(${px},0)`}>
                   <line className="grid-line" y1={-8} y2={innerH} />
                   <text className="axis-label" y={innerH + 16} textAnchor={anchor}>
-                    {t === 0 ? "0" : formatAge(t, 3)}
+                    {/* "4.4 kyr" cannot tell 4399 from 4400, and inside the
+                        Flood year that is the only distinction there is. */}
+                    {zoom === "flood" ? trim(t, 8) : t === 0 ? "0" : formatAge(t, 3)}
                   </text>
                   {/* Secondary axis: the same instants as calendar dates, which
-                      is how a reader without the BP convention will read it. */}
-                  <text className="axis-label" y={-16} textAnchor={anchor}
-                        fill="var(--text-muted)">
-                    {calendarLabel(t)}
-                  </text>
+                      is how a reader without the BP convention will read it.
+                      Dropped in the Flood view — every tick falls in the same
+                      calendar year, so the tier would repeat one label. */}
+                  {zoom === "flood" ? null : (
+                    <text className="axis-label" y={-16} textAnchor={anchor}
+                          fill="var(--text-muted)">
+                      {calendarLabel(t)}
+                    </text>
+                  )}
                 </g>
               );
             })}
@@ -258,7 +310,20 @@ export function GeologicColumnChart({
               const yTop = i * ROW_HEIGHT;
               const label = unit.name;
 
-              if (!unit.inRange) {
+              // Two different kinds of absence, said differently. A unit can
+              // have no young-earth date at all, or have one that this zoom
+              // does not cover. Clamping alone would turn the second into a
+              // zero-width bar pinned to the frame edge, then widen it to the
+              // 2px minimum — a mark exactly where the unit is not.
+              const missing = !unit.inRange
+                ? "beyond this calibration\u2019s range"
+                : unit.baseTrueAge! < domain[0]
+                  ? "after the Flood year"
+                  : unit.topTrueAge! > domain[1]
+                    ? "before the Flood year"
+                    : null;
+
+              if (missing) {
                 return (
                   <g key={label} transform={`translate(0,${yTop})`}>
                     <text className="axis-label" x={-10} y={ROW_HEIGHT / 2}
@@ -267,7 +332,7 @@ export function GeologicColumnChart({
                     </text>
                     <text className="axis-label" x={4} y={ROW_HEIGHT / 2}
                           dy="0.32em" fill="var(--text-muted)">
-                      beyond this calibration&rsquo;s range
+                      {missing}
                     </text>
                   </g>
                 );

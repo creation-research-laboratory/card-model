@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AgeComparisonChart, type AgeOrientation } from "../charts/AgeComparisonChart.js";
-import { GeologicColumnChart } from "../charts/GeologicColumnChart.js";
+import { GeologicColumnChart, type ColumnZoom } from "../charts/GeologicColumnChart.js";
 import { LambdaHistoryChart, type LambdaZoom } from "../charts/LambdaHistoryChart.js";
 import { AgeConverter } from "./AgeConverter.js";
 import { CalibrationReadout } from "./CalibrationReadout.js";
@@ -95,6 +95,9 @@ export function App({ data }: Props) {
   // model; a reader arriving with a published radiometric age wants "true".
   const [orientation, setOrientation] = useState<AgeOrientation>("apparent");
   const [lambdaZoom, setLambdaZoom] = useState<LambdaZoom>("full");
+  // The column has the same two ranges as the decay chart, and for the same
+  // reason: nearly every unit is inside the Flood year.
+  const [columnZoom, setColumnZoom] = useState<ColumnZoom>("full");
 
   // Parameter overrides the reader has made. Empty means "the preset as
   // calibrated"; anything in here makes the request non-preset, which only the
@@ -349,6 +352,8 @@ export function App({ data }: Props) {
             <GeologicColumnChart
               column={column}
               calibration={calibration}
+              zoom={columnZoom}
+              onZoom={setColumnZoom}
               fullColumnBoundary={fullColumnBoundary}
               onSelectBoundary={(boundary) =>
                 setRequest((r) => ({ ...r, boundary }))}
