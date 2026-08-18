@@ -234,8 +234,16 @@ describe("the Flood/post-Flood breakpoint names the boundary that was chosen", (
   it("marks the boundary at the same true age the column puts it", () => {
     // The whole claim: the exponential changes exactly where the chosen
     // contact sits. For K/Pg that is the base of the Paleogene.
+    // Every boundary, now that the Paleogene is split into its epochs and each
+    // one has a contact the column draws.
     for (const [preset, unit] of [
-      ["masoretic:kpg:default", "Paleogene"], ["masoretic:nq:default", "Pleistocene"],
+      ["masoretic:pt:default", "Triassic"],
+      ["masoretic:kpg:default", "Paleocene"],
+      ["masoretic:pe:default", "Eocene"],
+      ["masoretic:eo:default", "Oligocene"],
+      ["masoretic:om:default", "Miocene"],
+      ["masoretic:mp:default", "Pliocene"],
+      ["masoretic:nq:default", "Pleistocene"],
     ] as const) {
       const byKey = Object.fromEntries(
         markersFor(calibrationFor(preset)).map((m) => [m.key, m]),

@@ -136,13 +136,13 @@
     },
     "pe": {
       "label": "Paleocene-Eocene (P-E)",
-      "note": "Post-Flood contact at 56.0 Ma (ICS). Epoch boundary inside the Paleogene, which data/ics-units.json carries as one period, so this age is not cross-checked there.",
+      "note": "Post-Flood contact at 56.0 Ma (ICS; matches the Eocene base in data/ics-units.json).",
       "secular_age": 56000000.0,
       "uncertainty": 100000.0
     },
     "eo": {
       "label": "Eocene-Oligocene (E-O)",
-      "note": "Post-Flood contact at 33.9 Ma (ICS). Same caveat as P-E.",
+      "note": "Post-Flood contact at 33.9 Ma (ICS; matches the Oligocene base in data/ics-units.json).",
       "secular_age": 33900000.0,
       "uncertainty": 100000.0
     },

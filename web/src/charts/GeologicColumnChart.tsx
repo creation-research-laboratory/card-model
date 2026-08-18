@@ -13,8 +13,8 @@
  *
  * A unit whose base is older than the calibration can produce gets a marker
  * rather than a bar. Pinning the Flood to the K/Pg boundary caps the model at
- * 66 Myr, so nine of the fourteen units simply have no young-earth date — and
- * showing an empty row says that far better than omitting it.
+ * 66 Myr, so the units below it simply have no young-earth date — and showing
+ * an empty row says that far better than omitting it.
  */
 
 import { useMemo, useState } from "react";

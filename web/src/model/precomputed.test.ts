@@ -45,6 +45,17 @@ describe("generated data", () => {
     }
   });
 
+  it("gives every boundary a contact the column actually draws", () => {
+    // The reason the Paleogene is split into its epochs: a boundary the reader
+    // can select but the column has no bar edge for is a contact they cannot
+    // see. Every secular_age must be some unit's base.
+    const bases = new Set(data.ics.units.map((u) => u.base_secular_age));
+    for (const [key, b] of Object.entries(data.boundaries)) {
+      expect(bases.has(b.secular_age), `${key} has no matching unit base`)
+        .toBe(true);
+    }
+  });
+
   it("offers every boundary the model author asked for", () => {
     expect(Object.keys(data.boundaries).sort())
       .toEqual(["eo", "kpg", "mp", "nq", "om", "pe", "pt"]);
@@ -309,7 +320,7 @@ describe("geologic column", () => {
   it("carries every ICS unit, in range or not", async () => {
     for (const key of source.presetKeys) {
       const col = presetWithBody(key).geologic_column;
-      expect(col.length).toBe(14);
+      expect(col.length).toBe(data.ics.units.length);
       expect(col[0].name).toBe("Holocene");
       expect(col[col.length - 1].name).toBe("Cambrian");
     }
@@ -383,7 +394,7 @@ describe("geologic column", () => {
     const cal = await source.calibrate(preset("masoretic", "kpg"));
     const column = await source.geologicColumn(cal);
     expect(column.exact).toBe(true);
-    expect(column.units).toHaveLength(14);
+    expect(column.units).toHaveLength(data.ics.units.length);
   });
 });
 
