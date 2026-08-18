@@ -24,7 +24,7 @@ import json
 import math
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, Optional, List
 
 HERE = Path(__file__).resolve().parent
 WEB = HERE.parent
@@ -546,6 +546,51 @@ def _body_text(body: Dict[str, Any]) -> str:
     return json.dumps(body, separators=(",", ":")) + "\n"
 
 
+def _same(a: Any, b: Any, path: str = "") -> Optional[str]:
+    """
+    Structural comparison with a relative tolerance on numbers.
+
+    `--check` used to compare bytes. That held while the payload was four
+    presets; at seventy it is ~43,000 solver-derived floats, and the last
+    significant digit of `exp` and `log` is not identical across libm
+    implementations -- CI is Linux/x64 on Python 3.12, a developer machine is
+    likely neither. One flipped digit failed the check with nothing actually
+    stale.
+
+    So numbers compare to 1e-9 relative: far looser than the ninth significant
+    figure they are stored at, and far tighter than any real change to the
+    model, a constraint or a preset. Everything else -- keys, ordering, strings,
+    which presets exist -- still compares exactly, because that is what
+    staleness actually looks like.
+    """
+    if isinstance(a, dict) and isinstance(b, dict):
+        if list(a) != list(b):
+            return f"{path}: keys differ"
+        for k in a:
+            found = _same(a[k], b[k], f"{path}.{k}")
+            if found:
+                return found
+        return None
+    if isinstance(a, list) and isinstance(b, list):
+        if len(a) != len(b):
+            return f"{path}: length {len(a)} vs {len(b)}"
+        for i, (x, y) in enumerate(zip(a, b)):
+            found = _same(x, y, f"{path}[{i}]")
+            if found:
+                return found
+        return None
+    if isinstance(a, bool) or isinstance(b, bool):
+        return None if a is b else f"{path}: {a!r} vs {b!r}"
+    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+        if a == b:
+            return None
+        scale = max(abs(a), abs(b))
+        if scale > 0 and abs(a - b) / scale < 1e-9:
+            return None
+        return f"{path}: {a!r} vs {b!r}"
+    return None if a == b else f"{path}: {a!r} vs {b!r}"
+
+
 def _split(payload: Dict[str, Any]):
     """
     Separate the index from the per-preset arrays.
@@ -581,13 +626,19 @@ def main() -> int:
         if not OUTPUT_PATH.exists():
             print(f"{OUTPUT_PATH} does not exist; run this script.", file=sys.stderr)
             return 1
-        if OUTPUT_PATH.read_text() != text:
-            print(f"{OUTPUT_PATH} is stale; re-run "
+        drift = _same(json.loads(OUTPUT_PATH.read_text()), index)
+        if drift:
+            print(f"{OUTPUT_PATH} is stale ({drift}); re-run "
                   "`python web/tools/generate_precomputed.py`.", file=sys.stderr)
             return 1
-        stale = [k for k, body in bodies.items()
-                 if not _body_path(k).exists()
-                 or _body_path(k).read_text() != _body_text(body)]
+        stale = []
+        for k, body in bodies.items():
+            if not _body_path(k).exists():
+                stale.append(f"{k} (missing)")
+                continue
+            drift = _same(json.loads(_body_path(k).read_text()), body)
+            if drift:
+                stale.append(f"{k} ({drift})")
         if stale:
             print(f"{len(stale)} preset file(s) stale, e.g. {stale[0]}; re-run "
                   "`python web/tools/generate_precomputed.py`.", file=sys.stderr)

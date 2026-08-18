@@ -152,6 +152,14 @@ Phase 2 brief, remains genuinely unmeasured.
   `precomputed.json`) and silently reverted ~20 tests. After any merge from
   main, confirm: `generate_precomputed.py --check` passes, the web test counts
   have not dropped, and the app renders.
+- **`--check` compares numbers with a tolerance, not bytes.** The payload is
+  ~43,000 solver-derived floats, and the last significant digit of `exp`/`log`
+  is not identical across libm implementations — CI is Linux/x64 on Python
+  3.12. Byte comparison held while there were four presets and failed at
+  seventy with nothing actually stale. Numbers now compare to 1e-9 relative;
+  keys, ordering, strings and which presets exist still compare exactly.
+  Verified by mutation: a 1e-12 nudge passes, a 0.01% drift, a removed preset,
+  a changed label and a 1% curve change all fail.
 - **`web/spike/`** is Phase 2 measurement scaffolding. It still builds and is
   the only thing exercising the Worker path by hand, but nothing depends on it.
 - **The rejected-parameter panel cannot fire in the shipped UI.** It shows the
