@@ -227,3 +227,51 @@ describe("the Flood/post-Flood breakpoint names the boundary that was chosen", (
     }
   });
 });
+
+describe("a contact is claimed only while the model still puts it there", () => {
+  // The constraint's trueAge is a *target* and never moves, so matching on it
+  // alone claimed K/Pg forever. Raising lambda_F walks the real contact
+  // hundreds of years off t_F2 while the constraint stays at 4399.
+  const solved = calibrationFor("masoretic:kpg");
+
+  it("names the contact while the fit holds", () => {
+    const byKey = Object.fromEntries(markersFor(solved).map((m) => [m.key, m]));
+    expect(byKey.t_F2.boundary).toBe("Cretaceous-Paleogene (K/Pg)");
+    expect(byKey.t_F2.displaced).toBeUndefined();
+  });
+
+  it("stops claiming it once a slider breaks the fit", () => {
+    const broken = {
+      ...solved,
+      // What a slider does: parameters change, targets do not.
+      params: { ...solved.params, lambda_F: solved.params.lambda_F * 3 },
+      residuals: [0, 0.42, 0],
+    } as Calibration;
+    const byKey = Object.fromEntries(markersFor(broken).map((m) => [m.key, m]));
+    expect(byKey.t_F2.boundary).toBeUndefined();
+    expect(byKey.t_F2.displaced).toBe("Cretaceous-Paleogene (K/Pg)");
+    expect(byKey.t_F2.detail).toMatch(/no longer falls here/);
+    // The other two are untouched, so they keep their names.
+    expect(byKey.t_F.boundary).toBe("Precambrian-Cambrian");
+  });
+
+  it("tolerates arithmetic noise but not a real move", () => {
+    const noisy = { ...solved, residuals: [0, 1e-13, 0] } as Calibration;
+    const nudged = { ...solved, residuals: [0, 1e-3, 0] } as Calibration;
+    const boundaryOf = (c: Calibration) =>
+      markersFor(c).find((m) => m.key === "t_F2")!.boundary;
+    expect(boundaryOf(noisy)).toBe("Cretaceous-Paleogene (K/Pg)");
+    expect(boundaryOf(nudged)).toBeUndefined();
+  });
+
+  it("recomputes lambda_F2 from the parameters in hand", () => {
+    // The readout used to read this from the preset table, so it kept
+    // reporting the value the preset was solved with after an override.
+    const moved = {
+      ...solved, params: { ...solved.params, k_F: solved.params.k_F / 2 },
+    } as Calibration;
+    expect(lambdaF2(moved.params)).not.toBeCloseTo(lambdaF2(solved.params), 0);
+    // Relaxing more slowly leaves lambda higher at the Flood's end.
+    expect(lambdaF2(moved.params)).toBeGreaterThan(lambdaF2(solved.params));
+  });
+});

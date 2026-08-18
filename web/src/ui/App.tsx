@@ -221,10 +221,6 @@ export function App({ data }: Props) {
             <CalibrationReadout
               calibration={calibration}
               sourceKind={sourceKind}
-              lambdaF2={
-                data.presets[`${request.chronology}:${request.boundary}`]
-                  ?.lambda_F2
-              }
             />
           ) : null}
 

@@ -9,21 +9,19 @@
 import type { Calibration } from "../model/types.js";
 import type { SourceKind } from "../model/ModelSource.js";
 import { formatAge, formatMultiplier, trim } from "../charts/format.js";
+import { lambdaF2 } from "../charts/breakpoints.js";
 
 interface Props {
   calibration: Calibration;
   sourceKind: SourceKind;
-  /**
-   * The rate the in-Flood exponential has fallen to by the Flood's end, and so
-   * where the post-Flood one begins. Not free — continuity pins it — but it is
-   * the number that shows how much of the drop happens inside the Flood year.
-   */
-  lambdaF2?: number;
 }
 
-export function CalibrationReadout({
-  calibration, sourceKind, lambdaF2,
-}: Props) {
+export function CalibrationReadout({ calibration, sourceKind }: Props) {
+  // Derived from the parameters in hand, never looked up from the preset
+  // table: `lambda_F2` is pinned by continuity at t_F2, so an overridden
+  // lambda_F or k_F changes it, and a table lookup would keep reporting the
+  // value the preset was solved with.
+  const lambdaF2Value = lambdaF2(calibration.params);
   const { params, constraints, residuals, maxAbsResidual, exact } = calibration;
 
   return (
@@ -37,13 +35,13 @@ export function CalibrationReadout({
         <dd>{trim(params.k_F, 6)} yr⁻¹</dd>
         <dt>k<sub>PF</sub> (after)</dt>
         <dd>{trim(params.k_PF, 6)} yr⁻¹</dd>
-        {lambdaF2 !== undefined ? (
+        {Number.isFinite(lambdaF2Value) ? (
           <>
             <dt>λ at Flood&rsquo;s end</dt>
             <dd>
-              {formatMultiplier(lambdaF2)}×{" "}
+              {formatMultiplier(lambdaF2Value)}×{" "}
               <span style={{ color: "var(--text-muted)" }}>
-                (÷{formatMultiplier(params.lambda_F / lambdaF2)} inside the year)
+                (÷{formatMultiplier(params.lambda_F / lambdaF2Value)} inside the year)
               </span>
             </dd>
           </>

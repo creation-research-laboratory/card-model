@@ -35,8 +35,13 @@ export interface Marker {
   readonly trueAge: number;
   /** What happens here, in the model's terms. */
   readonly label: string;
-  /** The geological contact this coincides with, when it is one. */
+  /** The geological contact this coincides with, when it still does. */
   readonly boundary?: string;
+  /**
+   * A contact this breakpoint was calibrated onto but has since been moved
+   * off, by a parameter override. Set instead of `boundary`.
+   */
+  readonly displaced?: string;
   readonly kind: MarkerKind;
   /** One line saying what changes here, for a tooltip or caption. */
   readonly detail: string;
@@ -83,6 +88,14 @@ export function abbreviate(boundary: string): string {
   return boundary.match(/\(([^)]+)\)/)?.[1] ?? boundary;
 }
 
+/**
+ * How far out of fit a constraint may be while still counting as "met".
+ *
+ * Residuals are `predicted / target - 1`. A solved calibration sits below
+ * 1e-12, so anything above this is an override, not arithmetic noise.
+ */
+const CONTACT_TOLERANCE = 1e-6;
+
 export function markersFor(calibration: Calibration): Marker[] {
   const p = calibration.params;
   const { ageOfEarth } = calibration.chronology;
@@ -100,13 +113,26 @@ export function markersFor(calibration: Calibration): Marker[] {
    * The tolerance has to be far below the Flood year, or `t_F` and `t_F2`
    * would both match the same pair.
    */
-  const contactAt = (trueAge: number): string | undefined => {
-    const hit = constraints.find(
+  const contactAt = (
+    trueAge: number,
+  ): { boundary?: string; displaced?: string } => {
+    const i = constraints.findIndex(
       (c) => Math.abs(c.trueAge - trueAge) < 1e-6 * Math.max(1, Math.abs(trueAge)),
     );
-    if (!hit) return undefined;
-    claimed.add(hit);
-    return splitConstraintLabel(hit.label).boundary;
+    if (i < 0) return {};
+    claimed.add(constraints[i]);
+    const name = splitConstraintLabel(constraints[i].label).boundary;
+    if (!name) return {};
+
+    // A constraint is a *target*: its trueAge never moves. Whether the model
+    // still puts the contact there is a different question, and once a slider
+    // breaks the fit the answer is no -- raising lambda_F by a factor of three
+    // walks the K/Pg contact ~200 years off t_F2 while the constraint stays at
+    // 4399. Claiming the contact regardless would label the marker with a
+    // boundary the model no longer places there.
+    const residual = calibration.residuals?.[i];
+    const met = residual === undefined || Math.abs(residual) < CONTACT_TOLERANCE;
+    return met ? { boundary: name } : { displaced: name };
   };
 
   const markers: Marker[] = [];
@@ -117,7 +143,7 @@ export function markersFor(calibration: Calibration): Marker[] {
       key: "t_c",
       trueAge,
       label: "Creation week ends",
-      boundary: contactAt(trueAge),
+      ...contactAt(trueAge),
       kind: "rate",
       detail:
         `λ leaves its initial ${say(p.lambda_c)}× and begins relaxing toward ` +
@@ -130,7 +156,7 @@ export function markersFor(calibration: Calibration): Marker[] {
     key: "t_F",
     trueAge: floodStart,
     label: "Flood begins",
-    boundary: contactAt(floodStart),
+    ...contactAt(floodStart),
     kind: "rate",
     detail:
       `λ jumps to ${say(p.lambda_F)}× background and starts falling at ` +
@@ -143,13 +169,18 @@ export function markersFor(calibration: Calibration): Marker[] {
     key: "t_F2",
     trueAge: floodEnd,
     label: "Flood ends",
-    boundary: endContact,
+    ...endContact,
     kind: "rate",
     detail:
       `λ is continuous here — it has already fallen to ${say(lambdaF2(p))}× — ` +
       `but the relaxation constant switches from k_F = ${say(p.k_F)} to ` +
-      `k_PF = ${say(p.k_PF)}/yr, which governs the millennia after` +
-      (endContact ? `. This is the ${endContact} contact.` : "."),
+      `k_PF = ${say(p.k_PF)}/yr, which governs the millennia after.` +
+      (endContact.boundary
+        ? ` This is the ${endContact.boundary} contact.`
+        : endContact.displaced
+          ? ` The ${endContact.displaced} contact no longer falls here: the ` +
+            "parameters have been changed, so the model now places it elsewhere."
+          : ""),
   });
 
   // Whatever the fit used that is not a breakpoint. Derived rather than
@@ -157,11 +188,13 @@ export function markersFor(calibration: Calibration): Marker[] {
   for (const c of constraints) {
     if (claimed.has(c)) continue;
     const { role, boundary } = splitConstraintLabel(c.label);
+    const residual = calibration.residuals?.[constraints.indexOf(c)];
+    const met = residual === undefined || Math.abs(residual) < CONTACT_TOLERANCE;
     markers.push({
       key: `anchor:${c.label}`,
       trueAge: c.trueAge,
       label: role,
-      boundary,
+      ...(boundary ? (met ? { boundary } : { displaced: boundary }) : {}),
       kind: "anchor",
       detail:
         "A calibration anchor, not a rate change: nothing happens to λ here. " +

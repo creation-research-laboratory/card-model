@@ -65,27 +65,34 @@ const MIN_BAND_PX = 3;
  * the exponential handover happens exactly at K/Pg (or N/Q).
  */
 function labelForGroup(markers: readonly Marker[]): {
-  primary: string; secondary?: string;
+  primary: string; secondary?: string; displaced: boolean;
 } {
   const contacts = markers
-    .map((m) => m.boundary)
+    .map((m) => m.boundary ?? m.displaced)
     .filter((b): b is string => Boolean(b))
     .map(abbreviate);
   // Groups arrive sorted by pixel, and the axis runs oldest-left, so joining
   // in order reads the way the figure does.
   const secondary = contacts.length ? contacts.join(" → ") : undefined;
+  // A contact the model has been moved off is still worth naming — the reader
+  // needs to see *which* one drifted — but it must not read as a fact.
+  const displaced = markers.some((m) => m.displaced);
 
-  if (markers.length === 1) return { primary: markers[0].label, secondary };
+  if (markers.length === 1) {
+    return { primary: markers[0].label, secondary, displaced };
+  }
 
   const first = markers.map((m) => m.label.split(" ")[0]);
   if (first.every((w) => w === first[0])) {
     const span = Math.abs(markers[0].trueAge - markers[markers.length - 1].trueAge);
     return {
       primary: span > 0 ? `${first[0]} (${formatDuration(span)})` : first[0],
-      secondary,
+      secondary, displaced,
     };
   }
-  return { primary: markers.map((m) => m.label).join(" / "), secondary };
+  return {
+    primary: markers.map((m) => m.label).join(" / "), secondary, displaced,
+  };
 }
 
 export function GeologicColumnChart({
@@ -297,9 +304,11 @@ export function GeologicColumnChart({
                     // figure rather than only in the hover text.
                     <text
                       className="axis-label" x={mid} y={-48}
-                      textAnchor={anchor} fill="var(--text-muted)"
+                      textAnchor={anchor}
+                      fill={names.displaced ? "var(--warn)" : "var(--text-muted)"}
                     >
                       {names.secondary}
+                      {names.displaced ? " (moved)" : null}
                     </text>
                   ) : null}
                 </g>
@@ -400,6 +409,10 @@ export function GeologicColumnChart({
                   {m.label}
                   {m.boundary ? (
                     <span className="marker-contact"> — {m.boundary}</span>
+                  ) : m.displaced ? (
+                    <span className="marker-contact" style={{ color: "var(--warn)" }}>
+                      {" "}— {m.displaced} (no longer here)
+                    </span>
                   ) : null}
                   <span className="marker-age"> · {formatAge(m.trueAge, 4)} BP</span>
                 </dt>
