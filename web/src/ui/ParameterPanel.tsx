@@ -148,7 +148,13 @@ export function ParameterPanel({
         </p>
       ) : null}
 
-      {willStartDownload ? (
+      {/*
+        * Not shown in power-user mode. The Model source panel already carries
+        * the same fact on the button that performs the download — "Load the
+        * full model (5.8 MB)" — so here it is duplication rather than a
+        * warning the reader would otherwise miss.
+        */}
+      {willStartDownload && !powerUser ? (
         <p className="notice" style={{ marginTop: 0 }}>
           Changing any of these needs the full model, a{" "}
           <strong>5.8&nbsp;MB download</strong>. It starts when you move a

@@ -120,9 +120,14 @@ describe("it never removes what the reader is owed", () => {
     expect(container.querySelector('[role="alert"]')).not.toBeNull();
   });
 
-  it("keeps the download warning", () => {
-    mount(panel({ willStartDownload: true }), true);
+  it("drops the download notice, which the source panel duplicates", () => {
+    // The size is on the button that performs the download — "Load the full
+    // model (5.8 MB)" — so this paragraph is duplication in a dense view, not
+    // a warning the reader would otherwise miss.
+    mount(panel({ willStartDownload: true }), false);
     expect(container.textContent).toMatch(/5\.8\s*MB download/);
+    mount(panel({ willStartDownload: true }), true);
+    expect(container.textContent).not.toMatch(/5\.8\s*MB download/);
   });
 
   it("keeps the provisional-chronology warning", () => {
@@ -138,15 +143,19 @@ describe("it never removes what the reader is owed", () => {
     expect(container.textContent).toMatch(/Provisional values/i);
   });
 
-  it("keeps the interpolation caveat, shortened", () => {
+  it("drops the interpolation paragraph but keeps the ≈ on the values", () => {
+    // The marking is what tells a reader *which* numbers are approximate, and
+    // it is per-value — so it stays in every mode. The paragraph explaining it
+    // does not: the source badge already reads "precomputed · ≈1%".
     const readout = (
       <CalibrationReadout calibration={calibration} sourceKind="precomputed" />
     );
+    mount(readout, false);
+    expect(container.querySelector(".notice")).not.toBeNull();
+
     mount(readout, true);
-    // The numbers a reader would cite survive; the teaching around them goes.
-    expect(container.textContent).toMatch(/0\.8%/);
-    expect(container.textContent).toMatch(/0\.9%/);
-    expect(container.textContent).not.toMatch(/the solver produced them/);
+    expect(container.querySelector(".notice")).toBeNull();
+    expect(container.textContent).toContain("≈");
   });
 
   it("keeps units and values on every control", () => {

@@ -77,25 +77,19 @@ export function CalibrationReadout({ calibration, sourceKind }: Props) {
         </dd>
       </dl>
 
-      {sourceKind === "precomputed" ? (
+      {/*
+        * Not shown in power-user mode. The interpolation is still marked on
+        * every affected value by its own "≈", and the Model source panel's
+        * badge reads "precomputed · ≈1%", so the tolerance is on screen twice
+        * over without this paragraph.
+        */}
+      {sourceKind === "precomputed" && !powerUser ? (
         <p className="notice" style={{ marginTop: "1rem", marginBottom: 0 }}>
-          {/*
-            * How wrong a number may be is not explanation, so power-user mode
-            * shortens this rather than removing it. What goes is the part that
-            * says which quantities are exact — that is teaching; what stays is
-            * the figure a reader would need to cite.
-            */}
-          {powerUser ? (
-            <>Values marked <strong>≈</strong> are interpolated: ≈0.8% forward,
-            ≈0.9% inverse.</>
-          ) : (
-            <>Values marked <strong>≈</strong> are interpolated between
-            precomputed points: good to about 0.8% converting a true age
-            forwards, and about 0.9% converting an apparent age back. The
-            parameters, residuals and the plotted curves themselves are exact —
-            the solver produced them directly. Load the full model to make every
-            value exact.</>
-          )}
+          Values marked <strong>≈</strong> are interpolated between precomputed
+          points: good to about 0.8% converting a true age forwards, and about
+          0.9% converting an apparent age back. The parameters, residuals and
+          the plotted curves themselves are exact — the solver produced them
+          directly. Load the full model to make every value exact.
         </p>
       ) : null}
     </section>
