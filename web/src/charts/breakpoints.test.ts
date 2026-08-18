@@ -13,7 +13,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { abbreviate, groupMarkers, lambdaF2, markersFor } from "./breakpoints.js";
+import {
+  DAYS_PER_YEAR, abbreviate, groupMarkers, lambdaF2, markersFor,
+} from "./breakpoints.js";
 import type { Calibration, GeneralParams } from "../model/types.js";
 
 const WEB = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
@@ -139,7 +141,11 @@ describe("DATE and AGE are not confused", () => {
 });
 
 describe("grouping follows the pixel scale, not a hardcoded pair", () => {
-  const markers = markersFor(calibrationFor("masoretic:kpg"));
+  // The full view draws breakpoints and anchors only — the Flood-day marks are
+  // filtered out there, because the year holding them is 0.13 px wide — so the
+  // grouping these assertions describe is the grouping of those.
+  const markers = markersFor(calibrationFor("masoretic:kpg"))
+    .filter((m) => m.kind !== "reference");
   // The real axis: 596 px of plot across ~4500 years, reversed.
   const realistic = (age: number) => 596 - (age / 4500) * 596;
 
@@ -273,5 +279,67 @@ describe("a contact is claimed only while the model still puts it there", () => 
     expect(lambdaF2(moved.params)).not.toBeCloseTo(lambdaF2(solved.params), 0);
     // Relaxing more slowly leaves lambda higher at the Flood's end.
     expect(lambdaF2(moved.params)).toBeGreaterThan(lambdaF2(solved.params));
+  });
+});
+
+describe("the Flood-day reference marks", () => {
+  const solved = calibrationFor("masoretic:kpg");
+  const byKey = Object.fromEntries(markersFor(solved).map((m) => [m.key, m]));
+
+  it("places them by day count, not by eye", () => {
+    const floodStart = solved.chronology.ageOfEarth - solved.params.t_F;
+    expect(byKey["day:40"].trueAge).toBeCloseTo(floodStart - 40 / DAYS_PER_YEAR, 9);
+    expect(byKey["day:150"].trueAge).toBeCloseTo(floodStart - 150 / DAYS_PER_YEAR, 9);
+  });
+
+  it("uses the same year length as the bar durations", () => {
+    // `formatDuration` renders sub-year spans in days at 365.25. A different
+    // constant here would put a bar labelled "69 days" on the wrong side of
+    // the 40-day mark.
+    expect(DAYS_PER_YEAR).toBe(365.25);
+  });
+
+  it("keeps them inside the Flood year", () => {
+    const floodStart = solved.chronology.ageOfEarth - solved.params.t_F;
+    const floodEnd = solved.chronology.ageOfEarth - solved.params.t_F2;
+    for (const key of ["day:40", "day:150"]) {
+      expect(byKey[key].trueAge).toBeLessThan(floodStart);
+      expect(byKey[key].trueAge).toBeGreaterThan(floodEnd);
+    }
+  });
+
+  it("is neither a breakpoint nor an anchor, and says so", () => {
+    // The distinction the whole marker layer is built on. lambda is smooth
+    // across both of these and nothing was fitted to them, so a reader must
+    // not be able to mistake them for either.
+    for (const key of ["day:40", "day:150"]) {
+      expect(byKey[key].kind).toBe("reference");
+      expect(byKey[key].detail).toMatch(/model has no feature here/);
+      expect(byKey[key].boundary).toBeUndefined();
+    }
+  });
+
+  it("drops a day the Flood never reached", () => {
+    // t_F2 is settable. In the instantaneous-Flood limit the Flood has no
+    // days, so marking "150 days" would place it outside the Flood entirely.
+    const instant = {
+      ...solved, params: { ...solved.params, t_F2: solved.params.t_F },
+    } as Calibration;
+    const keys = markersFor(instant).map((m) => m.key);
+    expect(keys).not.toContain("day:40");
+    expect(keys).not.toContain("day:150");
+    // The breakpoints themselves survive.
+    expect(keys).toContain("t_F");
+    expect(keys).toContain("t_F2");
+  });
+
+  it("keeps a day that a longer Flood does reach", () => {
+    const halfYear = {
+      ...solved,
+      params: { ...solved.params, t_F2: solved.params.t_F + 100 / DAYS_PER_YEAR },
+    } as Calibration;
+    const keys = markersFor(halfYear).map((m) => m.key);
+    expect(keys).toContain("day:40");
+    expect(keys).not.toContain("day:150");
   });
 });

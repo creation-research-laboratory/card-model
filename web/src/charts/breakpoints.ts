@@ -27,7 +27,33 @@
 
 import type { Calibration, Constraint, GeneralParams } from "../model/types.js";
 
-export type MarkerKind = "rate" | "anchor";
+export type MarkerKind = "rate" | "anchor" | "reference";
+
+/**
+ * Julian year, matching `formatDuration` and the decay chart's day counts.
+ *
+ * The package never converts days to years — its Flood is one year and it does
+ * not subdivide it — so this convention belongs to the web layer, and all
+ * three uses have to agree or a bar reading "69 days" would sit on the wrong
+ * side of a marker reading "40 days".
+ */
+export const DAYS_PER_YEAR = 365.25;
+
+/**
+ * Days into the Flood year worth marking, from the Flood account.
+ *
+ * A third kind of mark, and the distinction matters as much as the earlier
+ * one: the model has *nothing* at either of these. They are not breakpoints
+ * (lambda is smooth across both) and not calibration anchors (nothing is
+ * fitted to them). They are narrative positions laid over the model's
+ * timeline, so a reader can see which systems the model puts down while the
+ * rain fell and which while the waters prevailed. Drawn dotted, and each says
+ * outright that the model has no feature there.
+ */
+const FLOOD_DAYS: ReadonlyArray<{ days: number; label: string; account: string }> = [
+  { days: 40, label: "40 days", account: "the rain fell for forty days (Gen. 7:12)" },
+  { days: 150, label: "150 days", account: "the waters prevailed for a hundred and fifty days (Gen. 7:24)" },
+];
 
 export interface Marker {
   readonly key: string;
@@ -182,6 +208,25 @@ export function markersFor(calibration: Calibration): Marker[] {
             "parameters have been changed, so the model now places it elsewhere."
           : ""),
   });
+
+  // Days into the Flood year. Emitted only when they actually fall inside it:
+  // t_F2 is settable, and an instantaneous-Flood limit (t_F2 == t_F) would
+  // otherwise put "150 days" somewhere the Flood never reached.
+  for (const { days, label, account } of FLOOD_DAYS) {
+    const offset = days / DAYS_PER_YEAR;
+    if (offset > p.t_F2 - p.t_F) continue;
+    markers.push({
+      key: `day:${days}`,
+      trueAge: floodStart - offset,
+      label,
+      kind: "reference",
+      detail:
+        `${days} days after the Flood began — ${account}. ` +
+        "The model has no feature here: λ is smooth across this point and " +
+        "nothing was fitted to it. It is shown so the systems either side " +
+        "can be read against the account.",
+    });
+  }
 
   // Whatever the fit used that is not a breakpoint. Derived rather than
   // hardcoded, so a fourth pair would appear here without a code change.

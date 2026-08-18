@@ -250,3 +250,88 @@ describe("the Flood-year view", () => {
     expect(container.textContent).not.toContain("The Flood year");
   });
 });
+
+describe("the Flood-day marks", () => {
+  it("appear only in the Flood view", () => {
+    // On the full axis the Flood year is 0.13 px, so they would be swallowed
+    // by its band and add two names to its hover text for no visible mark.
+    render({ zoom: "full" });
+    expect(markerGroups().map(labelOf).join(" ")).not.toMatch(/40 days/);
+
+    render({ zoom: "flood" });
+    const labels = markerGroups().map(labelOf);
+    expect(labels).toContain("40 days");
+    expect(labels).toContain("150 days");
+  });
+
+  it("are dotted, so they read as neither a breakpoint nor an anchor", () => {
+    render({ zoom: "flood" });
+    const byLabel = new Map(markerGroups().map((g) => [labelOf(g), g]));
+    const dash = (l: string) =>
+      byLabel.get(l)!.querySelector("line")!.getAttribute("stroke-dasharray");
+    expect(dash("Flood begins")).toBeNull();   // solid — lambda jumps
+    expect(dash("40 days")).toBe("1 3");       // dotted — model does nothing
+    expect(dash("150 days")).toBe("1 3");
+  });
+
+  it("sit between the systems the model puts either side of them", () => {
+    // The point of showing them: 40 days lands mid-Palaeozoic and 150 days
+    // inside the Cretaceous, so a reader can see which systems the model
+    // deposits while the rain fell and which while the waters prevailed.
+    render({ zoom: "flood" });
+    const xOf = (label: string) => {
+      const g = markerGroups().find((m) => labelOf(m) === label)!;
+      return Number(g.querySelector("line")!.getAttribute("x1"));
+    };
+    expect(xOf("Flood begins")).toBeLessThan(xOf("40 days"));
+    expect(xOf("40 days")).toBeLessThan(xOf("150 days"));
+    expect(xOf("150 days")).toBeLessThan(xOf("Flood ends"));
+  });
+
+  it("says outright that the model has no feature there", () => {
+    render({ zoom: "flood" });
+    const g = markerGroups().find((m) => labelOf(m) === "150 days")!;
+    act(() => {
+      g.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
+    });
+    expect(detail()).toMatch(/model has no feature here/);
+    expect(detail()).toMatch(/Gen\. 7:24/);
+  });
+
+  it("names the third key in the legend only where it is used", () => {
+    render({ zoom: "flood" });
+    expect(container.textContent).toMatch(/day of the Flood account/);
+    render({ zoom: "full" });
+    expect(container.textContent).not.toMatch(/day of the Flood account/);
+  });
+});
+
+describe("labels do not overwrite each other", () => {
+  /** y of a marker group's first label line. */
+  const labelY = (label: string) => {
+    const g = markerGroups().find((m) => labelOf(m) === label)!;
+    return Number(g.querySelector("text")!.getAttribute("y"));
+  };
+
+  it("drops a colliding stack to a second tier", () => {
+    // "Precambrian-Cambrian" is ~110px anchored at the Flood's start and the
+    // 40-day mark is ~59px away, so on one tier the contact name runs straight
+    // through its neighbour.
+    render({ zoom: "flood" });
+    expect(labelY("40 days")).not.toBe(labelY("Flood begins"));
+  });
+
+  it("keeps well-separated marks on the same tier", () => {
+    // Staggering everything would be as bad as staggering nothing — the tier
+    // has to mean "this one would have collided".
+    render({ zoom: "flood" });
+    expect(labelY("Flood begins")).toBe(labelY("Flood ends"));
+  });
+
+  it("leaves the full view on one tier, where the calendar sits", () => {
+    render({ zoom: "full" });
+    const ys = markerGroups().map((g) =>
+      Number(g.querySelector("text")!.getAttribute("y")));
+    expect(new Set(ys).size).toBe(1);
+  });
+});

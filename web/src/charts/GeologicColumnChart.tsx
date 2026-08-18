@@ -147,9 +147,58 @@ export function GeologicColumnChart({
   // Only the markers this axis actually reaches — the same test the bars get.
   const groups = useMemo(() => {
     const visible = markersFor(calibration)
-      .filter((m) => m.trueAge >= domain[0] && m.trueAge <= domain[1]);
+      .filter((m) => m.trueAge >= domain[0] && m.trueAge <= domain[1])
+      // The Flood-day marks live inside a year that is 0.13 px wide on the
+      // full axis, so there they would simply be swallowed by the Flood band
+      // and add two names to its hover text for no visible mark.
+      .filter((m) => zoom === "flood" || m.kind !== "reference");
     return groupMarkers(visible, x);
-  }, [calibration, domain, x]);
+  }, [calibration, domain, x, zoom]);
+
+  /**
+   * Place each label stack, dropping to a second tier when it would collide.
+   *
+   * "Precambrian-Cambrian" is 110px of text anchored at the Flood's start, and
+   * the 40-day mark is 59px away — so without this the contact name runs
+   * straight through the neighbouring label.
+   *
+   * The second tier exists only in the Flood view, which is also the only view
+   * that needs it: hiding the calendar tier there frees the band at -34/-22,
+   * and it is the view that puts four marks inside one year. The full view
+   * keeps the calendar and carries two marks — the Flood band at one end and
+   * the Ice Age millennia away — so it has neither the room nor the need.
+   */
+  const placed = useMemo(() => {
+    const tiers = zoom === "flood"
+      ? [{ primary: -60, secondary: -48 }, { primary: -34, secondary: -22 }]
+      : [{ primary: -60, secondary: -48 }];
+    // 11px sans, averaged. Only ever used to decide whether two labels clash.
+    const CHAR_PX = 5.7;
+    const rightEdge = tiers.map(() => -Infinity);
+
+    return groups.map((group) => {
+      const bandW = Math.max(MIN_BAND_PX, group.to - group.from);
+      const mid = group.from + bandW / 2;
+      const names = labelForGroup(group.markers);
+      // Both label lines share an anchor, or they would splay apart at the
+      // plot edges where one flips and the other does not.
+      const anchor: "start" | "end" | "middle" =
+        mid > innerW - 40 ? "end" : mid < 40 ? "start" : "middle";
+
+      const text = Math.max(
+        names.primary.length,
+        (names.secondary?.length ?? 0) + (names.displaced ? 8 : 0),
+      );
+      const w = text * CHAR_PX;
+      const left = anchor === "start" ? mid : anchor === "end" ? mid - w : mid - w / 2;
+
+      let tier = tiers.findIndex((_, i) => left > rightEdge[i] + 6);
+      if (tier < 0) tier = tiers.length - 1;
+      rightEdge[tier] = left + w;
+
+      return { group, names, mid, anchor, bandW, y: tiers[tier] };
+    });
+  }, [groups, innerW, zoom]);
 
   const openDetail = useMemo(() => {
     const group = groups.find(
@@ -251,17 +300,16 @@ export function GeologicColumnChart({
             })}
 
             {/* Where the model changes behaviour, and where it was pinned. */}
-            {groups.map((group) => {
+            {placed.map(({ group, names, mid, anchor, bandW, y }) => {
               const isRate = group.markers.some((m) => m.kind === "rate");
+              const isReference = group.markers.every((m) => m.kind === "reference");
+              // Solid: something changes. Dashed: fitted here. Dotted: a point
+              // in the account, where the model does nothing at all.
+              const dash = isRate ? undefined : isReference ? "1 3" : "4 3";
+              const stroke = isRate ? "var(--marker)"
+                : isReference ? "var(--text-secondary)" : "var(--text-muted)";
               const key = group.markers.map((m) => m.key).join("+");
               const isOpen = openMarker === key;
-              const bandW = Math.max(MIN_BAND_PX, group.to - group.from);
-              const mid = group.from + bandW / 2;
-              const names = labelForGroup(group.markers);
-              // Both label lines share an anchor, or they would splay apart at
-              // the plot edges where one flips and the other does not.
-              const anchor =
-                mid > innerW - 40 ? "end" : mid < 40 ? "start" : "middle";
 
               return (
                 <g
@@ -272,8 +320,8 @@ export function GeologicColumnChart({
                 >
                   {/* Generous hit target: the mark itself is a few pixels. */}
                   <rect
-                    x={group.from - 8} y={-64} width={bandW + 16}
-                    height={innerH + 64} fill="transparent"
+                    x={group.from - 8} y={y.primary - 12} width={bandW + 16}
+                    height={innerH - y.primary + 12} fill="transparent"
                   />
                   {group.markers.length > 1 ? (
                     // An interval, not an instant. Widened to stay visible, so
@@ -285,16 +333,15 @@ export function GeologicColumnChart({
                   ) : null}
                   <line
                     x1={mid} y1={-8} x2={mid} y2={innerH}
-                    stroke={isRate ? "var(--marker)" : "var(--text-muted)"}
+                    stroke={stroke}
                     strokeWidth={1}
-                    // Dashed says "fitted here", solid says "changes here".
-                    strokeDasharray={isRate ? undefined : "4 3"}
+                    strokeDasharray={dash}
                     opacity={isOpen ? 1 : 0.75}
                   />
                   <text
-                    className="axis-label" x={mid} y={-60}
+                    className="axis-label" x={mid} y={y.primary}
                     textAnchor={anchor}
-                    fill={isRate ? "var(--marker)" : "var(--text-muted)"}
+                    fill={stroke}
                   >
                     {names.primary}
                   </text>
@@ -303,7 +350,7 @@ export function GeologicColumnChart({
                     // the pair the reader chose between, so it belongs on the
                     // figure rather than only in the hover text.
                     <text
-                      className="axis-label" x={mid} y={-48}
+                      className="axis-label" x={mid} y={y.secondary}
                       textAnchor={anchor}
                       fill={names.displaced ? "var(--warn)" : "var(--text-muted)"}
                     >
@@ -405,7 +452,7 @@ export function GeologicColumnChart({
           <dl>
             {openDetail.map((m) => (
               <div key={m.key}>
-                <dt className={m.kind === "rate" ? "rate" : "anchor"}>
+                <dt className={m.kind}>
                   {m.label}
                   {m.boundary ? (
                     <span className="marker-contact"> — {m.boundary}</span>
@@ -425,7 +472,15 @@ export function GeologicColumnChart({
             <span className="marker-key rate" aria-hidden="true" /> where λ or
             its relaxation constant changes ·{" "}
             <span className="marker-key anchor" aria-hidden="true" /> a date the
-            model was fitted to. Hover either for detail.
+            model was fitted to
+            {zoom === "flood" ? (
+              <>
+                {" "}·{" "}
+                <span className="marker-key reference" aria-hidden="true" /> a
+                day of the Flood account, where the model does nothing
+              </>
+            ) : null}
+            . Hover any of them for detail.
           </p>
         )}
       </div>

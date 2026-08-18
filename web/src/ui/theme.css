@@ -343,3 +343,5 @@ dl.readout.stacked dd { padding-left: .1rem; }
 .converter-error { color: var(--warn); }
 
 .marker-detail .marker-contact { font-weight: 400; color: var(--text-secondary); }
+.marker-key.reference { border-top: 2px dotted var(--text-secondary); }
+.marker-detail dt.reference { color: var(--text-secondary); font-style: italic; }
