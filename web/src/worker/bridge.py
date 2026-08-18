@@ -108,11 +108,7 @@ def calibrate(request_json: str) -> str:
             )
             params = result.model.params
 
-            # Overrides apply on top of the solve. The Creation-week parameters
-            # do not enter either constraint (both constraint ages map to
-            # formation DATEs at or after t_F), so overriding them cannot
-            # invalidate the residuals reported below — which is what makes the
-            # general mode a data change rather than a new solver.
+            # Overrides apply on top of the solve.
             if overrides:
                 merged = params.to_dict()
                 merged.update({k: float(v) for k, v in overrides.items()})
@@ -121,10 +117,26 @@ def calibrate(request_json: str) -> str:
             model = GeneralModel(params)
             present = chronology.present_date
 
+            # Residuals are recomputed against the model actually in hand, not
+            # taken from the solve.  Once a reader can move lambda_F, k_F or
+            # k_PF, the solve's residuals describe a model that is no longer on
+            # screen: they would report machine precision while the curve misses
+            # every constraint it was fitted to.  (This was safe when only the
+            # Creation-week parameters could be overridden, because neither
+            # enters a constraint -- every constraint age maps to a formation
+            # DATE at or after t_F.  Free parameters ended that.)
+            targets = (
+                (flood_age, float(request["floodStartSecularAge"])),
+                (second_age, float(request["postFloodSecularAge"])),
+                (chronology.ice_age_end_age, float(request["iceAgeSecularAge"])),
+            )
+            residuals = [model.forward_age(age, present) / target - 1.0
+                         for age, target in targets]
+
             return _ok({
                 "params": params.to_dict(),
-                "residuals": list(result.residuals),
-                "maxAbsResidual": result.max_abs_residual,
+                "residuals": residuals,
+                "maxAbsResidual": max(abs(r) for r in residuals),
                 "maxSecularAge": model.max_secular_age(present),
                 "floodDate": result.flood_date,
                 "floodStartAge": chronology.flood_start_age,

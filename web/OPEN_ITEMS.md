@@ -152,6 +152,14 @@ Phase 2 brief, remains genuinely unmeasured.
   have not dropped, and the app renders.
 - **`web/spike/`** is Phase 2 measurement scaffolding. It still builds and is
   the only thing exercising the Worker path by hand, but nothing depends on it.
+- **The rejected-parameter panel cannot fire in the shipped UI.** It shows the
+  package's prose when a combination is refused, and the rule that reaches it is
+  the ordering one (`t_c <= t_F <= t_F2`) — which needs two date sliders. The
+  shipped mode is `flood_only`, offering `lambda_F`, `k_F`, `k_PF`, each clamped
+  to its own spec, so no combination it can produce is invalid. The path is
+  covered by unit tests and by a live test that pins the Python→JS prose, but it
+  is unexercised by hand and only becomes load-bearing when `general` mode is
+  turned on. Check it by hand at that point.
 
 ---
 
@@ -168,3 +176,10 @@ Recorded so these do not get re-litigated:
   generator and `bridge.py` call `solve_flood_rate`.
 - **That the Flood year is one year.** Confirmed twice, and the model treats its
   length as an input rather than an unknown.
+- **The age converter's settle time.** A browser probe appeared to show ~2 s
+  against a 200 ms debounce. It was the instrument: the automation pane runs
+  hidden, and browsers clamp `setTimeout` in a hidden tab — a requested 200 ms
+  measured 1069 ms. The component schedules one timer, and a unit test pins that
+  it settles within one debounce of the last keystroke. Any future timing taken
+  through the pane needs `document.visibilityState` checked first, or it is
+  measuring the clamp.

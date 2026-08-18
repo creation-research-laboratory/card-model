@@ -23,6 +23,11 @@
   --series-1: #2a78d6; /* the CARD model */
   --series-2: #eb6834; /* the constant-rate reference */
 
+  /* Breakpoint markers. Deliberately not a series slot: those are categorical
+     data, these are annotations about the model, and a marker sharing the
+     constant-rate reference's colour would read as that series. */
+  --marker: #7b5ea7;
+
   --grid: #e6e6e2;
   --warn: #9a6700;
   --ok: #1a7f37;
@@ -44,6 +49,7 @@
 
     --series-1: #3987e5;
     --series-2: #d95926;
+    --marker: #a98fd0;
 
     --grid: #2c2c2a;
     --warn: #d29922;
@@ -60,6 +66,7 @@
   --text-muted: #8f8e85;
   --series-1: #3987e5;
   --series-2: #d95926;
+  --marker: #a98fd0;
   --grid: #2c2c2a;
   --warn: #d29922;
   --ok: #3fb950;
@@ -92,6 +99,59 @@ header.app-header p { margin: 0; color: var(--text-secondary); max-width: 62ch; 
   align-items: start;
 }
 @media (max-width: 60rem) { .layout { grid-template-columns: 1fr; } }
+
+/*
+ * Two independently scrolling columns, above the stacking breakpoint only.
+ *
+ * Sticky would have been simpler, but the control column is five panels tall —
+ * more than most viewports — and a sticky block taller than the viewport pins
+ * its top and puts its bottom permanently out of reach. The reader needs to
+ * scroll *to* the control they care about and keep it there while working
+ * through the charts, which is two scroll containers, not one pinned one.
+ *
+ * `min-height: 0` on both the flex child and the grid children is what makes
+ * this work at all: the default `auto` minimum size lets a grid item grow to
+ * its content instead of scrolling.
+ */
+@media (min-width: 60.0625rem) {
+  .app {
+    height: 100vh;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    padding-top: 1.25rem;
+    padding-bottom: 1.25rem;
+  }
+  /*
+   * The header now costs its height permanently, where before it scrolled
+   * away — so it is tightened here rather than in the stacked layout, where
+   * scrolling still reclaims it. The intro is allowed a longer measure
+   * because it sits above the full width, not in a column.
+   */
+  header.app-header { flex: none; margin-bottom: .9rem; }
+  header.app-header p { max-width: 96ch; font-size: .92rem; }
+
+  .layout {
+    flex: 1 1 auto;
+    min-height: 0;
+    align-items: stretch;
+  }
+  .layout > * {
+    min-height: 0;
+    overflow-y: auto;
+    /* Stops a flick at the end of one column from scrolling the other. */
+    overscroll-behavior: contain;
+    /* Reserve the scrollbar so content does not shift when it appears. */
+    scrollbar-gutter: stable;
+    padding-bottom: 1.5rem;
+  }
+  /* The focus ring belongs on the column only when reached by keyboard. */
+  .layout > *:focus-visible {
+    outline: 2px solid var(--series-1);
+    outline-offset: -2px;
+    border-radius: var(--radius);
+  }
+}
 
 .panel {
   background: var(--surface-2);
@@ -220,3 +280,68 @@ dl.readout.stacked { grid-template-columns: 1fr; gap: .1rem; }
 dl.readout.stacked dt { white-space: normal; margin-top: .45rem; }
 dl.readout.stacked dt:first-child { margin-top: 0; }
 dl.readout.stacked dd { padding-left: .1rem; }
+
+/* Parameter controls. Generated from the package's ParamSpec, so the styling
+   has to work for a log slider spanning eleven decades and a linear one
+   spanning [0, 50] without knowing which is which. */
+.param { margin-bottom: .9rem; }
+.param-label {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: .5rem; font-size: .82rem; margin-bottom: .2rem;
+}
+.param-label > span { color: var(--text-secondary); }
+.param-unit { color: var(--text-muted); font-size: .75rem; }
+.param-label output {
+  font-family: var(--mono); font-size: .8rem;
+  font-variant-numeric: tabular-nums; color: var(--text-primary);
+}
+.param-label output.changed { color: var(--series-1); font-weight: 600; }
+.param input[type="range"] { width: 100%; accent-color: var(--series-1); }
+.param input[type="range"]:disabled { opacity: .5; }
+.param-help {
+  margin: .15rem 0 0; font-size: .72rem; color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* Breakpoint markers on the geological column.
+
+   The strip keeps a fixed minimum height whether or not a marker is hovered:
+   swapping the legend for a two-line detail would otherwise shift every row
+   below it, and the thing being hovered is a three-pixel band. */
+.marker-detail {
+  min-height: 3.2rem;
+  margin: .5rem 0 0;
+  font-size: .78rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+.marker-detail p { margin: 0; }
+.marker-detail dl { margin: 0; display: grid; gap: .3rem; }
+.marker-detail dt {
+  font-weight: 600; color: var(--text-primary); font-size: .78rem;
+}
+.marker-detail dt.rate { color: var(--marker); }
+.marker-detail dt.anchor { color: var(--text-secondary); }
+.marker-detail dd { margin: 0; }
+.marker-age { font-weight: 400; color: var(--text-muted); font-family: var(--mono); }
+
+/* Legend keys: a solid rule for a rate change, a dashed one for a fitted date,
+   matching how each is drawn in the figure. */
+.marker-key {
+  display: inline-block; width: 1.4rem; height: 0;
+  vertical-align: middle; margin-right: .15rem;
+}
+.marker-key.rate { border-top: 2px solid var(--marker); }
+.marker-key.anchor { border-top: 2px dashed var(--text-muted); }
+
+/* Age converter. The arrow shows which way the conversion is running, so the
+   reader can see which box is authoritative rather than guessing. */
+.converter-arrow {
+  text-align: center; color: var(--text-muted);
+  font-size: 1.1rem; line-height: 1; margin: -.35rem 0 .35rem;
+}
+.converter-error { color: var(--warn); }
+
+.marker-detail .marker-contact { font-weight: 400; color: var(--text-secondary); }
+.marker-key.reference { border-top: 2px dotted var(--text-secondary); }
+.marker-detail dt.reference { color: var(--text-secondary); font-style: italic; }

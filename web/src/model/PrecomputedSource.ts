@@ -45,10 +45,29 @@ export interface PrecomputedData {
   }>;
   boundaries: Record<string, { label: string; secular_age: number; uncertainty: number }>;
   calibration: {
-    flood_start: { label: string; secular_age: number };
-    ice_age_end: { label: string; secular_age: number };
+    flood_start: { label: string; secular_age: number; uncertainty: number };
+    ice_age_end: { label: string; secular_age: number; uncertainty: number };
   };
   flood_duration_years: number;
+  /**
+   * The parameter form, per mode and chronology, emitted by the same
+   * `to_json_schema` call the live source would make. Present here so the
+   * panel can render before Pyodide has booted — the controls are what tell a
+   * reader the download is worth starting.
+   */
+  modes: Record<string, {
+    label: string;
+    enabled: boolean;
+    by_chronology: Record<string, {
+      schema: { properties: Record<string, {
+        title: string; description: string; default: number;
+        minimum: number; maximum: number;
+        "x-unit": string; "x-log-scale": boolean; "x-is-date": boolean;
+      }> };
+      free: string[];
+      fixed: Record<string, number>;
+    }>;
+  } | string[]>;
   presets: Record<string, {
     chronology: string;
     boundary: string;
@@ -101,6 +120,25 @@ export class PrecomputedSource implements ModelSource {
 
   get defaults(): PrecomputedData["defaults"] {
     return this.data.defaults;
+  }
+
+  /** Names the package considers free to vary (`ParamSpec.is_fittable`). */
+  get fittable(): string[] {
+    return (this.data.modes["$fittable"] as string[]) ?? [];
+  }
+
+  /** The parameter form for one mode under one chronology, or null. */
+  schemaFor(mode: string, chronology: string) {
+    const entry = this.data.modes[mode];
+    if (!entry || Array.isArray(entry)) return null;
+    return entry.by_chronology[chronology] ?? null;
+  }
+
+  /** Modes the app should offer. `general` ships authored but disabled. */
+  get enabledModes(): string[] {
+    return Object.entries(this.data.modes)
+      .filter(([k, v]) => !k.startsWith("$") && !Array.isArray(v) && v.enabled)
+      .map(([k]) => k);
   }
 
   /** Preset keys this source can answer, for a UI that lists them. */

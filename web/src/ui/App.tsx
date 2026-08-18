@@ -11,9 +11,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AgeComparisonChart, type AgeOrientation } from "../charts/AgeComparisonChart.js";
-import { GeologicColumnChart } from "../charts/GeologicColumnChart.js";
+import { GeologicColumnChart, type ColumnZoom } from "../charts/GeologicColumnChart.js";
 import { LambdaHistoryChart, type LambdaZoom } from "../charts/LambdaHistoryChart.js";
+import { AgeConverter } from "./AgeConverter.js";
 import { CalibrationReadout } from "./CalibrationReadout.js";
+import { ParameterPanel } from "./ParameterPanel.js";
 import { PresetPicker } from "./PresetPicker.js";
 import { SeriesTable } from "./SeriesTable.js";
 import { ModelSourceManager, type ManagerState } from "../model/ModelSourceManager.js";
@@ -21,7 +23,8 @@ import { PrecomputedSource, type PrecomputedData } from "../model/PrecomputedSou
 import { PyodideSource } from "../model/PyodideSource.js";
 import { WorkerTransport } from "../worker/transport.js";
 import type {
-  Calibration, CalibrationRequest, GeologicColumn, LambdaSeries, Series,
+  Calibration, CalibrationRequest, GeneralParams, GeologicColumn,
+  LambdaSeries, Series,
 } from "../model/types.js";
 
 interface Props {
@@ -81,11 +84,35 @@ export function App({ data }: Props) {
   const [series, setSeries] = useState<Series | null>(null);
   const [history, setHistory] = useState<LambdaSeries | null>(null);
   const [column, setColumn] = useState<GeologicColumn | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // `fromParameters` decides where the message belongs. A rejected slider
+  // combination is reported beside the sliders; anything else stays with the
+  // charts. The two travel together because showing one without the other is
+  // how a message ends up in the wrong column.
+  const [failure, setFailure] = useState<
+    { message: string; fromParameters: boolean } | null
+  >(null);
   // Which way round the age chart is read. Both directions are the same
   // model; a reader arriving with a published radiometric age wants "true".
   const [orientation, setOrientation] = useState<AgeOrientation>("apparent");
   const [lambdaZoom, setLambdaZoom] = useState<LambdaZoom>("full");
+  // The column has the same two ranges as the decay chart, and for the same
+  // reason: nearly every unit is inside the Flood year.
+  const [columnZoom, setColumnZoom] = useState<ColumnZoom>("full");
+
+  // Parameter overrides the reader has made. Empty means "the preset as
+  // calibrated"; anything in here makes the request non-preset, which only the
+  // live source can answer.
+  const [overrides, setOverrides] = useState<Partial<GeneralParams>>({});
+  const overridden = useMemo(
+    () => new Set(Object.keys(overrides)), [overrides],
+  );
+
+  // The parameter form, from the package. Available before Pyodide boots
+  // because the generator emits it alongside the presets.
+  const modeSchema = useMemo(
+    () => precomputed.schemaFor(request.mode, request.chronology),
+    [precomputed, request.mode, request.chronology],
+  );
 
   useEffect(() => manager.subscribe(setState), [manager]);
 
@@ -116,14 +143,53 @@ export function App({ data }: Props) {
       setSeries(curve);
       setHistory(lambda);
       setColumn(geology);
-      setError(null);
+      setFailure(null);
     } catch (caught) {
       if (mine !== generation.current) return;
-      setError(caught instanceof Error ? caught.message : String(caught));
+      // The last good calibration stays on screen — recomputing it would cost
+      // another solve and the reader is mid-drag — so the failure has to say
+      // that the figures are no longer the parameters shown.
+      setFailure({
+        message: caught instanceof Error ? caught.message : String(caught),
+        fromParameters: Boolean(next.overrides),
+      });
     }
   }, [manager]);
 
-  useEffect(() => { void load(request); }, [load, request]);
+  // Overrides are part of what gets solved, so they belong in the request the
+  // loader sees rather than in a second channel.
+  const effectiveRequest = useMemo<CalibrationRequest>(
+    () => (overridden.size ? { ...request, overrides } : request),
+    [request, overrides, overridden.size],
+  );
+
+  useEffect(() => { void load(effectiveRequest); }, [load, effectiveRequest]);
+
+  // Changing preset abandons any overrides: they were values for a different
+  // calibration, and carrying them across would silently mix two scenarios.
+  const changePreset = useCallback((patch: Partial<CalibrationRequest>) => {
+    setOverrides({});
+    setRequest((r) => ({ ...r, ...patch }));
+  }, []);
+
+  const onParameter = useCallback((name: string, value: number) => {
+    setOverrides((o) => ({ ...o, [name]: value }));
+  }, []);
+
+  // The converter asks the source in force, against the calibration on screen.
+  // Rebuilt when either changes, so a slider move updates the answer without
+  // the reader retyping it. Unlike a parameter change, converting is a *read* —
+  // it must not start the 5.8 MB download on its own, so it stays on whatever
+  // source is already up.
+  const convertForward = useCallback(async (age: number) => {
+    if (!calibration) throw new Error("no calibration yet");
+    return manager.current.forwardAge(calibration, age);
+  }, [manager, calibration, state.kind]);
+
+  const convertInverse = useCallback(async (age: number) => {
+    if (!calibration) throw new Error("no calibration yet");
+    return manager.current.inverseAge(calibration, age);
+  }, [manager, calibration, state.kind]);
 
   const sourceKind = state.kind;
 
@@ -142,23 +208,48 @@ export function App({ data }: Props) {
       </header>
 
       <div className="layout">
-        <div>
+        {/*
+          * `tabIndex` because a scroll container that only a mouse can reach is
+          * unusable by keyboard. Chrome and Firefox now focus overflow
+          * containers on their own; Safari does not, so it is set explicitly.
+          */}
+        <div role="region" aria-label="Model controls" tabIndex={0}>
           <PresetPicker
             data={data}
             chronology={request.chronology}
             boundary={request.boundary}
-            onChronology={(chronology) => setRequest((r) => ({ ...r, chronology }))}
-            onBoundary={(boundary) => setRequest((r) => ({ ...r, boundary }))}
+            onChronology={(chronology) => changePreset({ chronology })}
+            onBoundary={(boundary) => changePreset({ boundary })}
           />
 
           {calibration ? (
             <CalibrationReadout
               calibration={calibration}
               sourceKind={sourceKind}
-              lambdaF2={
-                data.presets[`${request.chronology}:${request.boundary}`]
-                  ?.lambda_F2
-              }
+            />
+          ) : null}
+
+          {modeSchema && calibration ? (
+            <ParameterPanel
+              mode={modeSchema}
+              fittable={precomputed.fittable}
+              values={calibration.params}
+              overridden={overridden}
+              onChange={onParameter}
+              onReset={() => setOverrides({})}
+              error={failure?.fromParameters ? failure.message : null}
+              // Honest about the cost before it is incurred, rather than
+              // freezing on a 5.8 MB fetch the reader did not ask for.
+              willStartDownload={sourceKind !== "live"}
+            />
+          ) : null}
+
+          {calibration ? (
+            <AgeConverter
+              forward={convertForward}
+              inverse={convertInverse}
+              exact={calibration.exact}
+              initialApparent={data.boundaries[request.boundary].secular_age}
             />
           ) : null}
 
@@ -201,9 +292,21 @@ export function App({ data }: Props) {
           </section>
         </div>
 
-        <main>
-          {error ? (
-            <p className="notice"><strong>Error.</strong> {error}</p>
+        <main aria-label="Charts" tabIndex={0}>
+          {failure && !failure.fromParameters ? (
+            <p className="notice"><strong>Error.</strong> {failure.message}</p>
+          ) : null}
+
+          {failure?.fromParameters ? (
+            // The prose itself is beside the controls; repeating it here would
+            // just be loud. What this column has to say is that the figures
+            // below are stale — they are the last combination that solved, not
+            // the one the sliders are showing.
+            <p className="notice">
+              <strong>These figures are out of date.</strong> They show the last
+              parameters the model accepted; see <em>Parameters</em> for why the
+              current ones were rejected.
+            </p>
           ) : null}
 
           {series && calibration ? (
@@ -250,6 +353,8 @@ export function App({ data }: Props) {
             <GeologicColumnChart
               column={column}
               calibration={calibration}
+              zoom={columnZoom}
+              onZoom={setColumnZoom}
               fullColumnBoundary={fullColumnBoundary}
               onSelectBoundary={(boundary) =>
                 setRequest((r) => ({ ...r, boundary }))}

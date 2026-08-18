@@ -316,6 +316,44 @@ describe("custom parameters — the thing only the live source can do", () => {
   });
 });
 
+describe("residuals describe the model on screen", () => {
+  it("reports machine precision only while nothing is overridden", async () => {
+    const cal = await live.calibrate(preset("masoretic", "kpg"));
+    expect(cal.maxAbsResidual).toBeLessThan(1e-12);
+  });
+
+  it("recomputes them once a fitted parameter is moved", async () => {
+    // The bug this pins: residuals used to be taken from the solve, which runs
+    // *before* overrides are applied. Moving lambda_F then left the readout
+    // claiming an exact fit for a curve that missed every constraint. Free
+    // parameters are exactly what made that reachable.
+    const base = await live.calibrate(preset("masoretic", "kpg"));
+    const moved = await live.calibrate({
+      ...preset("masoretic", "kpg"),
+      overrides: { lambda_F: base.params.lambda_F * 1.66 },
+    });
+    expect(moved.maxAbsResidual).toBeGreaterThan(0.1);
+
+    // And the reported residuals match what the model actually produces.
+    for (let i = 0; i < moved.constraints.length; i++) {
+      const c = moved.constraints[i];
+      const got = await live.forwardAge(moved, c.trueAge);
+      expect(moved.residuals[i]).toBeCloseTo(got / c.secularAge - 1, 9);
+    }
+  });
+
+  it("still reports exact for a Creation-week override", async () => {
+    // lambda_c and k_c do not enter any constraint — every constraint age maps
+    // to a formation DATE at or after t_F — so the fit is genuinely untouched.
+    // This is what the recompute must NOT break.
+    const cal = await live.calibrate({
+      ...preset("masoretic", "kpg"),
+      overrides: { lambda_c: 1e8, k_c: 1e-3 },
+    });
+    expect(cal.maxAbsResidual).toBeLessThan(1e-12);
+  });
+});
+
 describe("errors and warnings come from the package", () => {
   it("surfaces the package's own prose for an out-of-domain age", async () => {
     const cal = await live.calibrate(preset("masoretic", "kpg"));
@@ -330,6 +368,52 @@ describe("errors and warnings come from the package", () => {
     await expect(live.calibrate({
       ...preset("masoretic", "kpg"), overrides: { lambda_F: 0.5 },
     })).rejects.toThrow(/must be >= 1/);
+  });
+
+  it("describes the fit with as many constraints as it has residuals", async () => {
+    // The live source used to build two Constraint objects while the bridge
+    // returned three residuals, so `residuals[2]` -- the Ice Age -- had no
+    // constraint beside it. Anything zipping the two lists silently dropped
+    // the third pair, and the readout reported two thirds of the fit as if it
+    // were all of it.
+    const cal = await live.calibrate(preset("masoretic", "kpg"));
+    expect(cal.constraints).toHaveLength(cal.residuals.length);
+    expect(cal.constraints).toHaveLength(3);
+  });
+
+  it("agrees with the precomputed source on what was fitted", async () => {
+    // Both sources answer the same question, so they must describe the same
+    // three pairs -- same labels, same ages. The markers read these labels to
+    // name the boundary, so a divergence here would show up on the chart.
+    for (const boundary of ["kpg", "nq"] as const) {
+      const request = preset("masoretic", boundary);
+      const [liveCal, preCal] = await Promise.all([
+        live.calibrate(request), precomputed.calibrate(request),
+      ]);
+      expect(liveCal.constraints.map((c) => c.label))
+        .toEqual(preCal.constraints.map((c) => c.label));
+      for (let i = 0; i < liveCal.constraints.length; i++) {
+        expect(liveCal.constraints[i].trueAge)
+          .toBeCloseTo(preCal.constraints[i].trueAge, 6);
+        expect(liveCal.constraints[i].secularAge)
+          .toBeCloseTo(preCal.constraints[i].secularAge, 6);
+      }
+    }
+  });
+
+  it("rejects a combination no single slider bound could prevent", async () => {
+    // The one the UI actually has to handle. Every control is clamped to its
+    // own spec, so a lone parameter cannot leave its range — but `t_c` and
+    // `t_F` are independently draggable across the same interval, and the
+    // model requires t_c <= t_F <= t_F2. Nothing about a per-parameter bound
+    // catches that, which is why the panel shows the package's prose.
+    const rejected = live.calibrate({
+      ...preset("masoretic", "kpg"),
+      overrides: { t_c: 3000, t_F: 1656 },
+    });
+    await expect(rejected).rejects.toThrow(ModelError);
+    // The explanation, not just the complaint.
+    await expect(rejected).rejects.toThrow(/must be ordered/);
   });
 
   it("passes non-blocking warnings through instead of swallowing them", async () => {
