@@ -13,6 +13,11 @@ uncertainties.
 
 <div class="grid cards" markdown>
 
+-   :material-chart-line: **[Interactive app](app/){ .external }**
+
+    Explore the model in your browser — presets, free parameters, and a CSV
+    of the calibrated series. Runs the real package under Pyodide.
+
 -   :material-function-variant: **[The model](model.md)**
 
     The piecewise \(\lambda(t)\), the age integral, and its closed form.
