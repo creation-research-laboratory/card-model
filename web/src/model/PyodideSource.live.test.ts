@@ -354,6 +354,90 @@ describe("residuals describe the model on screen", () => {
   });
 });
 
+describe("the CSV download", () => {
+  const STAMP = new Date("2026-08-17T12:00:00Z");
+
+  async function csvFor(boundary: string, points = 60) {
+    const cal = await live.calibrate(preset("masoretic", boundary));
+    return live.csv(cal, { points, generated: STAMP, description: "test" });
+  }
+
+  it("is byte-identical to what `card series` writes", async () => {
+    // The claim the whole module exists to support: one function behind the
+    // CLI and the download, so a file fetched from the site and one produced
+    // locally are the same bytes. Both sides are given the same timestamp,
+    // which is the only value in the file not derived from the model.
+    const cal = await live.calibrate(preset("masoretic", "kpg"));
+    const fromBrowser = await live.csv(cal, {
+      points: 60, generated: STAMP, description: "parity check",
+    });
+
+    const script = [
+      "import json, sys",
+      "from datetime import datetime, timezone",
+      "from card.chronology import Chronology",
+      "from card.models import GeneralModel, GeneralModelParams",
+      "from card.series import SeriesConstraint, to_csv",
+      "req = json.loads(sys.stdin.read())",
+      "c = req['chronology']",
+      "chron = Chronology(age_of_earth=c['ageOfEarth'],",
+      "                   flood_start_date=c['floodStartDate'],",
+      "                   flood_end_date=c['floodEndDate'],",
+      "                   ice_age_end_date=c['iceAgeEndDate'])",
+      "model = GeneralModel(GeneralModelParams.from_dict(req['params']))",
+      "cons = [SeriesConstraint(x['label'], x['trueAge'], x['secularAge'], x['residual'])",
+      "        for x in req['constraints']]",
+      "sys.stdout.write(to_csv(model, chron, points=60, constraints=cons,",
+      "    description='parity check',",
+      "    generated=datetime(2026, 8, 17, 12, 0, tzinfo=timezone.utc)))",
+    ].join("\n");
+
+    const { execFileSync } = await import("node:child_process");
+    const fromPython = execFileSync(
+      join(WEB, "..", ".venv", "bin", "python"), ["-c", script],
+      {
+        encoding: "utf8",
+        input: JSON.stringify({
+          chronology: cal.chronology,
+          params: cal.params,
+          constraints: cal.constraints.map((x, i) => ({
+            label: x.label, trueAge: x.trueAge, secularAge: x.secularAge,
+            residual: cal.residuals[i],
+          })),
+        }),
+      },
+    );
+
+    expect(fromBrowser).toBe(fromPython);
+  });
+
+  it("puts every constraint on an exact row", async () => {
+    const text = await csvFor("kpg");
+    const cal = await live.calibrate(preset("masoretic", "kpg"));
+    const body = text.split("\n").filter((l) => l && !l.startsWith("#"));
+    const ages = body.slice(1).map((l) => Number(l.split(",")[0]));
+    for (const c of cal.constraints) expect(ages).toContain(c.trueAge);
+  });
+
+  it("carries enough provenance to rebuild the model", async () => {
+    // With free parameters most downloads describe a model that exists
+    // nowhere else, so a file without its chronology is an unreproducible
+    // number.
+    const text = await csvFor("kpg");
+    for (const field of ["age_of_earth", "lambda_F=", "k_F=", "k_PF=", "t_F2="]) {
+      expect(text).toContain(field);
+    }
+    expect(text).toMatch(/# constraint:.*residual/);
+  });
+
+  it("follows the boundary it was calibrated for", async () => {
+    const [kpg, nq] = await Promise.all([csvFor("kpg"), csvFor("nq")]);
+    expect(kpg).not.toBe(nq);
+    expect(kpg).toContain("66000000.0 yr apparent");
+    expect(nq).toContain("2580000.0 yr apparent");
+  });
+});
+
 describe("errors and warnings come from the package", () => {
   it("surfaces the package's own prose for an out-of-domain age", async () => {
     const cal = await live.calibrate(preset("masoretic", "kpg"));

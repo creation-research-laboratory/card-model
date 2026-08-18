@@ -6,6 +6,7 @@ Four commands, all of which are thin wrappers over the package API:
     card init myrun.yaml        write a starter run config to edit
     card fit myrun.yaml         run the MCMC a config file describes
     card calibrate myrun.yaml   solve the same constraints deterministically
+    card series myrun.yaml      write the calibrated time series as CSV
     card schema                 print the parameter/chronology JSON schema
 
 ``card fit`` is the config-driven form of `examples/run_card_mcmc.py`: it
@@ -71,6 +72,16 @@ def _build_parser() -> argparse.ArgumentParser:
         "calibrate",
         help="solve a two-constraint config exactly, without sampling")
     calibrate.add_argument("config", help="path to a run config")
+
+    series = subparsers.add_parser(
+        "series",
+        help="solve a config and write its calibrated time series as CSV")
+    series.add_argument("config", help="path to a run config")
+    series.add_argument("-o", "--output",
+                        help="file to write (default: stdout)")
+    series.add_argument("-n", "--points", type=int, default=400,
+                        help="grid size before the breakpoint and anchor "
+                             "unions (default: 400)")
 
     schema = subparsers.add_parser(
         "schema", help="print the model parameter spec as JSON Schema")
@@ -257,6 +268,48 @@ def _run_calibrate(args) -> int:
     return 0
 
 
+# ------------------------------------------------------------------ series
+def _run_series(args) -> int:
+    """
+    Solve exactly, then write the CSV.
+
+    Goes through `RunConfig.solve_exactly` like `card calibrate`, so the two
+    commands cannot solve different problems from the same file, and through
+    `card.series.to_csv` like the browser's download button, so the bytes
+    match.
+    """
+    from .series import SeriesConstraint, to_csv
+
+    config = RunConfig.from_file(args.config)
+    result = config.solve_exactly()
+    ordered = sorted(config.constraints,
+                     key=lambda c: c.young_age, reverse=True)
+
+    text = to_csv(
+        result.model,
+        config.chronology,
+        points=args.points,
+        constraints=[
+            SeriesConstraint(
+                label=c.label or f"{c.young_age:g} YBP",
+                true_age=c.young_age,
+                secular_age=c.secular_age,
+                residual=residual,
+            )
+            for c, residual in zip(ordered, result.residuals)
+        ],
+        description=f"card series {os.path.basename(args.config)}",
+    )
+
+    if args.output:
+        with open(args.output, "w", encoding="utf-8", newline="") as handle:
+            handle.write(text)
+        print(f"wrote {args.output}", file=sys.stderr)
+    else:
+        sys.stdout.write(text)
+    return 0
+
+
 # ------------------------------------------------------------------ schema
 def _run_schema(args) -> int:
     if args.chronology:
@@ -276,6 +329,7 @@ _COMMANDS = {
     "init": _run_init,
     "fit": _run_fit,
     "calibrate": _run_calibrate,
+    "series": _run_series,
     "schema": _run_schema,
 }
 

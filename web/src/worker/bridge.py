@@ -17,11 +17,13 @@ from __future__ import annotations
 
 import json
 import warnings
+from datetime import datetime
 from typing import Any, Dict, List
 
 from card.calibrate import solve_flood_rate
 from card.chronology import Chronology
 from card.models import GeneralModel, GeneralModelParams
+from card.series import SeriesConstraint, sample_ages, to_csv
 from card.parameters import (
     parameter_specs,
     split_fixed_and_free,
@@ -166,20 +168,11 @@ def series(request_json: str) -> str:
         present = chronology.present_date
         n = max(2, int(request.get("points", 400)))
 
-        lo, hi = 1.0, present
-        ratio = (hi / lo) ** (1.0 / (n - 1))
-        grid = {lo * ratio ** i for i in range(n)}
-        grid.update({0.0, present})
-        for date in model.breakpoints():
-            age = chronology.date_to_age(date)
-            if 0.0 < age < present:
-                grid.add(age)
-                grid.add(age * (1.0 - 1e-12))
-        for age in request.get("anchors", []):
-            if 0.0 <= float(age) <= present:
-                grid.add(float(age))
-
-        ordered = sorted(grid)
+        # The grid is `card.series.sample_ages`, not a second copy of it: the
+        # chart and the CSV download must sample the same model the same way,
+        # and a duplicate here is exactly the drift this repo keeps hitting.
+        ordered = sample_ages(model, chronology, n,
+                              anchors=request.get("anchors", []))
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             secular = [model.forward_age(age, present) for age in ordered]
@@ -331,6 +324,54 @@ def inverse_age(request_json: str) -> str:
             value = model.inverse_age(float(request["secularAge"]),
                                       chronology.present_date)
             return _ok({"value": value}, caught)
+    except Exception as exc:  # noqa: BLE001
+        return _error(exc)
+
+
+def series_csv(request_json: str) -> str:
+    """
+    The downloadable time series, as CSV.
+
+    Goes through `card.series.to_csv`, which is also what `card series`
+    calls -- so a file downloaded here and one produced by the CLI are
+    byte-identical for the same model, grid and timestamp.  The live suite
+    asserts exactly that.
+
+    `generated` is accepted rather than read from the clock because it is the
+    only value in the file that cannot be derived from the model, and pinning
+    it is what makes the comparison above testable.
+    """
+    try:
+        request = json.loads(request_json)
+        chronology = _chronology(request["chronology"])
+        params = GeneralModelParams.from_dict(request["params"])
+        model = GeneralModel(params)
+
+        stamp = request.get("generated")
+        generated = (
+            datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+            if stamp else None
+        )
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            text = to_csv(
+                model,
+                chronology,
+                points=int(request.get("points", 2000)),
+                constraints=[
+                    SeriesConstraint(
+                        label=str(c["label"]),
+                        true_age=float(c["trueAge"]),
+                        secular_age=float(c["secularAge"]),
+                        residual=float(c["residual"]),
+                    )
+                    for c in request.get("constraints", [])
+                ],
+                description=str(request.get("description", "custom parameters")),
+                generated=generated,
+            )
+            return _ok({"csv": text}, caught)
     except Exception as exc:  # noqa: BLE001
         return _error(exc)
 
