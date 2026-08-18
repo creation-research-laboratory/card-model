@@ -236,12 +236,19 @@ function AppBody({ data }: Props) {
         </div>
         {powerUser ? null : (
           <p>
-            Converting between young-earth ages and the apparent ages rock would
-            yield under a time-varying decay rate. The Flood begins at the
-            Precambrian–Cambrian contact and ends a year later at the boundary you
-            choose. The rate falls steeply across that year and far more slowly
-            for millennia after, so it takes three matched dates — those two
-            contacts and the end of the Ice Age — to fix the curve exactly.
+            {/*
+              * The bold initials spell the acronym out without a clause saying
+              * so, and match how the docs site introduces it — the wordmark
+              * above no longer expands it.
+              */}
+            <strong>C</strong>alibrating <strong>A</strong>ccelerated{" "}
+            <strong>R</strong>adiometric <strong>D</strong>ecay: converting
+            between young-earth ages and the apparent ages rock would yield
+            under a time-varying decay rate. The Flood begins at the
+            Precambrian–Cambrian contact and ends a year later at the boundary
+            you choose. The rate falls steeply across that year and far more
+            slowly for millennia after, so it takes three matched dates — those
+            two contacts and the end of the Ice Age — to fix the curve exactly.
           </p>
         )}
       </header>
