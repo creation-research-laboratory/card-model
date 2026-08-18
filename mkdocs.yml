@@ -94,6 +94,12 @@ extra_javascript:
 
 nav:
   - Home: index.md
+  # Absolute, because the app is not a mkdocs page: docs.yml copies the built
+  # bundle into site/app after `mkdocs build` has run, so a relative nav entry
+  # would fail validation against a file that does not exist yet. The cost is
+  # that this link leaves a local `mkdocs serve`; the index card uses a
+  # relative `app/`, which works in both.
+  - Interactive app: https://creation-research-laboratory.github.io/card-model/app/
   - The model: model.md
   - Tutorials:
       - 1. Forward and inverse ages: tutorials/forward-inverse.md
