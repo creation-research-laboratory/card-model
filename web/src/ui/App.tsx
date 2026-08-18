@@ -208,7 +208,12 @@ export function App({ data }: Props) {
       </header>
 
       <div className="layout">
-        <div>
+        {/*
+          * `tabIndex` because a scroll container that only a mouse can reach is
+          * unusable by keyboard. Chrome and Firefox now focus overflow
+          * containers on their own; Safari does not, so it is set explicitly.
+          */}
+        <div role="region" aria-label="Model controls" tabIndex={0}>
           <PresetPicker
             data={data}
             chronology={request.chronology}
@@ -287,7 +292,7 @@ export function App({ data }: Props) {
           </section>
         </div>
 
-        <main>
+        <main aria-label="Charts" tabIndex={0}>
           {failure && !failure.fromParameters ? (
             <p className="notice"><strong>Error.</strong> {failure.message}</p>
           ) : null}

@@ -100,6 +100,59 @@ header.app-header p { margin: 0; color: var(--text-secondary); max-width: 62ch; 
 }
 @media (max-width: 60rem) { .layout { grid-template-columns: 1fr; } }
 
+/*
+ * Two independently scrolling columns, above the stacking breakpoint only.
+ *
+ * Sticky would have been simpler, but the control column is five panels tall —
+ * more than most viewports — and a sticky block taller than the viewport pins
+ * its top and puts its bottom permanently out of reach. The reader needs to
+ * scroll *to* the control they care about and keep it there while working
+ * through the charts, which is two scroll containers, not one pinned one.
+ *
+ * `min-height: 0` on both the flex child and the grid children is what makes
+ * this work at all: the default `auto` minimum size lets a grid item grow to
+ * its content instead of scrolling.
+ */
+@media (min-width: 60.0625rem) {
+  .app {
+    height: 100vh;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    padding-top: 1.25rem;
+    padding-bottom: 1.25rem;
+  }
+  /*
+   * The header now costs its height permanently, where before it scrolled
+   * away — so it is tightened here rather than in the stacked layout, where
+   * scrolling still reclaims it. The intro is allowed a longer measure
+   * because it sits above the full width, not in a column.
+   */
+  header.app-header { flex: none; margin-bottom: .9rem; }
+  header.app-header p { max-width: 96ch; font-size: .92rem; }
+
+  .layout {
+    flex: 1 1 auto;
+    min-height: 0;
+    align-items: stretch;
+  }
+  .layout > * {
+    min-height: 0;
+    overflow-y: auto;
+    /* Stops a flick at the end of one column from scrolling the other. */
+    overscroll-behavior: contain;
+    /* Reserve the scrollbar so content does not shift when it appears. */
+    scrollbar-gutter: stable;
+    padding-bottom: 1.5rem;
+  }
+  /* The focus ring belongs on the column only when reached by keyboard. */
+  .layout > *:focus-visible {
+    outline: 2px solid var(--series-1);
+    outline-offset: -2px;
+    border-radius: var(--radius);
+  }
+}
+
 .panel {
   background: var(--surface-2);
   border: 1px solid var(--border);
