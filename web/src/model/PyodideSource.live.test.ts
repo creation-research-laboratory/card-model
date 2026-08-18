@@ -12,6 +12,7 @@
 
 import { readFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -34,6 +35,37 @@ const preset = (chronology: string, boundary: string): CalibrationRequest => ({
 
 let live: PyodideSource;
 let precomputed: PrecomputedSource;
+
+/**
+ * An interpreter that can `import card`.
+ *
+ * Hardcoding `.venv/bin/python` passed locally and failed in CI with ENOENT:
+ * the workflow installs the package with `actions/setup-python` and
+ * `pip install -e .`, so `card` is importable from `python3` on PATH and there
+ * is no virtualenv at all. Probing rather than guessing covers both, and fails
+ * with something actionable instead of ENOENT when it covers neither.
+ */
+async function pythonWithCard(): Promise<string> {
+  const candidates = [
+    process.env.CARD_PYTHON,
+    join(WEB, "..", ".venv", "bin", "python"),
+    "python3",
+    "python",
+  ].filter((c): c is string => Boolean(c));
+
+  for (const bin of candidates) {
+    try {
+      execFileSync(bin, ["-c", "import card"], { stdio: "ignore" });
+      return bin;
+    } catch {
+      // Missing interpreter, or one without the package. Try the next.
+    }
+  }
+  throw new Error(
+    `no Python with \`card\` importable (tried ${candidates.join(", ")}). ` +
+    "Install it with `pip install -e .`, or set CARD_PYTHON.",
+  );
+}
 
 /** Relative agreement, with an absolute fallback for values at or near zero. */
 function closeEnough(a: number, b: number, tolerance = 1e-8): boolean {
@@ -392,9 +424,8 @@ describe("the CSV download", () => {
       "    generated=datetime(2026, 8, 17, 12, 0, tzinfo=timezone.utc)))",
     ].join("\n");
 
-    const { execFileSync } = await import("node:child_process");
     const fromPython = execFileSync(
-      join(WEB, "..", ".venv", "bin", "python"), ["-c", script],
+      await pythonWithCard(), ["-c", script],
       {
         encoding: "utf8",
         input: JSON.stringify({
