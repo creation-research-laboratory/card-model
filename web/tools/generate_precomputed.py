@@ -466,8 +466,12 @@ def build(presets: Dict[str, Any]) -> Dict[str, Any]:
         # Both fixed pairs. The third — the post-Flood contact — varies per
         # preset and lives under `boundaries`.
         "calibration": {
+            # `uncertainty` travels with the pair: the live source builds its
+            # own Constraint objects from this catalogue, and without it the
+            # two sources describe the same fit differently.
             key: {"label": spec["label"],
-                  "secular_age": float(spec["secular_age"])}
+                  "secular_age": float(spec["secular_age"]),
+                  "uncertainty": float(spec["uncertainty"])}
             for key, spec in calib.items()
         },
         "flood_duration_years": flood_years,

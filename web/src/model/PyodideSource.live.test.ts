@@ -370,6 +370,37 @@ describe("errors and warnings come from the package", () => {
     })).rejects.toThrow(/must be >= 1/);
   });
 
+  it("describes the fit with as many constraints as it has residuals", async () => {
+    // The live source used to build two Constraint objects while the bridge
+    // returned three residuals, so `residuals[2]` -- the Ice Age -- had no
+    // constraint beside it. Anything zipping the two lists silently dropped
+    // the third pair, and the readout reported two thirds of the fit as if it
+    // were all of it.
+    const cal = await live.calibrate(preset("masoretic", "kpg"));
+    expect(cal.constraints).toHaveLength(cal.residuals.length);
+    expect(cal.constraints).toHaveLength(3);
+  });
+
+  it("agrees with the precomputed source on what was fitted", async () => {
+    // Both sources answer the same question, so they must describe the same
+    // three pairs -- same labels, same ages. The markers read these labels to
+    // name the boundary, so a divergence here would show up on the chart.
+    for (const boundary of ["kpg", "nq"] as const) {
+      const request = preset("masoretic", boundary);
+      const [liveCal, preCal] = await Promise.all([
+        live.calibrate(request), precomputed.calibrate(request),
+      ]);
+      expect(liveCal.constraints.map((c) => c.label))
+        .toEqual(preCal.constraints.map((c) => c.label));
+      for (let i = 0; i < liveCal.constraints.length; i++) {
+        expect(liveCal.constraints[i].trueAge)
+          .toBeCloseTo(preCal.constraints[i].trueAge, 6);
+        expect(liveCal.constraints[i].secularAge)
+          .toBeCloseTo(preCal.constraints[i].secularAge, 6);
+      }
+    }
+  });
+
   it("rejects a combination no single slider bound could prevent", async () => {
     // The one the UI actually has to handle. Every control is clamped to its
     // own spec, so a lone parameter cannot leave its range — but `t_c` and

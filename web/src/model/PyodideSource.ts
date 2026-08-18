@@ -136,13 +136,24 @@ export class PyodideSource implements ModelSource {
         label: `Flood begins — ${calib.flood_start.label}`,
         trueAge: payload.floodStartAge,
         secularAge: calib.flood_start.secular_age,
-        uncertainty: 0,
+        uncertainty: calib.flood_start.uncertainty,
       },
       {
         label: `Flood ends — ${boundary.label}`,
         trueAge: payload.postFloodBoundaryAge,
         secularAge: boundary.secular_age,
         uncertainty: boundary.uncertainty,
+      },
+      // The third pair. `solve_flood_rate` fits all three and the bridge
+      // returns three residuals, so omitting this one left `residuals[2]`
+      // with no constraint beside it: the live source reported two thirds of
+      // the fit while the precomputed source reported all of it, and anything
+      // zipping the two lists silently dropped the Ice Age.
+      {
+        label: calib.ice_age_end.label,
+        trueAge: payload.iceAgeEndAge,
+        secularAge: calib.ice_age_end.secular_age,
+        uncertainty: calib.ice_age_end.uncertainty,
       },
     ];
 

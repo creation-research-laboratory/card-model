@@ -63,13 +63,26 @@ const markerGroups = () =>
   [...container.querySelectorAll<SVGGElement>('g[style*="help"]')];
 
 const labelOf = (g: SVGGElement) => g.querySelector("text")?.textContent ?? "";
+/** Every line of a marker's label stack, joined. */
+const labelsOf = (g: SVGGElement) =>
+  [...g.querySelectorAll("text")].map((t) => t.textContent).join(" | ");
 const detail = () =>
   container.querySelector(".marker-detail")?.textContent?.replace(/\s+/g, " ").trim() ?? "";
 
 describe("what is drawn", () => {
   it("draws one mark for the Flood and one for the Ice Age", () => {
     render();
-    expect(markerGroups().map(labelOf)).toEqual(["Flood (1 yr)", "Ice Age ends"]);
+    expect(markerGroups().map(labelOf))
+      .toEqual(["Flood (1 yr)", "End of the Ice Age"]);
+  });
+
+  it("names the chosen boundary on the band itself", () => {
+    // The reason the marker layer exists at all: t_F2 is the contact the
+    // reader picked, so the figure has to show that the exponential hands
+    // over at K/Pg rather than at some anonymous "end of the Flood".
+    render();
+    expect(labelsOf(markerGroups()[0])).toContain("K/Pg");
+    expect(labelsOf(markerGroups()[0])).toContain("Precambrian-Cambrian");
   });
 
   it("collapses t_F and t_F2 into a single band, labelled with the real span", () => {
@@ -122,6 +135,16 @@ describe("the detail strip", () => {
     expect(text).toMatch(/discontinuous/);
     expect(text).toMatch(/continuous here/);
     expect(text).toMatch(/k_PF/);
+  });
+
+  it("names the contact beside the role in the detail", () => {
+    render();
+    act(() => {
+      markerGroups()[0].dispatchEvent(
+        new PointerEvent("pointerover", { bubbles: true }),
+      );
+    });
+    expect(detail()).toContain("Flood ends — Cretaceous-Paleogene (K/Pg)");
   });
 
   it("says plainly that the Ice Age is not a rate change", () => {

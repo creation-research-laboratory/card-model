@@ -13,7 +13,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { groupMarkers, lambdaF2, markersFor } from "./breakpoints.js";
+import { abbreviate, groupMarkers, lambdaF2, markersFor } from "./breakpoints.js";
 import type { Calibration, GeneralParams } from "../model/types.js";
 
 const WEB = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
@@ -35,6 +35,12 @@ function calibrationFor(presetKey: string): Calibration {
   const chron: RawChronology = data.chronologies[preset.chronology];
   return {
     params: preset.params as GeneralParams,
+    constraints: preset.constraints.map((c: {
+      label: string; true_age: number; secular_age: number; uncertainty: number;
+    }) => ({
+      label: c.label, trueAge: c.true_age,
+      secularAge: c.secular_age, uncertainty: c.uncertainty,
+    })),
     chronology: {
       ageOfEarth: chron.age_of_earth,
       floodStartDate: chron.flood_start_date,
@@ -62,6 +68,10 @@ describe("lambda_F2 agrees with the package", () => {
   }
 });
 
+/** The one marker that is a fitted date rather than a breakpoint. */
+const anchor = (ms: ReturnType<typeof markersFor>) =>
+  ms.find((m) => m.kind === "anchor")!;
+
 describe("what gets marked, and as what", () => {
   const markers = markersFor(calibrationFor("masoretic:kpg"));
   const byKey = Object.fromEntries(markers.map((m) => [m.key, m]));
@@ -75,8 +85,8 @@ describe("what gets marked, and as what", () => {
     // `GeneralModel.breakpoints()` returns (t_c, t_F, t_F2). The end of the Ice
     // Age is not among them — it is the third constraint the curve was fitted
     // to. Drawing it as a rate change would assert something the model denies.
-    expect(byKey.ice_age_end.kind).toBe("anchor");
-    expect(byKey.ice_age_end.detail).toMatch(/not a rate change/i);
+    expect(anchor(markers).kind).toBe("anchor");
+    expect(anchor(markers).detail).toMatch(/not a rate change/i);
   });
 
   it("says what actually changes at the end of the Flood", () => {
@@ -120,7 +130,8 @@ describe("DATE and AGE are not confused", () => {
         markersFor(calibrationFor(key)).map((m) => [m.key, m]),
       );
       expect(byKey.t_F.trueAge).toBeCloseTo(chron.flood_start_age, 6);
-      expect(byKey.ice_age_end.trueAge).toBeCloseTo(chron.ice_age_end_age, 6);
+      const ice = Object.values(byKey).find((m) => m.kind === "anchor")!;
+      expect(ice.trueAge).toBeCloseTo(chron.ice_age_end_age, 6);
       // And the Flood ends one year *later*, so its AGE is one year smaller.
       expect(byKey.t_F.trueAge - byKey.t_F2.trueAge).toBeCloseTo(1, 6);
     });
@@ -140,7 +151,7 @@ describe("grouping follows the pixel scale, not a hardcoded pair", () => {
 
   it("keeps the Ice Age separate — it is 240 px away", () => {
     const groups = groupMarkers(markers, realistic);
-    const ice = groups.find((g) => g.markers.some((m) => m.key === "ice_age_end"));
+    const ice = groups.find((g) => g.markers.some((m) => m.kind === "anchor"));
     expect(ice!.markers).toHaveLength(1);
   });
 
@@ -152,5 +163,67 @@ describe("grouping follows the pixel scale, not a hardcoded pair", () => {
     const keys = groups.map((g) => g.markers.map((m) => m.key));
     expect(keys).toContainEqual(["t_F"]);
     expect(keys).toContainEqual(["t_F2"]);
+  });
+});
+
+describe("the Flood/post-Flood breakpoint names the boundary that was chosen", () => {
+  // The reason this module reads constraint labels instead of writing its own.
+  // `t_F2` *is* the contact the reader selected in the preset picker, so the
+  // point where the exponential hands over from k_F to k_PF has to say K/Pg or
+  // N/Q. A marker reading only "Flood ends" hid that.
+  it("says K/Pg when the K/Pg boundary is selected", () => {
+    const byKey = Object.fromEntries(
+      markersFor(calibrationFor("masoretic:kpg")).map((m) => [m.key, m]),
+    );
+    expect(byKey.t_F2.boundary).toBe("Cretaceous-Paleogene (K/Pg)");
+    expect(byKey.t_F2.detail).toContain("Cretaceous-Paleogene (K/Pg)");
+  });
+
+  it("says N/Q when the N/Q boundary is selected", () => {
+    const byKey = Object.fromEntries(
+      markersFor(calibrationFor("masoretic:nq")).map((m) => [m.key, m]),
+    );
+    expect(byKey.t_F2.boundary).toBe("Neogene-Quaternary (N/Q)");
+  });
+
+  it("names the Flood onset as the Precambrian-Cambrian contact", () => {
+    const byKey = Object.fromEntries(
+      markersFor(calibrationFor("masoretic:kpg")).map((m) => [m.key, m]),
+    );
+    expect(byKey.t_F.boundary).toBe("Precambrian-Cambrian");
+  });
+
+  it("abbreviates for the figure but keeps the full name for the text", () => {
+    expect(abbreviate("Cretaceous-Paleogene (K/Pg)")).toBe("K/Pg");
+    expect(abbreviate("Neogene-Quaternary (N/Q)")).toBe("N/Q");
+    // No parenthetical, so nothing to shorten — better than inventing one.
+    expect(abbreviate("Precambrian-Cambrian")).toBe("Precambrian-Cambrian");
+  });
+
+  it("drops the contact name if a breakpoint is moved off it", () => {
+    // Overriding t_F moves the Flood away from the Precambrian-Cambrian
+    // contact, and the marker must stop claiming to sit on it.
+    const base = calibrationFor("masoretic:kpg");
+    const moved = {
+      ...base, params: { ...base.params, t_F: base.params.t_F - 300 },
+    } as Calibration;
+    const byKey = Object.fromEntries(markersFor(moved).map((m) => [m.key, m]));
+    expect(byKey.t_F.boundary).toBeUndefined();
+    expect(byKey.t_F.label).toBe("Flood begins");
+  });
+
+  it("marks the boundary at the same true age the column puts it", () => {
+    // The whole claim: the exponential changes exactly where the chosen
+    // contact sits. For K/Pg that is the base of the Paleogene.
+    for (const [preset, unit] of [
+      ["masoretic:kpg", "Paleogene"], ["masoretic:nq", "Pleistocene"],
+    ] as const) {
+      const byKey = Object.fromEntries(
+        markersFor(calibrationFor(preset)).map((m) => [m.key, m]),
+      );
+      const base = data.presets[preset].geologic_column
+        .find((u: { name: string }) => u.name === unit).base_true_age;
+      expect(byKey.t_F2.trueAge).toBeCloseTo(base, 6);
+    }
   });
 });

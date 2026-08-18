@@ -21,7 +21,7 @@ import { useMemo, useState } from "react";
 import { scaleLinear } from "d3-scale";
 
 import { linearTicks } from "./axes.js";
-import { groupMarkers, markersFor } from "./breakpoints.js";
+import { abbreviate, groupMarkers, markersFor, type Marker } from "./breakpoints.js";
 import { formatDuration, formatMultiplier, formatAge } from "./format.js";
 import type { Calibration, GeologicColumn } from "../model/types.js";
 
@@ -41,27 +41,46 @@ interface Props {
 }
 
 const ROW_HEIGHT = 22;
-// The top band carries three tiers: marker labels, the calendar axis title,
-// and the calendar tick labels.
-const MARGIN = { top: 66, right: 20, bottom: 34, left: 104 };
+// The top band carries four tiers: the marker label, the contacts it names,
+// the calendar axis title, and the calendar tick labels.
+const MARGIN = { top: 78, right: 20, bottom: 34, left: 104 };
 /** Sub-pixel intervals still need to be visible; see `groupMarkers`. */
 const MIN_BAND_PX = 3;
 
 /**
- * A name for a cluster of markers.
+ * Names for a cluster of markers: what happens, and where.
  *
  * `t_F` and `t_F2` always cluster, and "Flood begins / Flood ends" is a poor
  * label for a mark three pixels wide. When every label in the group opens with
  * the same word, that word plus the span it covers says it better.
+ *
+ * The second line is the point of the whole exercise. `t_F2` is the
+ * Flood/post-Flood contact, which is the boundary the reader selected — so the
+ * band has to name it. A label reading only "Flood (1 yr)" hid the fact that
+ * the exponential handover happens exactly at K/Pg (or N/Q).
  */
-function labelForGroup(markers: readonly { label: string; trueAge: number }[]): string {
-  if (markers.length === 1) return markers[0].label;
+function labelForGroup(markers: readonly Marker[]): {
+  primary: string; secondary?: string;
+} {
+  const contacts = markers
+    .map((m) => m.boundary)
+    .filter((b): b is string => Boolean(b))
+    .map(abbreviate);
+  // Groups arrive sorted by pixel, and the axis runs oldest-left, so joining
+  // in order reads the way the figure does.
+  const secondary = contacts.length ? contacts.join(" → ") : undefined;
+
+  if (markers.length === 1) return { primary: markers[0].label, secondary };
+
   const first = markers.map((m) => m.label.split(" ")[0]);
   if (first.every((w) => w === first[0])) {
     const span = Math.abs(markers[0].trueAge - markers[markers.length - 1].trueAge);
-    return span > 0 ? `${first[0]} (${formatDuration(span)})` : first[0];
+    return {
+      primary: span > 0 ? `${first[0]} (${formatDuration(span)})` : first[0],
+      secondary,
+    };
   }
-  return markers.map((m) => m.label).join(" / ");
+  return { primary: markers.map((m) => m.label).join(" / "), secondary };
 }
 
 export function GeologicColumnChart({
@@ -179,6 +198,11 @@ export function GeologicColumnChart({
               const isOpen = openMarker === key;
               const bandW = Math.max(MIN_BAND_PX, group.to - group.from);
               const mid = group.from + bandW / 2;
+              const names = labelForGroup(group.markers);
+              // Both label lines share an anchor, or they would splay apart at
+              // the plot edges where one flips and the other does not.
+              const anchor =
+                mid > innerW - 40 ? "end" : mid < 40 ? "start" : "middle";
 
               return (
                 <g
@@ -189,8 +213,8 @@ export function GeologicColumnChart({
                 >
                   {/* Generous hit target: the mark itself is a few pixels. */}
                   <rect
-                    x={group.from - 8} y={-52} width={bandW + 16}
-                    height={innerH + 52} fill="transparent"
+                    x={group.from - 8} y={-64} width={bandW + 16}
+                    height={innerH + 64} fill="transparent"
                   />
                   {group.markers.length > 1 ? (
                     // An interval, not an instant. Widened to stay visible, so
@@ -209,14 +233,23 @@ export function GeologicColumnChart({
                     opacity={isOpen ? 1 : 0.75}
                   />
                   <text
-                    className="axis-label" x={mid} y={-48}
-                    textAnchor={
-                      mid > innerW - 40 ? "end" : mid < 40 ? "start" : "middle"
-                    }
+                    className="axis-label" x={mid} y={-60}
+                    textAnchor={anchor}
                     fill={isRate ? "var(--marker)" : "var(--text-muted)"}
                   >
-                    {labelForGroup(group.markers)}
+                    {names.primary}
                   </text>
+                  {names.secondary ? (
+                    // The contacts this lands on. For the Flood band that is
+                    // the pair the reader chose between, so it belongs on the
+                    // figure rather than only in the hover text.
+                    <text
+                      className="axis-label" x={mid} y={-48}
+                      textAnchor={anchor} fill="var(--text-muted)"
+                    >
+                      {names.secondary}
+                    </text>
+                  ) : null}
                 </g>
               );
             })}
@@ -300,6 +333,9 @@ export function GeologicColumnChart({
               <div key={m.key}>
                 <dt className={m.kind === "rate" ? "rate" : "anchor"}>
                   {m.label}
+                  {m.boundary ? (
+                    <span className="marker-contact"> — {m.boundary}</span>
+                  ) : null}
                   <span className="marker-age"> · {formatAge(m.trueAge, 4)} BP</span>
                 </dt>
                 <dd>{m.detail}</dd>

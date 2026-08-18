@@ -45,8 +45,8 @@ export interface PrecomputedData {
   }>;
   boundaries: Record<string, { label: string; secular_age: number; uncertainty: number }>;
   calibration: {
-    flood_start: { label: string; secular_age: number };
-    ice_age_end: { label: string; secular_age: number };
+    flood_start: { label: string; secular_age: number; uncertainty: number };
+    ice_age_end: { label: string; secular_age: number; uncertainty: number };
   };
   flood_duration_years: number;
   /**

@@ -288,3 +288,5 @@ dl.readout.stacked dd { padding-left: .1rem; }
   font-size: 1.1rem; line-height: 1; margin: -.35rem 0 .35rem;
 }
 .converter-error { color: var(--warn); }
+
+.marker-detail .marker-contact { font-weight: 400; color: var(--text-secondary); }

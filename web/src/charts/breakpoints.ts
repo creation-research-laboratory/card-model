@@ -8,11 +8,16 @@
  *     `GeneralModel.breakpoints()` names exactly three: `t_c`, `t_F`, `t_F2`.
  *     At `t_F` the rate jumps; at `t_F2` it does not jump at all, but the
  *     constant governing its relaxation switches from `k_F` to `k_PF`.
- *   * **Calibration anchors** — the matched dates the curve was *fitted* to.
- *     The end of the Ice Age is one of these. Nothing happens to lambda there;
- *     it is the third constraint that pins the post-Flood relaxation. Drawing
- *     it in the same style as a breakpoint would claim a rate change the model
- *     does not have.
+ *   * **Calibration anchors** — matched dates the curve was *fitted* to which
+ *     are not breakpoints. The end of the Ice Age is one: nothing happens to
+ *     lambda there, it is what pins `k_PF`. Drawing it like a breakpoint would
+ *     claim a rate change the model does not have.
+ *
+ * Breakpoints are named from the constraints rather than from a list here.
+ * That matters because the second breakpoint *is* the boundary the reader
+ * picked: `t_F2` is the Flood/post-Flood contact, so it lands on K/Pg or N/Q
+ * according to the preset, and a marker that just said "Flood ends" hid the
+ * fact that the exponential changes at the boundary they chose.
  *
  * `t_c` is included only when it is a real transition. In the flood-only mode
  * `lambda_c` is pinned to background and `k_c` to zero, so the first two
@@ -20,7 +25,7 @@
  * nothing observable happens — marking it would be noise.
  */
 
-import type { Calibration, GeneralParams } from "../model/types.js";
+import type { Calibration, Constraint, GeneralParams } from "../model/types.js";
 
 export type MarkerKind = "rate" | "anchor";
 
@@ -28,7 +33,10 @@ export interface Marker {
   readonly key: string;
   /** AGE — years before present, which is what the chart axes use. */
   readonly trueAge: number;
+  /** What happens here, in the model's terms. */
   readonly label: string;
+  /** The geological contact this coincides with, when it is one. */
+  readonly boundary?: string;
   readonly kind: MarkerKind;
   /** One line saying what changes here, for a tooltip or caption. */
   readonly detail: string;
@@ -57,6 +65,24 @@ function say(value: number): string {
   return String(Number(value.toPrecision(4)));
 }
 
+/**
+ * Split "Flood ends — Cretaceous-Paleogene (K/Pg)" into its two halves.
+ *
+ * The generator and the live source both build constraint labels as
+ * `role — contact`, so the contact can be recovered rather than duplicated in
+ * a table here that would drift from theirs.
+ */
+function splitConstraintLabel(label: string): { role: string; boundary?: string } {
+  const parts = label.split("—").map((s) => s.trim()).filter(Boolean);
+  if (parts.length < 2) return { role: label.trim() };
+  return { role: parts[0], boundary: parts.slice(1).join(" — ") };
+}
+
+/** "Cretaceous-Paleogene (K/Pg)" → "K/Pg"; anything unparenthesised is kept. */
+export function abbreviate(boundary: string): string {
+  return boundary.match(/\(([^)]+)\)/)?.[1] ?? boundary;
+}
+
 export function markersFor(calibration: Calibration): Marker[] {
   const p = calibration.params;
   const { ageOfEarth } = calibration.chronology;
@@ -65,14 +91,33 @@ export function markersFor(calibration: Calibration): Marker[] {
   // so the conversion happens once, here.
   const age = (date: number) => ageOfEarth - date;
 
+  const constraints: readonly Constraint[] = calibration.constraints ?? [];
+  const claimed = new Set<Constraint>();
+
+  /**
+   * The constraint sitting on a breakpoint, if any.
+   *
+   * The tolerance has to be far below the Flood year, or `t_F` and `t_F2`
+   * would both match the same pair.
+   */
+  const contactAt = (trueAge: number): string | undefined => {
+    const hit = constraints.find(
+      (c) => Math.abs(c.trueAge - trueAge) < 1e-6 * Math.max(1, Math.abs(trueAge)),
+    );
+    if (!hit) return undefined;
+    claimed.add(hit);
+    return splitConstraintLabel(hit.label).boundary;
+  };
+
   const markers: Marker[] = [];
 
-  const creationWeekActive = p.lambda_c > p.lambda_bg || p.k_c > 0;
-  if (creationWeekActive) {
+  if (p.lambda_c > p.lambda_bg || p.k_c > 0) {
+    const trueAge = age(p.t_c);
     markers.push({
       key: "t_c",
-      trueAge: age(p.t_c),
+      trueAge,
       label: "Creation week ends",
+      boundary: contactAt(trueAge),
       kind: "rate",
       detail:
         `λ leaves its initial ${say(p.lambda_c)}× and begins relaxing toward ` +
@@ -80,36 +125,50 @@ export function markersFor(calibration: Calibration): Marker[] {
     });
   }
 
+  const floodStart = age(p.t_F);
   markers.push({
     key: "t_F",
-    trueAge: age(p.t_F),
+    trueAge: floodStart,
     label: "Flood begins",
+    boundary: contactAt(floodStart),
     kind: "rate",
     detail:
       `λ jumps to ${say(p.lambda_F)}× background and starts falling at ` +
       `k_F = ${say(p.k_F)}/yr. This is the only point where λ is discontinuous.`,
   });
 
+  const floodEnd = age(p.t_F2);
+  const endContact = contactAt(floodEnd);
   markers.push({
     key: "t_F2",
-    trueAge: age(p.t_F2),
+    trueAge: floodEnd,
     label: "Flood ends",
+    boundary: endContact,
     kind: "rate",
     detail:
       `λ is continuous here — it has already fallen to ${say(lambdaF2(p))}× — ` +
       `but the relaxation constant switches from k_F = ${say(p.k_F)} to ` +
-      `k_PF = ${say(p.k_PF)}/yr, which governs the millennia after.`,
+      `k_PF = ${say(p.k_PF)}/yr, which governs the millennia after` +
+      (endContact ? `. This is the ${endContact} contact.` : "."),
   });
 
-  markers.push({
-    key: "ice_age_end",
-    trueAge: age(calibration.chronology.iceAgeEndDate),
-    label: "Ice Age ends",
-    kind: "anchor",
-    detail:
-      "A calibration anchor, not a rate change: nothing happens to λ here. " +
-      "It is the third matched date, and what it pins is k_PF.",
-  });
+  // Whatever the fit used that is not a breakpoint. Derived rather than
+  // hardcoded, so a fourth pair would appear here without a code change.
+  for (const c of constraints) {
+    if (claimed.has(c)) continue;
+    const { role, boundary } = splitConstraintLabel(c.label);
+    markers.push({
+      key: `anchor:${c.label}`,
+      trueAge: c.trueAge,
+      label: role,
+      boundary,
+      kind: "anchor",
+      detail:
+        "A calibration anchor, not a rate change: nothing happens to λ here. " +
+        `It is one of the ${constraints.length} matched dates, and what it ` +
+        "pins is k_PF.",
+    });
+  }
 
   return markers;
 }
