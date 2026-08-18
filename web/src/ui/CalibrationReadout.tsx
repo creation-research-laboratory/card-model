@@ -10,6 +10,7 @@ import type { Calibration } from "../model/types.js";
 import type { SourceKind } from "../model/ModelSource.js";
 import { formatAge, formatMultiplier, trim } from "../charts/format.js";
 import { lambdaF2 } from "../charts/breakpoints.js";
+import { usePowerUser } from "./preferences.js";
 
 interface Props {
   calibration: Calibration;
@@ -17,6 +18,7 @@ interface Props {
 }
 
 export function CalibrationReadout({ calibration, sourceKind }: Props) {
+  const powerUser = usePowerUser();
   // Derived from the parameters in hand, never looked up from the preset
   // table: `lambda_F2` is pinned by continuity at t_F2, so an overridden
   // lambda_F or k_F changes it, and a table lookup would keep reporting the
@@ -77,11 +79,23 @@ export function CalibrationReadout({ calibration, sourceKind }: Props) {
 
       {sourceKind === "precomputed" ? (
         <p className="notice" style={{ marginTop: "1rem", marginBottom: 0 }}>
-          Values marked <strong>≈</strong> are interpolated between precomputed
-          points: good to about 0.8% converting a true age forwards, and about
-          0.9% converting an apparent age back. The parameters, residuals and the
-          plotted curves themselves are exact — the solver produced them
-          directly. Load the full model to make every value exact.
+          {/*
+            * How wrong a number may be is not explanation, so power-user mode
+            * shortens this rather than removing it. What goes is the part that
+            * says which quantities are exact — that is teaching; what stays is
+            * the figure a reader would need to cite.
+            */}
+          {powerUser ? (
+            <>Values marked <strong>≈</strong> are interpolated: ≈0.8% forward,
+            ≈0.9% inverse.</>
+          ) : (
+            <>Values marked <strong>≈</strong> are interpolated between
+            precomputed points: good to about 0.8% converting a true age
+            forwards, and about 0.9% converting an apparent age back. The
+            parameters, residuals and the plotted curves themselves are exact —
+            the solver produced them directly. Load the full model to make every
+            value exact.</>
+          )}
         </p>
       ) : null}
     </section>

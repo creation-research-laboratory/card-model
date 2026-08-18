@@ -23,6 +23,7 @@ import { scaleLinear, scaleLog } from "d3-scale";
 import { DEFAULT_MARGIN, linearTicks, logDecadeTicks, nearestIndex, polyline } from "./axes.js";
 import { formatDate, formatMultiplier, trim } from "./format.js";
 import type { LambdaSeries } from "../model/types.js";
+import { usePowerUser } from "../ui/preferences.js";
 
 /** Which slice of the timeline the x axis covers. */
 export type LambdaZoom = "full" | "flood";
@@ -38,6 +39,7 @@ interface Props {
 export function LambdaHistoryChart({
   history, zoom, onZoom, width = 720, height = 300,
 }: Props) {
+  const powerUser = usePowerUser();
   const wrapRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<{ index: number; left: number; top: number } | null>(null);
   // Extra headroom over the shared margin: the Flood annotation sits above
@@ -116,22 +118,24 @@ export function LambdaHistoryChart({
     <figure className="chart">
       <figcaption>
         <h3>Decay rate through time</h3>
-        <p>
-          λ(t) as a multiple of the present-day rate. The horizontal axis is a{" "}
-          <strong>date</strong> — years <em>after</em> Day 1 of Creation — which
-          runs opposite to the ages on the chart above.{" "}
-          {zoom === "full" ? (
-            <>The rate falls by most of its range inside the Flood
-            year, which is why that part reads as a vertical line here; the
-            remainder then relaxes for roughly{" "}
-            {view.tailSpan < 1
-              ? `${(view.tailSpan * 365.25).toFixed(0)} days`
-              : `${Math.round(view.tailSpan).toLocaleString()} years`}
-            {" "}after it.</>
-          ) : (
-            <>Zoomed to the Flood year, where the steep drop happens.</>
-          )}
-        </p>
+        {powerUser ? null : (
+  <p>
+            λ(t) as a multiple of the present-day rate. The horizontal axis is a{" "}
+            <strong>date</strong> — years <em>after</em> Day 1 of Creation — which
+            runs opposite to the ages on the chart above.{" "}
+            {zoom === "full" ? (
+              <>The rate falls by most of its range inside the Flood
+              year, which is why that part reads as a vertical line here; the
+              remainder then relaxes for roughly{" "}
+              {view.tailSpan < 1
+                ? `${(view.tailSpan * 365.25).toFixed(0)} days`
+                : `${Math.round(view.tailSpan).toLocaleString()} years`}
+              {" "}after it.</>
+            ) : (
+              <>Zoomed to the Flood year, where the steep drop happens.</>
+            )}
+          </p>
+        )}
         {onZoom ? (
           <div className="segmented" style={{ marginTop: ".5rem" }} role="group"
                aria-label="Decay chart time range">

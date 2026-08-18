@@ -21,6 +21,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { GeneralParams } from "../model/types.js";
 import { formatMultiplier, trim } from "../charts/format.js";
+import { usePowerUser } from "./preferences.js";
 
 /** One property of the JSON Schema the package emits. */
 export interface ParamProperty {
@@ -105,6 +106,7 @@ export function ParameterPanel({
   mode, fittable, values, overridden, onChange, onReset,
   willStartDownload, error, disabled, debounceMs = 100,
 }: Props) {
+  const powerUser = usePowerUser();
   // Only the names the package returned, and only those it considers free to
   // vary. Never a literal list.
   const names = useMemo(
@@ -190,7 +192,18 @@ export function ParameterPanel({
               aria-describedby={`d-${name}`}
               onChange={(e) => set(name, scale.fromSlider(Number(e.target.value)))}
             />
-            <p id={`d-${name}`} className="param-help">{prop.description}</p>
+            {/*
+              * Hidden, not removed. `aria-describedby` points here, and a
+              * reader who wants a denser view has not asked to be told less
+              * about what a parameter means — the label's `title` still shows
+              * it on hover, and assistive technology still reads it.
+              */}
+            <p
+              id={`d-${name}`}
+              className={powerUser ? "visually-hidden" : "param-help"}
+            >
+              {prop.description}
+            </p>
           </div>
         );
       })}

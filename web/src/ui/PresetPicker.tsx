@@ -12,6 +12,7 @@
 
 import type { PrecomputedData } from "../model/PrecomputedSource.js";
 import { formatAge } from "../charts/format.js";
+import { usePowerUser } from "./preferences.js";
 
 interface Props {
   data: PrecomputedData;
@@ -25,6 +26,7 @@ interface Props {
 export function PresetPicker({
   data, chronology, boundary, onChronology, onBoundary, disabled,
 }: Props) {
+  const powerUser = usePowerUser();
   const chron = data.chronologies[chronology];
 
   return (
@@ -65,12 +67,14 @@ export function PresetPicker({
         </select>
       </label>
 
+      {powerUser ? null : (
       <p style={{ fontSize: ".8rem", color: "var(--text-secondary)", margin: "0 0 .8rem" }}>
         The Flood <em>begins</em> at the {data.calibration.flood_start.label}{" "}
         contact in every scenario, and the rate spikes there. This choice sets
         where it has fallen to a year later. A third date &mdash; the end of the
         Ice Age &mdash; fixes how slowly it relaxes over the millennia after.
       </p>
+      )}
 
       <h2 style={{ marginTop: "1.1rem" }}>Calibrated on</h2>
       <dl className="readout stacked">

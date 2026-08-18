@@ -345,3 +345,41 @@ dl.readout.stacked dd { padding-left: .1rem; }
 .marker-detail .marker-contact { font-weight: 400; color: var(--text-secondary); }
 .marker-key.reference { border-top: 2px dotted var(--text-secondary); }
 .marker-detail dt.reference { color: var(--text-secondary); font-style: italic; }
+
+/* ---------------------------------------------------------------- power user
+
+   One attribute on <html> drives every density rule, so the components decide
+   what *text* to show and the stylesheet decides how tightly to pack it.
+
+   Only spacing and scale change here. Nothing is hidden by CSS: a rule that
+   made prose disappear would leave it in the accessibility tree, saying one
+   thing to a screen reader and another to the page. What goes, goes in the
+   component. */
+
+.app-title {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 1rem; flex-wrap: wrap;
+}
+
+.power-toggle {
+  display: inline-flex; align-items: center; gap: .4rem;
+  font-size: .78rem; color: var(--text-secondary);
+  cursor: pointer; user-select: none; white-space: nowrap;
+}
+.power-toggle input { margin: 0; cursor: pointer; }
+.power-toggle:hover { color: var(--text-primary); }
+
+:root[data-power="on"] .panel { padding: .7rem .8rem; }
+:root[data-power="on"] .panel + .panel { margin-top: .6rem; }
+:root[data-power="on"] .panel h2 { margin-bottom: .5rem; }
+:root[data-power="on"] label.field { margin-bottom: .55rem; }
+:root[data-power="on"] .param { margin-bottom: .55rem; }
+:root[data-power="on"] figure.chart { margin-bottom: .6rem; }
+:root[data-power="on"] figure.chart figcaption { margin-bottom: .35rem; }
+:root[data-power="on"] header.app-header { margin-bottom: .7rem; }
+:root[data-power="on"] .marker-detail { min-height: 2.4rem; }
+
+/* The controls are the point of this mode, so they get bigger, not smaller —
+   a 14px slider thumb is hard to place accurately on a log axis spanning
+   eleven decades. */
+:root[data-power="on"] input[type="range"] { height: 1.5rem; }
