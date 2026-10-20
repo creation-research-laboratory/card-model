@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="utf-8"?>
+<style xmlns="http://purl.org/net/xbiblio/csl" class="in-text" version="1.0" default-locale="en-US">
+  <!-- ICC (International Conference on Creationism) author-date style, written
+       from the "2027 ICC Author Instruction Manual and Style Guide" (Aug 2026):
+       in text (Walsh 2006), (Gunderson and Norse 2001), (Snelling et al. 1998),
+       groups alphabetical and separated by semicolons; reference list
+       alphabetical with no indentation, "Surname, I.I., and I.I. Surname. Year.
+       Title.", book and journal titles in italics, article titles in sentence
+       case.  Titles come out as stored, so keep the capitalization in the .bib
+       file the way the manual wants it. -->
+  <info>
+    <title>International Conference on Creationism (ICC)</title>
+    <id>http://www.zotero.org/styles/icc-creationism-local</id>
+    <link href="https://www.internationalconferenceoncreationism.com" rel="documentation"/>
+    <category citation-format="author-date"/>
+    <updated>2026-10-19T00:00:00+00:00</updated>
+  </info>
+  <locale xml:lang="en">
+    <terms>
+      <term name="editor" form="short">
+        <single>(editor)</single>
+        <multiple>(editors)</multiple>
+      </term>
+      <term name="retrieved">Retrieved</term>
+    </terms>
+  </locale>
+
+  <macro name="author">
+    <names variable="author">
+      <name and="text" name-as-sort-order="first" sort-separator=", " delimiter=", " delimiter-precedes-last="always" initialize-with="." initialize="true"/>
+      <et-al/>
+      <substitute>
+        <names variable="editor"/>
+        <text variable="title"/>
+      </substitute>
+    </names>
+  </macro>
+  <macro name="author-intext">
+    <names variable="author">
+      <name form="short" and="text" delimiter-precedes-et-al="never"/>
+      <substitute>
+        <names variable="editor"/>
+        <text variable="title"/>
+      </substitute>
+    </names>
+  </macro>
+  <macro name="editors">
+    <names variable="editor">
+      <name and="text" delimiter=", " delimiter-precedes-last="always" initialize-with="." initialize="true"/>
+      <label form="short" prefix=" "/>
+    </names>
+  </macro>
+  <macro name="year">
+    <choose>
+      <if variable="issued">
+        <date variable="issued"><date-part name="year"/></date>
+        <text variable="year-suffix"/>
+      </if>
+      <else>
+        <text value="n.d."/>
+      </else>
+    </choose>
+  </macro>
+  <macro name="locator-part">
+    <choose>
+      <if variable="locator">
+        <text value=", p. " />
+        <text variable="locator"/>
+      </if>
+    </choose>
+  </macro>
+
+  <citation et-al-min="3" et-al-use-first="1" disambiguate-add-year-suffix="true" collapse="year-suffix">
+    <sort>
+      <key macro="author-intext"/>
+      <key macro="year"/>
+    </sort>
+    <layout prefix="(" suffix=")" delimiter="; ">
+      <group delimiter=" ">
+        <text macro="author-intext"/>
+        <text macro="year"/>
+      </group>
+      <text macro="locator-part"/>
+    </layout>
+  </citation>
+
+  <bibliography et-al-min="99" et-al-use-first="99" entry-spacing="1" line-spacing="1">
+    <sort>
+      <key macro="author"/>
+      <key variable="issued"/>
+    </sort>
+    <layout suffix=".">
+      <group delimiter=". ">
+        <group delimiter=" ">
+          <text macro="author" suffix="."/>
+          <text macro="year"/>
+        </group>
+        <choose>
+          <if type="article-journal article-magazine" match="any">
+            <!-- Article title. Journal vol, no. n:pages. DOI: ... -->
+            <text variable="title"/>
+            <group delimiter=" ">
+              <text variable="container-title" font-style="italic"/>
+              <group>
+                <text variable="volume"/>
+                <text variable="issue" prefix=", no. "/>
+                <text variable="page" prefix=":"/>
+              </group>
+              <text variable="DOI" prefix="DOI: "/>
+            </group>
+          </if>
+          <else-if type="chapter paper-conference" match="any">
+            <!-- Chapter title. In E. Editor (editors), Book Title, pp. x-y. Place: Publisher. -->
+            <text variable="title"/>
+            <group delimiter=", ">
+              <group delimiter=" ">
+                <text value="In"/>
+                <text macro="editors"/>
+              </group>
+              <text variable="container-title" font-style="italic"/>
+              <text variable="page" prefix="pp. "/>
+            </group>
+            <group delimiter=": ">
+              <text variable="publisher-place"/>
+              <text variable="publisher"/>
+            </group>
+          </else-if>
+          <else-if type="thesis">
+            <group delimiter=" ">
+              <text variable="title" font-style="italic"/>
+              <text variable="genre" prefix="[" suffix="]"/>
+            </group>
+            <group delimiter=": ">
+              <text variable="publisher-place"/>
+              <text variable="publisher"/>
+            </group>
+          </else-if>
+          <else-if type="webpage post-weblog" match="any">
+            <text variable="title"/>
+            <group delimiter=", ">
+              <group delimiter=" ">
+                <text term="retrieved"/>
+                <date variable="accessed" form="text"/>
+              </group>
+              <text variable="URL" prefix="from "/>
+            </group>
+          </else-if>
+          <else>
+            <!-- Books, reports, and anything else: Title. Place: Publisher. -->
+            <group delimiter=", ">
+              <text variable="title" font-style="italic"/>
+              <group delimiter=" ">
+                <text term="volume" form="short" text-case="lowercase"/>
+                <text variable="volume"/>
+              </group>
+            </group>
+            <choose>
+              <if variable="editor author" match="all">
+                <text macro="editors"/>
+              </if>
+            </choose>
+            <group delimiter=": ">
+              <text variable="publisher-place"/>
+              <text variable="publisher"/>
+            </group>
+            <text variable="URL"/>
+          </else>
+        </choose>
+      </group>
+    </layout>
+  </bibliography>
+</style>

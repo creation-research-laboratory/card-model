@@ -1,35 +1,95 @@
 ---
-title: "CARD: A General Framework for deriving a Calibrated Model for Accelerated Radiometric Decay"
-format: 
-    html: 
-        code-fold: true
-    pdf: default
+# Render (from the repo root): source .venv/bin/activate && quarto render docs/paper/CARD_model.qmd --to docx && quarto render docs/paper/CARD_model.qmd --to pdf
+title: "CARD: A General Calibrated Model for Accelerated Radiometric Decay"
+# Formatting follows the 2027 ICC Author Instruction Manual (Aug 2026): bold
+# ALL-CAPS main headings, figure/table captions and the figures and tables
+# themselves at the end, no footnotes, no page numbers, Times New Roman 11 pt,
+# single spacing, one-inch margins, line numbers.  Brief running title (<= 50
+# characters): CARD: Calibrated Accelerated Radiometric Decay
+bibliography: references.bib
+csl: icc.csl                 # ICC author-date style, see the comment in the file
+link-citations: false
+number-sections: false       # numbering is written into the headings (I., A., 1.)
+fig-cap-location: bottom
+tbl-cap-location: top
+# In text: "Fig. 1", "Table 1".  Captions begin "Figure 1." / "Table 1."
+crossref:
+  fig-prefix: Fig.
+  tbl-prefix: Table
+  eq-prefix: Eq.
+  fig-title: Figure
+  tbl-title: Table
+  title-delim: "."
+# One source for each caption: the figure chunks and the FIGURE CAPTIONS list
+# at the end of the manuscript both read these.  Sentence-style capitalization.
+fig-cap-general-model: "Schematic diagram of the general model showing model behavior."
+fig-cap-age-curve: "Secular age as a function of young age under the calibrated flood-only model."
+tbl-cap-notation: "Notation used throughout the paper (update)."
+format:
+  docx:
+    reference-doc: icc-reference.docx   # built by make_reference_docx.py
+    toc: false
+    fig-format: png
+    fig-dpi: 300
+  pdf:
+    documentclass: article
+    papersize: letter
+    fontsize: 11pt
+    geometry: margin=1in
+    linestretch: 1.0
+    indent: false
+    colorlinks: false
+    keep-tex: true
+    include-in-header:
+      text: |
+        \usepackage{mathptmx}
+        \usepackage[switch]{lineno}
+        \linenumbers
+        \pagestyle{empty}
+        \usepackage{etoolbox}
+        \AtBeginEnvironment{longtable}{\linenumbers\relax}
+  html:
+    toc: true
+    code-fold: true
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
 ---
 
-# Abstract
-We present a general framework for deriving a calibrated model for accelerated radiometric decay that can be used to estimate the equivalent young-earth ages of rocks and geologic horizons given a secular age.
-The idea is based on specifying a time-dependent decay rate $\lambda(t)$ as a piecewise function that defines how the rate of radiometric decay evolves through time, with parameters that can be specified or solved for given appropriate data. 
-We divide history into three periods: the Creation week up to the Flood, the year-long Flood, and the post-Flood period. 
-Accelerated decay may occur during the Creation week and during the Flood, with an exponential decay of $\lambda(t)$ to return to the background rate $\lambda_{bg}$ in each period.
-Each time period may have its own decay constant.
-By specifying pairs of matched dates (corresponding young-earth and secular ages), it is possible to calibrate parameters to define an age model that relates secular ages to young-earth ages.
-Using this approach, we can calculate young-earth ages for various geological processes given their secular age, and vice versa.
-In this paper, we derive the general model and provide examples of calibrated age relationships based on various hypothesized matched date pairs. 
-The predictions from these example models can then be used to calculate various parameters of relevance to young-earth creation studies, for example, the rates of sediment flux and mountain building during the Flood, the timing of the end of the Flood with regards to the geologic period, and the point at which the accelerated decay rates return to the background rate.
-The framework we propose is very flexible and can be used to explore the implications of accelerated decay for various creation issues. 
+Rick R. Sanders (corresponding author), Creation Research Laboratory, USA, rick.r.sanders@gmail.com
+
+Edward Isaacs, Creation Research Laboratory, USA, edward.isaacs@gmail.com
+
+Zachary Klein, Creation Research Laboratory, USA, zachary.klein@gmail.com
+
+# KEY WORDS {.unnumbered}
+
+radioisotope dating, accelerated decay, young-earth creation, Flood geology, geochronology
+
+# ABSTRACT {.unnumbered}
+
+We present a general framework for deriving a calibrated model for accelerated radiometric decay that can be used to estimate the equivalent young-earth ages of rocks and geologic horizons given a secular age. The idea is based on specifying a time-dependent decay rate $\lambda(t)$ as a piecewise function that defines how the rate of radiometric decay evolves through time, with parameters that can be specified or solved for given appropriate data. We divide history into three periods: the Creation week up to the Flood, the year-long Flood, and the post-Flood period. Accelerated decay may occur during the Creation week and during the Flood, with an exponential decay of $\lambda(t)$ to return to the background rate $\lambda_{bg}$ in each period. Each time period may have its own decay constant. By specifying pairs of matched dates (corresponding young-earth and secular ages), it is possible to calibrate parameters to define an age model that relates secular ages to young-earth ages. Using this approach, we can calculate young-earth ages for various geological processes given their secular age, and vice versa. In this paper, we derive the general model and provide examples of calibrated age relationships based on various hypothesized matched date pairs. The predictions from these example models can then be used to calculate various parameters of relevance to young-earth creation studies, for example, the rates of sediment flux and mountain building during the Flood, the timing of the end of the Flood with regards to the geologic period, and the point at which the accelerated decay rates return to the background rate. The framework we propose is very flexible and can be used to explore the implications of accelerated decay for various creation issues.
 
 
-# Introduction 
+# I. INTRODUCTION
+- Importance of radiometric decay acceleration in young-earth creation studies
+- Motivation for a general model that can be calibrated to match secular and young-earth ages
+- Our contribution: the central idea of the method in one paragraph
+- Summary of contributions (bulleted, 3-4 items):
+    - A new method with [key property]
+    - Theoretical results on [convergence / bias / complexity / identifiability]
+    - An open-source implementation at [repository URL]
+    - Validation on [synthetic and real] data
 
 
-## Previous Work 
+# II. PREVIOUS WORK
+- RATE project general findings [@humphreys2004]
+- Follow-up conceptual and quantitative work [@williams1990; @reed1996; @oard2013; @mogk2023]
 
+# III. METHODS
 
-## Motivation for a General Model
-
-
-# Methods
-
+## A. Problem formulation
 ```{python}
 #| label: setup
 #| code-summary: "Load the CARD package and its chronology configuration"
@@ -51,7 +111,19 @@ from card import (
 )
 ```
 
-## General Model Derivation
+The approach we take is to specify a time-dependent decay rate $\lambda(t)$ 
+as a piecewise function that defines how the rate of radiometric decay evolves 
+through time, with parameters that can be specified or solved for given 
+appropriate data.
+This time-dependent function, in contrast to the constant-rate $\lambda_{bg}$ 
+assumed in secular dating, requires explicit and potentially numerical integration
+to determine the age of a sample given its measured daughter-to-parent ratio.
+In this way, it is possible to calculate the equivalent young-earth age for a 
+given secular age, and vice versa.
+
+## B. Derivation
+
+### a. Underlying Assumptions and Basic Framework
 
 In order to develop the general model, we make a series of assumptions that limit the mathematical form of the time-dependent decay rate, $\lambda(t)$. 
 First, we assume that there are two periods of accelerated decay, one during the Creation week and one during the Flood. 
@@ -74,6 +146,7 @@ $$ {#eq-general-model}
 
 where $t$ is the time in years after Day 1 of creation, denoted as $t_0$.
 Each of the three relaxing regions is written in the same form — an excess over the background rate that decays exponentially, plus the background rate itself — so that $\lambda(t)$ approaches $\lambda_{bg}$ from above in every period and can never fall below it, however fast or however long it decays.
+@tbl-notation summarizes the notation used throughout the paper.
 
 We require $\lambda(t)$ to be **continuous at the end of the Flood**: the rate at which the Flood finishes is the rate from which the post-Flood relaxation begins.
 That is what fixes $\lambda_{F2}$,
@@ -90,13 +163,7 @@ We further take the Flood to be a single year, $t_{F2} = t_{F} + 1$: the Flood's
 We can plot the general mathematical model represented in @eq-general-model using Python:
 
 ```{python}
-#| label: fig-general-model
-#| fig-cap: "Schematic diagram of the general model showing model behavior. "
-# The curve is the package's own lambda_func, drawn by the package's own
-# plotting function — the same code `examples/plot_general_model.py` calls — so
-# this figure cannot drift from the model the solver integrates.  t_F2 is left
-# unset: the package derives it as t_F + 1, the year-long Flood, and so does
-# every other figure and solve in this paper.
+#| label: schematic-params
 schematic = GeneralModelParams(
     lambda_c=1e3,
     lambda_F=1e5,
@@ -109,7 +176,6 @@ schematic = GeneralModelParams(
 )
 
 print(f"lambda at the Flood's end: {schematic.lambda_F2:,.0f} x background")
-plot_lambda_history(schematic, out_file=None, show=True)
 ```
 
 @fig-general-model shows schematically how @eq-general-model would look for a particular set of choices for the parameters.
@@ -129,6 +195,8 @@ The remaining two symbols are determined rather than chosen:
 - $t_{F2}$: the end time of accelerated decay during the Flood, equal to $t_{F} + 1$.
 - $\lambda_{F2}$: the decay rate ($\lambda(t)$) at the end of the Flood, given by @eq-flood-continuity. It equals $\lambda_F$ when $k_F = 0$ and is smaller otherwise.
 
+### b. Relationship between time after Creation and years before present
+
 We note that the model can be re-written in terms of the age $\tau$ (years before present) rather than the date $t$. 
 In that case @eq-general-model becomes:
 $$
@@ -146,7 +214,7 @@ There are other models that would be more general extensions of this model, for 
 In addition, we try to minimize the number of free parameters that would require addtional data to be able to constrain. 
 The current model can be calibrated using only two or three matched date pairs (depending on what behavior is assumed during the Flood year). 
 
-## The Flood-Only Model
+### c. The flood-only simplification
 
 From the general model even simpler versions can be derived.
 The simplification we will develop at length below is to consider accelerated decay that occured only during and following the Flood; this is termed the ``**flood-only**'' case and mathematically corresponds to setting $\lambda_c = \lambda_{bg}$. 
@@ -154,6 +222,8 @@ This implies no acceleration of decay during the Creation week, and in this scen
 This will be the primary model that we work with in this paper. 
 Other possibile simplifications including setting $k_F = 0$ — a Flood that holds its peak rate for the whole year — then $\lambda_{F2} = \lambda_F$ by @eq-flood-continuity and only the post-Flood relaxation is left to describe. 
 Another is that $k_f = k_{PF}$, so that the decay rate falls at the same rate during and after the Flood, which is a single-parameter model for the Flood's decay behavior.
+
+## C. Accelerated Radiometric Decay Framework 
 
 Consider the differential equation for radiometric decay, which is given by:
 $$
@@ -218,6 +288,8 @@ For rock that predates the Flood ($A_{ya} \ge A_F$) the bracket in @eq-integral-
 Note that the age of the Earth $A_E$ does not appear: the accelerated decay is anchored at the Flood, so what matters is how long ago the Flood was, not how long ago Creation was.
 <!-- If $t_{ya} < t_F$, then we simply integrate to $t_{ya}$ instead of $t_F$ in the first integral. -->
 
+## D. Calibration Approach
+
 Using @eq-integral-flood-only-1, we can test several hypotheses.
 For example, given two pairs of ages known in both the secular and young-age models, we can calculate the decay constant $k_{PF}$ and decay rate ratio $R$.
 Two pairs cannot also determine $k_F$ — three unknowns need three equations — so in this example we hold $k_F = 0$ and return to the three-pair case afterwards.
@@ -225,6 +297,8 @@ As an example, let us consider the start of the Flood.
 Assume the Flood begins at the Precambrian-Cambrian boundary, an event dated on the secular time-scale to be ~540 Ma.
 Take the end of the Ice Age as another data point, conventionally dated to be around 11.7 ka.
 The matching young-age estimates are read from the chronology configuration rather than written in by hand, so that changing the assumed chronology updates every number that follows:
+
+### a. Matched pairs: data constraints on the rate of change in $\lambda(t)$
 
 ```{python}
 #| label: constraints
@@ -311,7 +385,7 @@ for A_ya in (1000.0, ICE_AGE_END_AGE, FLOOD_AGE, AGE_OF_EARTH):
           f"{abs(algebra / package - 1):.1e}")
 ```
 
-## Three matched pairs: solving for the in-Flood relaxation
+### b. Three matched pairs: solving for the in-Flood relaxation
 
 The two-pair solve above held $k_F$ at zero because two equations cannot determine three unknowns.
 A third matched pair makes the system determined, and what it buys is precisely the new degree of freedom: how fast the decay rate falls *during* the Flood.
@@ -350,19 +424,10 @@ All three pairs are honored to machine precision.
 The solved $k_F$ is large — the decay rate falls by more than four orders of magnitude within the Flood year — which is what asking a single year to carry the whole Phanerozoic requires.
 That is a substantive prediction of the framework rather than an artifact of it, and it is exactly the kind of statement the extra parameter was introduced to make testable.
 
-It is important to note that this derivation made several assumptions about the timing and dates of the beginning of the Flood and the Ice Age in the rock record, which could be debated.
-Other comparative dates for these events could easily be substituted for the ones used here, and the resulting parameters would be slightly different.
-The point is that this is a completely generalizable model for which, given any constraints or assumptions about the timing of these events, we can derive the equivalent decay rates within a young-age framework.
-
-With this framework, we now can not only make predictions, but test those predictions against observations. 
-
-# Discussion
-
-## Discussion Point 1
+@fig-age-curve shows the forward age curve under the calibrated flood-only model.
 
 ```{python}
-#| label: fig-age-curve
-#| fig-cap: "Secular age as a function of young age under the calibrated flood-only model."
+#| label: age-curve-data
 #| code-summary: "Forward age curve and the inverse of a given secular age"
 # forward_age is the package's exact evaluation of @eq-integral-flood-only-1,
 # so this curve is the model itself rather than a re-derivation of it.
@@ -371,18 +436,182 @@ t_sec = 65e6  # 65 million years in the secular model
 young_ages = np.linspace(0, AGE_OF_EARTH, 1000)
 secular_ages = np.array([calibrated.forward_age(a) for a in young_ages])
 
-plt.semilogy(young_ages, secular_ages)
-plt.semilogy([0, young_ages[-1]], [t_sec, t_sec], 'r--')
-plt.axvline(FLOOD_AGE, color='0.6', linestyle=':')
-plt.xlabel('Young age (years before present)')
-plt.ylabel('Secular age (years)')
-plt.title('Young-age equivalent of secular ages under the flood-only model')
-plt.grid()
-plt.show()
-
 print(f"Ratio of flood decay rate to background decay rate: {lambda_F:,.0f}")
 print(f"A rock dated to {t_sec:.3g} secular years formed "
       f"{calibrated.inverse_age(t_sec):,.0f} years before present.")
 print(f"Oldest secular age this model can produce: "
       f"{calibrated.forward_age(AGE_OF_EARTH):.4g} years.")
 ```
+
+
+It is important to note that this derivation made several assumptions about the timing and dates of the beginning of the Flood and the Ice Age in the rock record, which could be debated.
+Other comparative dates for these events could easily be substituted for the ones used here, and the resulting parameters would be slightly different.
+The point is that this is a completely generalizable model for which, given any constraints or assumptions about the timing of these events, we can derive the equivalent decay rates within a young-age framework.
+
+With this framework, we now can not only make predictions, but test those predictions against observations. 
+
+### c. Least-squares calibration for multiple matched date pairs
+- Least squares as a "best fit" approach to calibration
+- Overdetermined systems
+
+### d. Uncertainty quantification
+- Propagation of uncertainty from the data to the model parameters
+- Monte Carlo methods for uncertainty quantification
+
+
+# IV. SOFTWARE IMPLEMENTATION
+
+- Repository overview: language, dependencies, license, and project layout
+- Architecture: main modules and how they map onto the equations in the Method section
+- Interface: command line, Python API, configuration files
+- Performance considerations: vectorization, parallelism, GPU or memory strategy
+- Testing and continuous integration: unit tests, regression tests, test coverage
+- Reproducibility: pinned environments, containers, example notebooks, archived release with DOI
+
+## A. Algorithm
+- Pseudocode of the core algorithm
+- Numerical considerations (stability, conditioning, convergence criteria)
+
+## B. Code and data availability
+
+- Repository: [URL], version [x.y.z], license [license]
+- Archived release: [Zenodo DOI]
+- Data: sources, access instructions, and any restrictions
+- Scripts to reproduce every figure and table in the paper
+
+# V. EXPERIMENTS
+
+- Present 3 examples
+
+For each example:
+- E.g. K-Pg boundary, Plio-Pleistocene transition, others???
+- This section should be parameter solving ONLY (age results in next section)
+- Evaluation metrics (error norms, coverage, runtime, memory)
+- Sensitivity / uncertainty analysis of each example
+- Comparison against other studies
+- Robustnesso of the results to violated assumptions (e.g., if one set of 
+assumptions is used but another is correct)
+
+## A. Example 1: Flood ends at the K-Pg boundary, Ice Age ends at 4200 YBP
+
+
+## B. Example 2: Flood ends at the Plio-Pleistocene transition, Ice Age ends at 4200 YBP
+
+
+## C. Example 3: Flood ends at the Permo-Triassic boundary, Ice Age ends at 4200 YBP
+
+
+# VI. RESULTS
+
+<!-- Present results here; interpret them in the Discussion. -->
+
+For each example: 
+- Minimal discussion of the results in terms of the time periods of each geologic epoch during the Flood and other straightforward quantities
+- Graphs from the repo, with example inputs to reproduce them
+
+
+## A. Example 1: Flood ends at the K-Pg boundary, Ice Age ends at 4200 YBP
+
+
+## B. Example 2: Flood ends at the Plio-Pleistocene transition, Ice Age ends at 4200 YBP
+
+
+## C. Example 3: Flood ends at the Permo-Triassic boundary, Ice Age ends at 4200 YBP
+
+
+# VII. DISCUSSION
+
+## A. How to choose your assumptions and matched date pairs
+
+
+## B. Running the model
+
+
+## C. Example datasets for interpreting the model outputs
+
+
+## D. Limitations of the model and future work
+
+
+
+# VIII. CONCLUSION
+
+- Final results and the most important points
+- Comparison with the original theory; applications and areas for further investigation
+
+# ACKNOWLEDGMENTS {.unnumbered}
+
+Funding sources, computing resources, data providers, and helpful discussions.
+
+<!-- The ICC manual has no Author Contributions or Competing Interests section
+     (author biographies are submitted separately), so the placeholders are
+     parked here.
+
+# Author Contributions
+Using CRediT roles: Conceptualization, Methodology, Software, Validation, Formal analysis, Investigation, Writing (original draft), Writing (review and editing), Supervision, Funding acquisition.
+
+# Competing Interests
+Statement of any conflicts of interest.
+-->
+
+# REFERENCES {.unnumbered}
+
+::: {#refs}
+:::
+
+# APPENDIX A: FULL PROOFS {.unnumbered}
+
+# APPENDIX B: ADDITIONAL DERIVATIONS {.unnumbered}
+
+# APPENDIX C: SUPPLEMENTARY FIGURES AND TABLES {.unnumbered}
+
+# APPENDIX D: HYPERPARAMETER SETTINGS FOR ALL EXPERIMENTS {.unnumbered}
+
+# FIGURE CAPTIONS {.unnumbered}
+
+Figure 1. {{< meta fig-cap-general-model >}}
+
+Figure 2. {{< meta fig-cap-age-curve >}}
+
+# TABLE CAPTIONS {.unnumbered}
+
+Table 1. {{< meta tbl-cap-notation >}}
+
+# FIGURES {.unnumbered}
+
+```{python}
+#| label: fig-general-model
+#| fig-cap: "{{< meta fig-cap-general-model >}}"
+# The curve is the package's own lambda_func, drawn by the package's own
+# plotting function — the same code `examples/plot_general_model.py` calls — so
+# this figure cannot drift from the model the solver integrates.  t_F2 is left
+# unset: the package derives it as t_F + 1, the year-long Flood, and so does
+# every other figure and solve in this paper.
+plot_lambda_history(schematic, out_file=None, show=True)
+```
+
+```{python}
+#| label: fig-age-curve
+#| fig-cap: "{{< meta fig-cap-age-curve >}}"
+import numpy as np
+import matplotlib.pyplot as plt
+from card import FLOOD_AGE
+plt.semilogy(young_ages, secular_ages)
+plt.semilogy([0, young_ages[-1]], [t_sec, t_sec], 'r--')
+plt.axvline(FLOOD_AGE, color='0.6', linestyle=':')
+plt.xlabel('Young age (years before present)')
+plt.ylabel('Secular age (years)')
+plt.grid()
+plt.show()
+```
+
+
+# TABLES {.unnumbered}
+
+| Symbol | Meaning | Dimensions |
+|--------|---------|------------|
+| $\mathbf{x}$ | Unknown parameters | $n \times 1$ |
+| $\mathbf{d}$ | Observations | $m \times 1$ |
+| $\mathbf{G}$ | Forward operator | $m \times n$ |
+
+: {{< meta tbl-cap-notation >}} {#tbl-notation}
