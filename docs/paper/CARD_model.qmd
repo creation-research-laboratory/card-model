@@ -87,8 +87,11 @@ We propose to do this in the present study.
 Such a study is by nature under-determined because it requires knowing a set of true ages precisely within a Young-age framework, which is very difficult prior to the Fall of Jerusalem. 
 As a result, our approach is to provide a framework model with parameters that can be calibrated based on assumptions about matched date pairs on the resulting age model.
 This allows flexibility for testing different hypotheses about the timing of the Flood and other events in the geologic record.
-In this paper we will not attempt to provide a definitive answer to the actual date of the Flood in the geologic record, but instead will provide the mathematical framework required and present a suite of case studies that make use of various assumptions to show how the framework can be applied.
-Furthermore, we present a software package that can be applied by anyone interested in running the model with their own assumptions and matched date pairs.
+In this paper we will not attempt to provide a definitive answer to how accelerated decay works, or what is the actual date of the Flood in the geologic record. 
+Instead, we simply assume accelerated decay occurred and provide a mathematical framework required for making predictions based on that assumption. 
+The framework we propose is based on a specific set of assumptions about the timing and characteristics of accelerated decay, and coupled with a set of matched date pairs we can develop a full model for calibrating secular ages to true ages. 
+We show several examples that make use of different sets of matched date pairs to show how the framework can be applied.
+Finally, we present a software package that can be applied by anyone interested in running the model with their own assumptions and matched date pairs.
 
 A summary of the structure of the paper is as follows.
 In Section II we review previous work on accelerated decay and its implications for young-earth creation studies.
