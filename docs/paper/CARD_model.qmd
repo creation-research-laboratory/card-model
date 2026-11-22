@@ -73,15 +73,33 @@ We present a general framework for deriving a calibrated model for accelerated r
 
 
 # I. INTRODUCTION
-- Importance of radiometric decay acceleration in young-earth creation studies
-- Motivation for a general model that can be calibrated to match secular and young-earth ages
-- Our contribution: the central idea of the method in one paragraph
-- Summary of contributions (bulleted, 3-4 items):
-    - A new method with [key property]
-    - Theoretical results on [convergence / bias / complexity / identifiability]
-    - An open-source implementation at [repository URL]
-    - Validation on [synthetic and real] data
+## A. Accelerated Radiometric Decay in Young-Earth Creation Studies
+Ever since the publication of the Radioisotopes and the Age of the Earth (RATE) project [@humphreys2004], there has been a strong interest in understanding the implications of accelerated radiometric decay for young-earth creation studies. 
+The RATE project showed evidence for accelerated decay during the Flood, but could not provide a mechanism for how this acceleration occurred, and also showed several problems with the hypothesis.
+Since then, much work has been done to explore various mechanisms for accelerated decay, including ---.
 
+In spite of the interest in accelerated decay, very little work has been done to assess the implications of accelerated decay for geochronology from a Young-age perspective.
+[@oard2013] and [@reed1996] showed the general expectations for the rate of accelerated decay during the Creation Week, pre-Flood, Flood, and post-Flood periods, but did not provide a quantitative framework for Young-age dating that could convert secular ages to true ages.
+The closest analysis is likely [@mogk2023], who provided ---.
+
+However, there is still a need for a quantitative age model that can match secular and young-earth ages, allowing for calibration as needed, in order to practically apply the implications of accelerated decay to geochronology and other creation studies.
+We propose to do this in the present study. 
+Such a study is by nature under-determined because it requires knowing a set of true ages precisely within a Young-age framework, which is very difficult prior to the Fall of Jerusalem. 
+As a result, our approach is to provide a framework model with parameters that can be calibrated based on assumptions about matched date pairs on the resulting age model.
+This allows flexibility for testing different hypotheses about the timing of the Flood and other events in the geologic record.
+In this paper we will not attempt to provide a definitive answer to how accelerated decay works, or what is the actual date of the Flood in the geologic record. 
+Instead, we simply assume accelerated decay occurred and provide a mathematical framework required for making predictions based on that assumption. 
+The framework we propose is based on a specific set of assumptions about the timing and characteristics of accelerated decay, and coupled with a set of matched date pairs we can develop a full model for calibrating secular ages to true ages. 
+We show several examples that make use of different sets of matched date pairs to show how the framework can be applied.
+Finally, we present a software package that can be applied by anyone interested in running the model with their own assumptions and matched date pairs.
+
+A summary of the structure of the paper is as follows.
+In Section II we review previous work on accelerated decay and its implications for young-earth creation studies.
+In Section III we present the general model and its derivation, as well as the calibration approach.
+In Section IV we present the software implementation of the model, including the algorithm and code availability.
+In Section V we present several examples of the model applied to various assumptions about the timing of the Flood and other events in the geologic record.
+In Section VI we present the results of the model for each example, and in Section VII we discuss the implications of the results and how to choose assumptions and matched date pairs.
+Finally, in Section VIII we conclude with a summary of the contributions of this work and areas for future research.
 
 # II. PREVIOUS WORK
 - RATE project general findings [@humphreys2004]
